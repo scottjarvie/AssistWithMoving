@@ -22,8 +22,18 @@
  * ordering, the status codes, the bodies — is the shipped code path.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { convexTest } from "convex-test";
+import schema from "../../convex/schema";
+import { api, internal } from "../../convex/_generated/api";
+import { GRANT_CONSENT_POLICY, grantCatalogFingerprint } from "../../convex/lib/aiGrants";
 import { getFunctionName } from "convex/server";
+import { movingScopes } from "../../convex/lib/aiGrants";
 import { clearClientMetadataCache } from "../../convex/lib/mcpClientIdentity";
+
+async function revokeOwner(owner: any, args: any) {
+  const loaded = await owner.query(api.aiGrants.listMine, {});
+  return owner.mutation(api.aiGrants.revoke, { ...args, expectedRecoveryFingerprint: loaded.recoveryFingerprint });
+}
 
 const verifyMock = vi.fn();
 
@@ -134,19 +144,36 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     jsonrpc: "2.0", id: 1, method: "tools/list",
   }));
 
-  it("does not retrieve metadata without a grant, and still gives connection guidance", async () => {
+  it("resolves first contact before discovery so a new connection sees the full catalog", async () => {
+    let connected = false;
+    const ctx = {
+      runMutation: vi.fn(async () => { connected = true; return { grants: [] }; }),
+      runQuery: vi.fn(async () => ({ scopes: connected ? movingScopes : [] })),
+      runAction: vi.fn(),
+    } as any;
+    const { handleMcpRequestForTests, STATELESS_MOVING_TOOL_NAMES } = await loadRoute();
+    const response = await handleMcpRequestForTests(ctx, listTools());
+    expect(response.status).toBe(200);
+    expect((await response.json()).result.tools.map((tool: any) => tool.name).sort())
+      .toEqual([...STATELESS_MOVING_TOOL_NAMES].sort());
+    expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("aiGrants:touchLegacyConnection");
+    expect(ctx.runMutation.mock.calls[0][1]).toMatchObject({ subject: SUBJECT, clientId: CLIENT_ID });
+  });
+
+  it("validates metadata without domain scopes and still gives connection guidance", async () => {
     verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const ctx = {
+      runMutation: vi.fn(async () => ({ grants: [] })),
       runQuery: vi.fn(async () => ({ scopes: [] })),
-      runAction: vi.fn(),
+      runAction: vi.fn(async () => metadata),
     } as any;
     const { handleMcpRequestForTests } = await loadRoute();
     const response = await handleMcpRequestForTests(ctx, listTools());
     expect(response.status).toBe(200);
     expect((await response.json()).result.tools.map((tool: any) => tool.name))
-      .toEqual(["describe_connection"]);
+      .toEqual(["describe_connection", "reduce_connection"]);
     const described = await handleMcpRequestForTests(ctx, protocolRequest(JSON.stringify({
       jsonrpc: "2.0", id: 2, method: "tools/call",
       params: { name: "describe_connection", arguments: {} },
@@ -154,41 +181,45 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     expect(described.status).toBe(200);
     const result = JSON.parse((await described.json()).result.content[0].text);
     expect(result.connected).toBe(false);
-    expect(result.client.registrationMethod).toBe("unknown");
-    expect(ctx.runAction).not.toHaveBeenCalled();
+    expect(result.client.registrationMethod).toBe("clientIdMetadataDocument");
+    expect(ctx.runAction).toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("fails closed on grant lookup failure without making an outbound request", async () => {
+  it("fails closed on grant lookup failure after required safe metadata validation", async () => {
     verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const ctx = {
+      runMutation: vi.fn(async () => ({ grants: [] })),
       runQuery: vi.fn(async () => { throw new Error("synthetic grant outage"); }),
-      runAction: vi.fn(),
+      runAction: vi.fn(async () => metadata),
     } as any;
     const { handleMcpRequestForTests } = await loadRoute();
     const response = await handleMcpRequestForTests(ctx, listTools());
     expect(response.status).toBe(200);
-    expect((await response.json()).result.tools).toHaveLength(1);
-    expect(ctx.runAction).not.toHaveBeenCalled();
+    expect((await response.json()).result.tools).toHaveLength(2);
+    expect(ctx.runAction).toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("reads grants before invoking the protected Node action, keeping digest validation", async () => {
+  it("validates via the protected Node action before atomically connecting and reading grants", async () => {
     verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
     const order: string[] = [];
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const ctx = {
+      runMutation: vi.fn(async () => { order.push("connect"); return { grants: [] }; }),
       runQuery: vi.fn(async () => { order.push("grant"); return { scopes: ["moving.context.read"] }; }),
       runAction: vi.fn(async () => { order.push("metadata"); return metadata; }),
     } as any;
     const { handleMcpRequestForTests } = await loadRoute();
     const response = await handleMcpRequestForTests(ctx, listTools());
     expect(response.status).toBe(200);
-    expect(order).toEqual(["grant", "metadata"]);
+    expect(order).toEqual(["metadata", "connect", "grant"]);
+    expect(ctx.runMutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ clientId: metadataClientId }));
+    expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("aiGrants:touchLegacyConnection");
     expect(ctx.runAction).toHaveBeenCalledWith(expect.anything(), { clientId: metadataClientId });
     expect(getFunctionName(ctx.runAction.mock.calls[0][0])).toBe("mcpClientMetadata:fetchDocument");
     expect((await response.json()).result.tools.map((tool: any) => tool.name))
@@ -200,6 +231,7 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     const { handleMcpRequestForTests } = await loadRoute();
     verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
     const ctx = {
+      runMutation: vi.fn(async () => ({ grants: [] })),
       runQuery: vi.fn(async () => ({ scopes: ["moving.context.read"] })),
       runAction: vi.fn(),
     } as any;
@@ -211,6 +243,7 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     response = await handleMcpRequestForTests(ctx, listTools());
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ error: "invalid_client", reason: "client_id_mismatch" });
+    expect(ctx.runMutation).not.toHaveBeenCalled();
   });
 });
 
@@ -438,5 +471,360 @@ describe("canonical /mcp malformed JSON-RPC envelopes", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+});
+
+
+describe("R1 metadata validation has no rejected-client database effects", () => {
+  const clientId = "https://atomic-client.example/client.json";
+  const valid = JSON.stringify({ client_id: clientId, redirect_uris: ["https://atomic-client.example/callback"] });
+  const consent = { consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint() };
+  async function fixture(unbound: boolean) {
+    const t = convexTest(schema, import.meta.glob("../../convex/**/*.ts"));
+    const householdId = await t.run(async ctx => {
+      const now = Date.now();
+      const userId = await ctx.db.insert("users", { clerkUserId: SUBJECT, email: "metadata@example.test", name: "Synthetic metadata owner", appRole: "member", status: "active", createdAt: now, updatedAt: now, lastSeenAt: now });
+      const householdId = await ctx.db.insert("households", { name: "Synthetic metadata", ownerUserId: userId, createdByUserId: userId, createdAt: now, updatedAt: now });
+      await ctx.db.insert("householdMemberships", { householdId, userId, role: "owner", status: "active", apiAccessStatus: "enabled", createdByUserId: userId, createdAt: now, updatedAt: now });
+      return householdId;
+    });
+    const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+    if (unbound) await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Unbound approval" });
+    const snapshot = () => t.run(async ctx => ({ grants: await ctx.db.query("aiGrants").collect(), activities: await ctx.db.query("aiGrantActivities").collect(), audits: await ctx.db.query("auditLogs").collect() }));
+    return { t, owner, householdId, snapshot };
+  }
+  function listRequest() {
+    const req = request(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "atomic-test", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} } } }));
+    req.headers.set("mcp-protocol-version", "2026-07-28");
+    req.headers.set("mcp-method", "tools/list");
+    return req;
+  }
+  for (const participantOnly of [false, true]) for (const firstDoor of ["canonical", "persisted"]) {
+    it(`reconnects a revoked client only after explicit person approval, first ${firstDoor}, participantOnly=${participantOnly}`, async () => {
+      const f = await fixture(false);
+      if (participantOnly) await f.t.run(async ctx => {
+        const member = (await ctx.db.query("householdMemberships").first())!;
+        await ctx.db.patch(member._id, { status: "disabled" });
+        const now = Date.now();
+        const moveId = await ctx.db.insert("moves", { householdId: f.householdId, title: "Participant door proof", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: member.userId, createdAt: now, updatedAt: now });
+        await ctx.db.insert("moveParticipants", { householdId: f.householdId, moveId, userId: member.userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: now, updatedAt: now });
+      });
+      const ctx = {
+        runQuery: (ref: any, args: any) => f.t.query(ref, args),
+        runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+        runAction: async () => valid,
+      } as any;
+      const preexisting = verifiedToken(clientId);
+      verifyMock.mockResolvedValue({ ...preexisting, payload: { ...preexisting.payload, iat: 1, auth_time: 1 } });
+      const { createLegacyGrantGate } = await import("../../convex/http");
+      const { handleMcpRequestForTests, STATELESS_MOVING_TOOL_NAMES } = await loadRoute();
+      const canonical = async () => {
+        const response = await handleMcpRequestForTests(ctx, listRequest());
+        expect(response.status).toBe(200);
+        return (await response.json()).result.tools.map((tool: any) => tool.name);
+      };
+      const persisted = () => createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims: { client_id: clientId } }, toolName: "list_moves", mode: "list" } as any);
+      if (firstDoor === "canonical") await canonical(); else expect((await persisted()).allowed).toBe(true);
+      const original = (await f.snapshot()).grants[0];
+      await revokeOwner(f.owner, { grantId: original._id, expectedVersion: original.version });
+      if (!participantOnly) await f.owner.mutation(api.aiGrants.approve, { ...consent, householdId: f.householdId, label: "Unrelated connection" });
+      expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
+      expect((await persisted()).allowed).toBe(false);
+      const before = await f.snapshot();
+      const loaded = await f.owner.query(api.aiGrants.listMine, {});
+      const args = { ...consent, householdId: f.householdId, label: "Owner reconnect", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint };
+      await expect(f.t.withIdentity({ subject: SUBJECT, client_id: clientId }).mutation(api.aiGrants.approve, args)).rejects.toThrow(/settings/);
+      expect(await f.snapshot()).toEqual(before);
+      const { grantId } = await f.owner.mutation(api.aiGrants.approve, args);
+      expect((await canonical()).sort()).toEqual([...STATELESS_MOVING_TOOL_NAMES].sort());
+      expect((await persisted()).allowed).toBe(true);
+      const reconnected = (await f.snapshot()).grants.find(row => row._id === grantId)!;
+      expect(reconnected).toMatchObject({ clientId, scopeChoice: "full", expiryChoice: "none" });
+      expect(reconnected.expiresAt).toBeUndefined();
+      for (const row of before.grants) expect(await f.t.run(ctx => ctx.db.get(row._id))).toEqual(row);
+      const beforeDelayed = await f.snapshot();
+      await expect(f.t.mutation(internal.aiGrants.reduceConnection, {
+        subject: SUBJECT, clientId, expectedVersion: original.version, action: "revoke",
+      })).rejects.toThrow(/changed/);
+      await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, {
+        caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: original.version, action: "revoke",
+      })).rejects.toThrow(/changed/);
+      expect(await f.snapshot()).toEqual(beforeDelayed);
+      await revokeOwner(f.owner, { grantId, expectedVersion: reconnected.version });
+      expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
+      expect((await persisted()).allowed).toBe(false);
+      await f.t.run(async ctx => {
+        const current = (await ctx.db.get(grantId))!;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- historical fixtures omit Convex system fields.
+        const { _id, _creationTime, ...fields } = current;
+        for (let i = 0; i < 129; i++) await ctx.db.insert("aiGrants", { ...fields, clientId: `door-overflow-${i}` });
+      });
+      const recovery = await f.owner.query(api.aiGrants.listMine, {});
+      expect(recovery.historyOverflow).toBe(true);
+      await f.owner.mutation(api.aiGrants.approve, {
+        ...consent, householdId: f.householdId, label: "Recover oversized history",
+        reconnectGrantId: grantId, expectedRecoveryFingerprint: recovery.recoveryFingerprint,
+      });
+      expect((await canonical()).sort()).toEqual([...STATELESS_MOVING_TOOL_NAMES].sort());
+      expect((await persisted()).allowed).toBe(true);
+      const reductionRequest = request(JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: {
+        name: "reduce_connection", arguments: { expectedVersion: -1, scopes: ["moving.context.read"] },
+        _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "overflow-test", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} },
+      } }));
+      reductionRequest.headers.set("mcp-protocol-version", "2026-07-28");
+      reductionRequest.headers.set("mcp-method", "tools/call");
+      reductionRequest.headers.set("mcp-name", "reduce_connection");
+      expect((await handleMcpRequestForTests(ctx, reductionRequest)).status).toBe(200);
+      expect(await f.t.run(ctx => ctx.db.get(grantId))).toMatchObject({ version: -2, scopes: ["moving.context.read"] });
+      expect((await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: -2, scopes: [] })).version).toBe(-3);
+      expect((await persisted()).allowed).toBe(false);
+    });
+  }
+  // Actual HTTP/gateway handlers and direct internal legacy handlers share a
+  // real DB. Only token verification and the protected outbound fetch are fake.
+  for (const claim of ["https://client.example", "https://CLIENT.example:443", "https://client.example/a/../"]) {
+    for (const firstDoor of ["canonical", "persisted"]) {
+      it(`keeps reductions across both doors and normalized tokens: ${claim}, first ${firstDoor}`, async () => {
+        const f = await fixture(false);
+        const normalized = new URL(claim).toString();
+        const ctx = {
+          runQuery: (ref: any, args: any) => f.t.query(ref, args),
+          runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+          runAction: async () => JSON.stringify({ client_id: normalized, redirect_uris: ["https://client.example/callback"] }),
+        } as any;
+        const { createLegacyGrantGate } = await import("../../convex/http");
+        const { handleMcpRequestForTests } = await loadRoute();
+        const canonical = async (id = claim) => {
+          const token = verifiedToken(id);
+          verifyMock.mockResolvedValue({ ...token, payload: { ...token.payload, client_id: normalized } });
+          const response = await handleMcpRequestForTests(ctx, listRequest());
+          expect(response.status).toBe(200);
+          return (await response.json()).result.tools.map((tool: any) => tool.name);
+        };
+        const persisted = (id = claim) => createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims: { client_id: id, azp: normalized } }, toolName: "list_moves", mode: "list" } as any);
+        if (firstDoor === "canonical") await canonical(); else expect((await persisted()).allowed).toBe(true);
+        const initial = await f.snapshot();
+        expect(initial.grants).toHaveLength(1);
+        expect(initial.grants[0]).toMatchObject({ clientId: normalized, scopeChoice: "full", moveScope: "allMoves", expiryChoice: "none" });
+        const expiresAt = Date.now() + 200_000;
+        const caller = { subject: SUBJECT, claims: { client_id: claim } };
+        await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 1, scopes: ["moving.queue.work"], expiresAt });
+        expect(await canonical()).not.toContain("get_move_brief");
+        expect((await persisted()).allowed).toBe(false);
+        expect(await canonical(normalized)).not.toContain("get_move_brief");
+        expect((await persisted(normalized)).allowed).toBe(false);
+        expect((await f.t.query(internal.mcpTools.getAgentContext, { caller })).connectionVersion).toBe(2);
+        const narrowed = await f.snapshot();
+        expect(narrowed.grants).toHaveLength(1);
+        expect(narrowed.grants[0]).toMatchObject({ expiresAt, scopes: ["moving.queue.work"] });
+        await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 1, scopes: [] })).rejects.toThrow(/changed/);
+        expect(await f.snapshot()).toEqual(narrowed);
+        await f.t.mutation(internal.aiGrants.reduceConnection, { subject: SUBJECT, clientId: normalized, expectedVersion: 2, expiresAt: expiresAt - 10_000, scopes: [] });
+        expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
+        expect((await persisted()).allowed).toBe(false);
+        await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 3, action: "pause" });
+        expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
+        expect((await persisted(normalized)).allowed).toBe(false);
+        const row = (await f.snapshot()).grants[0];
+        await revokeOwner(f.owner, { grantId: row._id, expectedVersion: row.version });
+        const revoked = await f.snapshot();
+        await canonical(normalized);
+        expect((await persisted()).allowed).toBe(false);
+        expect(await f.snapshot()).toEqual(revoked);
+      });
+    }
+  }
+
+  for (const door of ["canonical", "persisted"]) {
+    for (const restriction of ["expired", "revoke-during-metadata", "invalid-metadata"]) {
+      it(`honors raw history on ${door}: ${restriction}`, async () => {
+        const f = await fixture(false);
+        const claim = "https://CLIENT.example:443";
+        const normalized = "https://client.example/";
+        await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: SUBJECT, clientId: `legacy:${claim}` });
+        const row = (await f.snapshot()).grants[0];
+        if (restriction === "expired") await f.t.run(ctx => ctx.db.patch(row._id, { expiresAt: Date.now() - 1, expiryChoice: undefined }));
+        let expected = await f.snapshot();
+        const ctx = {
+          runQuery: (ref: any, args: any) => f.t.query(ref, args),
+          runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+          runAction: async () => {
+            if (restriction === "revoke-during-metadata") {
+              await revokeOwner(f.owner, { grantId: row._id, expectedVersion: row.version });
+              expected = await f.snapshot();
+            }
+            return JSON.stringify({ client_id: restriction === "invalid-metadata" ? "https://unrelated.example/" : normalized, redirect_uris: ["https://client.example/callback"] });
+          },
+        } as any;
+        if (door === "canonical") {
+          verifyMock.mockResolvedValue(verifiedToken(claim));
+          const { handleMcpRequestForTests } = await loadRoute();
+          const response = await handleMcpRequestForTests(ctx, listRequest());
+          expect(response.status).toBe(restriction === "invalid-metadata" ? 401 : 200);
+          if (response.status === 200) expect((await response.json()).result.tools.map((tool: any) => tool.name)).toEqual(["describe_connection", "reduce_connection"]);
+        } else {
+          vi.spyOn(console, "error").mockImplementation(() => undefined);
+          const { createLegacyGrantGate } = await import("../../convex/http");
+          expect((await createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims: { client_id: claim } }, toolName: "list_moves", mode: "list" } as any)).allowed).toBe(false);
+        }
+        expect(await f.snapshot()).toEqual(expected);
+      });
+    }
+  }
+
+  it.each([
+    { client_id: "sibling-b", azp: "sibling-a" },
+    { client_id: "legacy:https://client.example/", azp: "legacy:https://client.example/" },
+  ])("rejects ambiguous or supplied history-alias claims %j on both doors and direct legacy handlers without effects", async (invalidClaims) => {
+    const f = await fixture(true);
+    const before = await f.snapshot();
+    const token = verifiedToken("sibling-a");
+    const claims = { ...token.payload, ...invalidClaims };
+    verifyMock.mockResolvedValue({ ...token, payload: claims });
+    const ctx = {
+      runQuery: (ref: any, args: any) => f.t.query(ref, args),
+      runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+      runAction: vi.fn(),
+    } as any;
+    const { createLegacyGrantGate } = await import("../../convex/http");
+    const { handleMcpRequestForTests } = await loadRoute();
+    expect((await handleMcpRequestForTests(ctx, listRequest())).status).toBe(401);
+    expect((await createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims }, toolName: "list_moves", mode: "list" } as any)).allowed).toBe(false);
+    const caller = { subject: SUBJECT, claims };
+    await expect(f.t.query(internal.mcpTools.getAgentContext, { caller })).rejects.toThrow(/unambiguous/);
+    await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 1, scopes: [] })).rejects.toThrow(/unambiguous/);
+    expect(ctx.runAction).not.toHaveBeenCalled();
+    expect(await f.snapshot()).toEqual(before);
+  });
+
+  it("serializes first contact through both real doors after metadata validation", async () => {
+    const f = await fixture(true);
+    const claim = "https://CLIENT.example:443";
+    const normalized = "https://client.example/";
+    verifyMock.mockResolvedValue(verifiedToken(claim));
+    const ctx = {
+      runQuery: (ref: any, args: any) => f.t.query(ref, args),
+      runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+      runAction: async () => JSON.stringify({ client_id: normalized, redirect_uris: ["https://client.example/callback"] }),
+    } as any;
+    const { createLegacyGrantGate } = await import("../../convex/http");
+    const { handleMcpRequestForTests } = await loadRoute();
+    const [canonical, persisted] = await Promise.all([
+      handleMcpRequestForTests(ctx, listRequest()),
+      createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims: { client_id: claim } }, toolName: "list_moves", mode: "list" } as any),
+    ]);
+    expect(canonical.status).toBe(200);
+    expect(persisted.allowed).toBe(true);
+    const after = await f.snapshot();
+    expect(after.grants).toHaveLength(1);
+    expect(after.grants[0].clientId).toBe(normalized);
+    expect(after.activities.filter(row => row.type === "clientBound")).toHaveLength(1);
+  });
+
+  for (const invalid of ["unreachable", "malformed", "wrong-id"]) {
+    it(`also refuses ${invalid} on the persisted compatibility door before binding`, async () => {
+      const f = await fixture(true);
+      const before = await f.snapshot();
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const { createLegacyGrantGate } = await import("../../convex/http");
+      const gate = createLegacyGrantGate({
+        runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+        runAction: async () => {
+          if (invalid === "unreachable") throw new Error("Synthetic unreachable metadata");
+          return invalid === "malformed" ? "[" : valid.replace(clientId, "https://other.example/client.json");
+        },
+      } as any);
+      const result = await gate({} as any, { identity: { subject: SUBJECT, claims: { client_id: clientId } }, toolName: "list_moves", mode: "list" } as any);
+      expect(result.allowed).toBe(false);
+      expect(await f.snapshot()).toEqual(before);
+    });
+  }
+  it("binds a validated first contact once, without widening its unbound chosen approval", async () => {
+    const f = await fixture(true);
+    const row = (await f.snapshot()).grants[0];
+    await f.owner.mutation(api.aiGrants.updateLimits, { ...consent, expectedRecoveryFingerprint: (await f.owner.query(api.aiGrants.listMine, {})).recoveryFingerprint, grantId: row._id, expectedVersion: 1, scopes: ["moving.context.read"], scopeIntent: "chosen", expiresInDays: 3, expiryIntent: "chosen" });
+    const chosen = (await f.snapshot()).grants[0];
+    verifyMock.mockResolvedValue(verifiedToken(clientId));
+    const { handleMcpRequestForTests } = await loadRoute();
+    const ctx = {
+      runQuery: (ref: any, args: any) => f.t.query(ref, args),
+      runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+      runAction: async () => valid,
+    } as any;
+    expect((await handleMcpRequestForTests(ctx, listRequest())).status).toBe(200);
+    const bound = (await f.snapshot()).grants[0];
+    expect(bound).toMatchObject({ clientId, scopes: chosen.scopes, expiresAt: chosen.expiresAt, version: chosen.version });
+    const after = await f.snapshot();
+    expect((await handleMcpRequestForTests(ctx, listRequest())).status).toBe(200);
+    expect(await f.snapshot()).toEqual(after);
+  });
+  for (const unbound of [false, true]) {
+    for (const invalid of ["unreachable", "malformed", "wrong-id"]) {
+      it(`leaves grants, bindings, slots and receipts exact for ${invalid}, unbound=${unbound}`, async () => {
+        const f = await fixture(unbound);
+        const before = await f.snapshot();
+        verifyMock.mockResolvedValue(verifiedToken(clientId));
+        const { handleMcpRequestForTests } = await loadRoute();
+        const ctx = {
+          runQuery: (ref: any, args: any) => f.t.query(ref, args),
+          runMutation: vi.fn((ref: any, args: any) => f.t.mutation(ref, args)),
+          runAction: async () => {
+            if (invalid === "unreachable") throw new Error("Synthetic unreachable metadata");
+            return invalid === "malformed" ? "[" : valid.replace(clientId, "https://other.example/client.json");
+          },
+        } as any;
+        expect((await handleMcpRequestForTests(ctx, listRequest())).status).toBe(401);
+        expect(ctx.runMutation).not.toHaveBeenCalled();
+        expect(await f.snapshot()).toEqual(before);
+      });
+    }
+  }
+  for (const unbound of [false, true]) {
+    it(`re-reads alias refusal committed during metadata I/O; unbound=${unbound}`, async () => {
+      const f = await fixture(unbound);
+      verifyMock.mockResolvedValue(verifiedToken(clientId));
+      const { handleMcpRequestForTests } = await loadRoute();
+      let refusedSnapshot: Awaited<ReturnType<typeof f.snapshot>>;
+      const ctx = {
+        runQuery: (ref: any, args: any) => f.t.query(ref, args),
+        runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+        runAction: async () => {
+          // Another request binds the alias and the person revokes it while
+          // this request is waiting on the required metadata document.
+          await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: SUBJECT, clientId: `legacy:${clientId}` });
+          const row = (await f.snapshot()).grants[0];
+          await revokeOwner(f.owner, { grantId: row._id, expectedVersion: row.version });
+          refusedSnapshot = await f.snapshot();
+          return valid;
+        },
+      } as any;
+      const response = await handleMcpRequestForTests(ctx, listRequest());
+      expect(response.status).toBe(200);
+      expect((await response.json()).result.tools.map((tool: any) => tool.name)).toEqual(["describe_connection", "reduce_connection"]);
+      expect(await f.snapshot()).toEqual(refusedSnapshot!);
+      expect((await f.snapshot()).grants).toHaveLength(1);
+    });
+  }
+  it("binds valid metadata only once and honors a refusal over an old unbound duplicate", async () => {
+    const f = await fixture(true);
+    await f.owner.mutation(api.aiGrants.approve, { ...consent, householdId: f.householdId, label: "Newer approval" });
+    verifyMock.mockResolvedValue(verifiedToken(clientId));
+    let afterRefusal: Awaited<ReturnType<typeof f.snapshot>>;
+    const ctx = {
+      runQuery: (ref: any, args: any) => f.t.query(ref, args),
+      runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+      runAction: async () => {
+        const rows = (await f.snapshot()).grants;
+        const latest = rows[rows.length - 1];
+        await revokeOwner(f.owner, { grantId: latest._id, expectedVersion: latest.version });
+        afterRefusal = await f.snapshot();
+        return valid;
+      },
+    } as any;
+    const { handleMcpRequestForTests } = await loadRoute();
+    const response = await handleMcpRequestForTests(ctx, listRequest());
+    expect((await response.json()).result.tools).toHaveLength(2);
+    expect(await f.snapshot()).toEqual(afterRefusal!);
+    expect((await f.snapshot()).grants.every(row => row.clientId === undefined)).toBe(true);
   });
 });

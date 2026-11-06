@@ -16,11 +16,13 @@ import {
 } from "./lib/accountPrivacy";
 import { recordAuditEvent } from "./lib/audit";
 import { requireCurrentUser } from "./lib/auth";
+import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
 import { visibilityForHouseholdRole } from "./lib/roles";
 
 export const status = query({
   args: {},
   handler: async (ctx) => {
+    await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
     const [exports, pendingDeletion] = await Promise.all([
       ctx.db
@@ -73,6 +75,7 @@ export const status = query({
 export const createAccountExport = mutation({
   args: {},
   handler: async (ctx) => {
+    await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
     const now = Date.now();
     const packageData = await buildAccountExportPackage(ctx, user);
@@ -116,6 +119,7 @@ export const getAccountExportArtifact = query({
     exportJobId: v.id("accountExportJobs"),
   },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
     const job = await ctx.db.get(args.exportJobId);
 
@@ -144,6 +148,7 @@ export const getAccountExportArtifact = query({
 export const requestAccountDeletion = mutation({
   args: {},
   handler: async (ctx) => {
+    await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
     const existing = await ctx.db
       .query("accountDeletionRequests")
@@ -184,6 +189,7 @@ export const cancelAccountDeletion = mutation({
     requestId: v.id("accountDeletionRequests"),
   },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
     const request = await ctx.db.get(args.requestId);
     if (!request || request.userId !== user._id || request.status !== "pending") {
@@ -214,6 +220,7 @@ export const completeAccountDeletion = mutation({
   },
   handler: async (ctx, args) => {
     assertDeletionConfirmation(args.confirmation);
+    await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
     const request = await ctx.db.get(args.requestId);
     if (!request || request.userId !== user._id || request.status !== "pending") {

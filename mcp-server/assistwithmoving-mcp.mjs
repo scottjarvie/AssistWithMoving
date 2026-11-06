@@ -38,6 +38,7 @@ import {
   getAiProviderStatus,
   getApiCapabilities,
   getApiContext,
+  reduceConnection,
   getAgentContext,
   getCapacityReport,
   getInlineImages,
@@ -892,6 +893,7 @@ const boxIntakeLinkedItemSchema = z.object({
 export const ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS = [
   "get_api_capabilities",
   "get_api_context",
+  "reduce_connection",
   "list_moves",
   "setup_move",
   "update_move",
@@ -938,7 +940,7 @@ export function createAssistWithMovingMcpServer(apiConfig, options = {}) {
     name: "assistwithmoving",
     version: "0.2.0",
     websiteUrl: "https://movingmanifest.com",
-  });
+  }, { instructions: "New AI connections default to all entitled current/future scopes, all owned moves and no end date. Use get_api_context first. reduce_connection can only narrow this calling bearer, with a version and durable receipt. Only the person in https://movingmanifest.com/settings/ai can widen or restore access. Existing chosen limits and this door’s product ceiling remain enforced." });
   registerTools(target, apiConfig, options);
   return target;
 }
@@ -964,6 +966,14 @@ export function registerTools(target, apiConfig, options = {}) {
     inputSchema: {},
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: () => getApiCapabilities(),
+  });
+
+  registerTool(target, "reduce_connection", {
+    title: "Reduce this connection's access",
+    description: "Narrow only this bearer key's scopes, moveIds (one move), expiry, pause or revoke. Get version from get_api_context. Only the person at https://movingmanifest.com/settings/ai can widen or restore access.",
+    inputSchema: { expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: input => reduceConnection(apiConfig, input),
   });
 
   registerTool(target, "get_api_context", {

@@ -1,4 +1,5 @@
 import type { Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { PermissionAction } from "./roles";
 
 export const apiKeyScopes = [
@@ -15,6 +16,11 @@ export const apiKeyScopes = [
   "exports/create",
   "members/manage",
 ] as const;
+
+/** Only newly explicit full keys follow future scopes; legacy arrays stay exact. */
+export function effectiveApiKeyScopes(key: { scopes: ApiKeyScope[]; scopeChoice?: "full" | "chosen" }): ApiKeyScope[] {
+  return key.scopeChoice === "full" ? [...apiKeyScopes] : key.scopes;
+}
 
 export type ApiKeyScope = (typeof apiKeyScopes)[number];
 
@@ -220,4 +226,14 @@ function timingSafeEqual(left: string, right: string) {
     difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
   }
   return difference === 0;
+}
+
+/** Indexed effective-active count; old expired rows never enter these ranges. */
+export async function readActiveApiKeyCount(db: QueryCtx["db"] | MutationCtx["db"], householdId: Id<"households">, limit = 100, now = Date.now()) {
+  const [permanent, dated] = await Promise.all([
+    db.query("apiKeys").withIndex("by_household_status_expiry", q => q.eq("householdId", householdId).eq("status", "active").eq("expiresAt", undefined)).take(limit + 1),
+    db.query("apiKeys").withIndex("by_household_status_expiry", q => q.eq("householdId", householdId).eq("status", "active").gt("expiresAt", now)).take(limit + 1),
+  ]);
+  const count = permanent.length + dated.length;
+  return { count: Math.min(count, limit), truncated: count > limit };
 }
