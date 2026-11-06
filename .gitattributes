@@ -1,0 +1,5 @@
+# The entry point is also consumed as POSIX shell source. Preserve LF even
+# when a Windows checkout enables core.autocrlf.
+.claude/hooks/cloud-session-setup.cmd text eol=lf
+.claude/hooks/cloud-session-setup.sh text eol=lf
+.claude/hooks/cloud-session-setup.test.sh text eol=lf
