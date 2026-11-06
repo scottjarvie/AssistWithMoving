@@ -1,3 +1,4 @@
+import connectionPolicy from "../../../../shared/ai-connection-policy.json";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
@@ -205,6 +206,7 @@ export default function AiAssistantPage() {
       }}
       visual={<AssistantVisual />}
     >
+      <p className="mx-auto max-w-5xl p-6 leading-7">{connectionPolicy.instructions}</p>
       <PublicBand>
         <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
           <div>

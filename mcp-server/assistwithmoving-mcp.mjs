@@ -1,9 +1,17 @@
 #!/usr/bin/env node
+import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
+import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { pathToFileURL } from "node:url";
+import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
+import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
+import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 
+import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
+import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import {
   addItemFromPhoto,
   addItemsToBox,
@@ -940,7 +948,7 @@ export function createAssistWithMovingMcpServer(apiConfig, options = {}) {
     name: "assistwithmoving",
     version: "0.2.0",
     websiteUrl: "https://movingmanifest.com",
-  }, { instructions: "New AI connections default to all entitled current/future scopes, all owned moves and no end date. Use get_api_context first. reduce_connection can only narrow this calling bearer, with a version and durable receipt. Only the person in https://movingmanifest.com/settings/ai can widen or restore access. Existing chosen limits and this door’s product ceiling remain enforced." });
+  }, { instructions: connectionPolicy.instructions });
   registerTools(target, apiConfig, options);
   return target;
 }
@@ -971,7 +979,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "reduce_connection", {
     title: "Reduce this connection's access",
     description: "Narrow only this bearer key's scopes, moveIds (one move), expiry, pause or revoke. Get version from get_api_context. Only the person at https://movingmanifest.com/settings/ai can widen or restore access.",
-    inputSchema: { expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() },
+    inputSchema: { opId: z.string(), expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: input => reduceConnection(apiConfig, input),
   });
@@ -2732,12 +2740,13 @@ function registerTool(target, name, config) {
     name,
     {
       title: config.title,
-      description: config.description,
+      description: apiToolAccess[name]?.websiteOnly ? "Website-only. API keys cannot create invitations or share links. The person must use https://movingmanifest.com/settings/ai." : config.description,
       inputSchema: config.inputSchema,
       annotations: config.annotations,
     },
     async (input) => {
       try {
+        if (apiToolAccess[name]?.websiteOnly) throw new Error("Invitations and new share links are website-only. The person must use https://movingmanifest.com/settings/ai.");
         const result = await config.handler(input);
         // Most tools return plain data we wrap as a text block. Tools that need
         // to emit native content blocks (e.g. inline images) set rawResult and

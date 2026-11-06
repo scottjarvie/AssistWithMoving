@@ -186,6 +186,17 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("names a removed power and person-only recovery for cached tool calls", async () => {
+    const ctx = { runMutation: vi.fn(async () => ({ grants: [] })), runQuery: vi.fn(async () => ({ scopes: [], connectionState: { status: "paused", changedAt: 1000 } })), runAction: vi.fn() } as any;
+    const { handleMcpRequestForTests } = await loadRoute();
+    const response = await handleMcpRequestForTests(ctx, protocolRequest(JSON.stringify({ jsonrpc: "2.0", id: 20, method: "tools/call", params: { name: "save_inventory", arguments: {} } })));
+    const reply = await response.json();
+    expect(reply.error.message).toContain("moving.work.write");
+    expect(reply.error.message).toContain("Only the person can restore");
+    expect(reply.error.message).toContain("https://movingmanifest.com/settings/ai");
+    expect(ctx.runMutation).toHaveBeenCalledTimes(1);
+  });
+
   it("fails closed on grant lookup failure after required safe metadata validation", async () => {
     verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
     vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -543,10 +554,10 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
       expect(reconnected.expiresAt).toBeUndefined();
       for (const row of before.grants) expect(await f.t.run(ctx => ctx.db.get(row._id))).toEqual(row);
       const beforeDelayed = await f.snapshot();
-      await expect(f.t.mutation(internal.aiGrants.reduceConnection, {
+      await expect(f.t.mutation(internal.aiGrants.reduceConnection, { opId: "test-mcp-request-guards.test-1",
         subject: SUBJECT, clientId, expectedVersion: original.version, action: "revoke",
       })).rejects.toThrow(/changed/);
-      await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, {
+      await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-request-guards.test-2",
         caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: original.version, action: "revoke",
       })).rejects.toThrow(/changed/);
       expect(await f.snapshot()).toEqual(beforeDelayed);
@@ -568,7 +579,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
       expect((await canonical()).sort()).toEqual([...STATELESS_MOVING_TOOL_NAMES].sort());
       expect((await persisted()).allowed).toBe(true);
       const reductionRequest = request(JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: {
-        name: "reduce_connection", arguments: { expectedVersion: -1, scopes: ["moving.context.read"] },
+        name: "reduce_connection", arguments: { opId: "wire-reduction", expectedVersion: -1, scopes: ["moving.context.read"] },
         _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "overflow-test", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} },
       } }));
       reductionRequest.headers.set("mcp-protocol-version", "2026-07-28");
@@ -576,7 +587,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
       reductionRequest.headers.set("mcp-name", "reduce_connection");
       expect((await handleMcpRequestForTests(ctx, reductionRequest)).status).toBe(200);
       expect(await f.t.run(ctx => ctx.db.get(grantId))).toMatchObject({ version: -2, scopes: ["moving.context.read"] });
-      expect((await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: -2, scopes: [] })).version).toBe(-3);
+      expect((await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-request-guards.test-3", caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: -2, scopes: [] })).version).toBe(-3);
       expect((await persisted()).allowed).toBe(false);
     });
   }
@@ -608,7 +619,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
         expect(initial.grants[0]).toMatchObject({ clientId: normalized, scopeChoice: "full", moveScope: "allMoves", expiryChoice: "none" });
         const expiresAt = Date.now() + 200_000;
         const caller = { subject: SUBJECT, claims: { client_id: claim } };
-        await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 1, scopes: ["moving.queue.work"], expiresAt });
+        await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-request-guards.test-4", caller, expectedVersion: 1, scopes: ["moving.queue.work"], expiresAt });
         expect(await canonical()).not.toContain("get_move_brief");
         expect((await persisted()).allowed).toBe(false);
         expect(await canonical(normalized)).not.toContain("get_move_brief");
@@ -617,12 +628,12 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
         const narrowed = await f.snapshot();
         expect(narrowed.grants).toHaveLength(1);
         expect(narrowed.grants[0]).toMatchObject({ expiresAt, scopes: ["moving.queue.work"] });
-        await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 1, scopes: [] })).rejects.toThrow(/changed/);
+        await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-request-guards.test-5", caller, expectedVersion: 1, scopes: [] })).rejects.toThrow(/changed/);
         expect(await f.snapshot()).toEqual(narrowed);
-        await f.t.mutation(internal.aiGrants.reduceConnection, { subject: SUBJECT, clientId: normalized, expectedVersion: 2, expiresAt: expiresAt - 10_000, scopes: [] });
+        await f.t.mutation(internal.aiGrants.reduceConnection, { opId: "test-mcp-request-guards.test-6", subject: SUBJECT, clientId: normalized, expectedVersion: 2, expiresAt: expiresAt - 10_000, scopes: [] });
         expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
         expect((await persisted()).allowed).toBe(false);
-        await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 3, action: "pause" });
+        await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-request-guards.test-7", caller, expectedVersion: 3, action: "pause" });
         expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
         expect((await persisted(normalized)).allowed).toBe(false);
         const row = (await f.snapshot()).grants[0];
@@ -692,7 +703,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
     expect((await createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims }, toolName: "list_moves", mode: "list" } as any)).allowed).toBe(false);
     const caller = { subject: SUBJECT, claims };
     await expect(f.t.query(internal.mcpTools.getAgentContext, { caller })).rejects.toThrow(/unambiguous/);
-    await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 1, scopes: [] })).rejects.toThrow(/unambiguous/);
+    await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-request-guards.test-8", caller, expectedVersion: 1, scopes: [] })).rejects.toThrow(/unambiguous/);
     expect(ctx.runAction).not.toHaveBeenCalled();
     expect(await f.snapshot()).toEqual(before);
   });

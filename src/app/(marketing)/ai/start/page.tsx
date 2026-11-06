@@ -1,3 +1,4 @@
+import connectionPolicy from "../../../../../shared/ai-connection-policy.json";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
@@ -104,6 +105,7 @@ export default function AiStartPage() {
                   key={option}
                   className="flex items-center gap-2 rounded-md border border-border bg-background/65 p-3 text-sm"
                 >
+      <p className="mx-auto max-w-5xl p-6 leading-7">{connectionPolicy.instructions}</p>
                   <CheckCircle2
                     className="size-4 shrink-0 text-primary"
                     aria-hidden="true"

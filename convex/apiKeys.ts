@@ -1,3 +1,4 @@
+import { connectionChange, connectionRequest, previousChange, safeConnectionText } from "./lib/connectionHistory";
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -175,6 +176,8 @@ export const create = mutation({
       metadata: { scopes, expiresAt: args.expiresAt },
     });
 
+    const created = await ctx.db.get(apiKeyId);
+    if (created) await connectionChange(ctx, { ownerUserId: created.createdByUserId, connectionId: String(apiKeyId), actor: "person", before: null, after: keyReceiptLimits(created, now), message: "You created an API-key connection.", opId: `create:${apiKeyId}` });
     return {
       apiKeyId,
       rawKey,
@@ -224,6 +227,8 @@ export const revoke = mutation({
       objectId: args.apiKeyId,
       metadata: { version, previousVersion: key.version ?? 1 },
     });
+    const after = await ctx.db.get(key._id);
+    if (after) await connectionChange(ctx, { ownerUserId: key.createdByUserId, connectionId: String(key._id), actor: "person", before: keyReceiptLimits(key, now), after: keyReceiptLimits(after, now), message: "You revoked this API-key connection.", opId: `person:${key._id}:${version}` });
     return { version };
   },
 });
@@ -232,6 +237,7 @@ export const rotate = mutation({
   args: {
     householdId: v.id("households"),
     apiKeyId: v.id("apiKeys"),
+    expectedVersion: v.number(),
   },
   handler: async (ctx, args) => {
     await requirePersonConnectionManagement(ctx);
@@ -252,11 +258,13 @@ export async function rotateApiKeyForUser(
   args: {
     householdId: Id<"households">;
     apiKeyId: Id<"apiKeys">;
+    expectedVersion?: number;
   },
   actorUserId: Id<"users">,
   now = Date.now(),
 ) {
     const key = await getMutableKey(ctx, args);
+    if (args.expectedVersion !== undefined && args.expectedVersion !== (key.version ?? 1)) throw new ConvexError("This connection changed. Reload Settings before rotating it.");
     const effectiveStatus = apiKeyEffectiveStatus(key, now);
     if (effectiveStatus === "revoked") {
       throw new ConvexError(
@@ -288,6 +296,7 @@ export async function rotateApiKeyForUser(
       tokenPreview: apiKeyPreview(rawKey),
       secretHash: await hashApiKey(rawKey),
       scopes: key.scopes,
+      withheldScopes: key.withheldScopes, pausedAt: key.pausedAt, narrowedBy: key.narrowedBy, narrowedAt: key.narrowedAt,
       scopeChoice: key.scopeChoice,
       version: 1,
       status: "active",
@@ -310,6 +319,9 @@ export async function rotateApiKeyForUser(
       metadata: { rotatedFromApiKeyId: key._id },
     });
 
+    const before = keyReceiptLimits(key, now);
+    await connectionChange(ctx, { ownerUserId: key.createdByUserId, connectionId: String(key._id), actor: "person", before, after: { ...before, status: "revoked", active: false, version: (key.version ?? 1) + 1 }, message: "You rotated this key; the old credential is revoked.", opId: `rotate:${key._id}:${(key.version ?? 1) + 1}` });
+    await connectionChange(ctx, { ownerUserId: actorUserId, connectionId: String(rotatedApiKeyId), actor: "person", before: null, after: { ...before, version: 1 }, message: "Replacement key keeps the previous connection’s limits.", opId: `create:${rotatedApiKeyId}` });
     return {
       apiKeyId: rotatedApiKeyId,
       rawKey,
@@ -361,7 +373,7 @@ function normalizeKeyName(name: string) {
   if (!trimmed) {
     throw new ConvexError("Give this connection a name.");
   }
-  return trimmed.slice(0, 120);
+  return safeConnectionText(trimmed).slice(0, 120);
 }
 
 function normalizeExpiration(expiresAt: number | undefined) {
@@ -376,6 +388,8 @@ function normalizeExpiration(expiresAt: number | undefined) {
 export async function reduceOwnApiKey(ctx: MutationCtx, apiKeyId: Id<"apiKeys">, input: Reduction) {
   const key = await ctx.db.get(apiKeyId);
   if (!key) throw new ConvexError("Calling connection unavailable.");
+  const replay = await previousChange(ctx, String(key._id), input.opId, "ai", input);
+  if (replay) return { version: replay.after.version as number, receipt: replay.after.auditReceipt as Id<"auditLogs">, settings: "https://movingmanifest.com/settings/ai" };
   const now = Date.now();
   const before = keyReceiptLimits(key, now);
   const reduced = reducedAccess({ version: key.version ?? 1, scopes: effectiveApiKeyScopes(key), moveIds: key.moveId ? [String(key.moveId)] : undefined, expiresAt: key.expiresAt, active: key.status === "active" }, input, now);
@@ -384,7 +398,8 @@ export async function reduceOwnApiKey(ctx: MutationCtx, apiKeyId: Id<"apiKeys">,
   if (moveId) await assertMoveRestriction(ctx, { householdId: key.householdId, moveId });
   const version = (key.version ?? 1) + 1;
   await ctx.db.patch(key._id, {
-    ...(reduced.scopes ? { scopes: reduced.scopes as import("./lib/apiKeys").ApiKeyScope[], scopeChoice: "chosen" as const } : {}),
+    ...(reduced.scopes ? { scopes: reduced.scopes as import("./lib/apiKeys").ApiKeyScope[], withheldScopes: apiKeyScopes.filter(scope => !reduced.scopes!.includes(scope)), scopeChoice: "chosen" as const } : {}),
+    ...(input.action === "pause" ? { pausedAt: now } : {}), narrowedBy: "ai", narrowedAt: now,
     ...(moveId ? { moveId } : {}),
     ...(reduced.expiresAt !== undefined ? { expiresAt: reduced.expiresAt! } : {}),
     ...(input.action === "revoke" ? { status: "revoked" as const, revokedAt: now } : {}),
@@ -394,12 +409,13 @@ export async function reduceOwnApiKey(ctx: MutationCtx, apiKeyId: Id<"apiKeys">,
   if (!changed) throw new ConvexError("Calling connection unavailable.");
   const after = keyReceiptLimits(changed, now);
   const receipt = await recordPrivateKeyAudit(ctx, { householdId: key.householdId, moveId: key.moveId, actorType: "apiKey", actorApiKeyId: key._id, actorUserId: key.createdByUserId, category: "apiKey", action: "api_key.self_reduced", objectTable: "apiKeys", objectId: key._id, metadata: { version, action: input.action ?? "narrow", previousVersion: before.version, previousScopes: before.scopes, scopes: after.scopes, moveId: after.moveId, expiresAt: after.expiresAt, before, after } });
+  await connectionChange(ctx, { ownerUserId: key.createdByUserId, connectionId: String(key._id), actor: "ai", before, after: { ...after, auditReceipt: receipt }, message: `Your AI ${input.action ?? "narrowed"} its API-key connection.`, opId: input.opId!, requestKey: connectionRequest(input) });
   return { version, receipt, settings: "https://movingmanifest.com/settings/ai" };
 }
 
 function keyReceiptLimits(key: Doc<"apiKeys">, now: number) {
   const status = apiKeyEffectiveStatus(key, now);
-  return { version: key.version ?? 1, status, active: status === "active", scopes: [...effectiveApiKeyScopes(key)], moveId: key.moveId ?? null, expiresAt: key.expiresAt ?? null };
+  return { version: key.version ?? 1, pausedAt: key.pausedAt ?? null, status, active: status === "active", scopes: [...effectiveApiKeyScopes(key)], moveId: key.moveId ?? null, expiresAt: key.expiresAt ?? null };
 }
 
 /** The REST facade maps failures only after this subtransaction rolls back. */

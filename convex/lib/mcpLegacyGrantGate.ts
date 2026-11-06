@@ -264,6 +264,7 @@ export type LegacyGrantBlock =
   | "lookupFailed"
   | "connectionLimit"
   | "revoked"
+  | "paused"
   | "expired"
   | "noHousehold";
 
@@ -285,7 +286,7 @@ const BLOCK_REFUSALS: Record<
     reason:
       "Your AI client did not identify itself, so Assist With Moving will not auto-connect it; an unnamed client cannot be revoked on its own later. Approve this connection yourself at " +
       GRANT_MANAGER_URL +
-      ", then reconnect.",
+      ", only the person can restore access on the website.",
   },
   lookupFailed: {
     refusalCode: "GRANT_LOOKUP_UNAVAILABLE",
@@ -297,17 +298,18 @@ const BLOCK_REFUSALS: Record<
     reason:
       "This account already has the maximum number of AI connections, so a new one was not created. Revoke one you no longer use at " +
       GRANT_MANAGER_URL +
-      ", then reconnect.",
+      ", only the person can restore access on the website.",
   },
   noHousehold: {
     refusalCode: "NO_WORKSPACE",
     reason:
-      "This account has no household or move yet, so there is nothing to connect an AI to. Create a household in Assist With Moving, or ask the move owner to add you, then reconnect.",
+      "This account has no household or move yet, so there is nothing to connect an AI to. Create a household in Assist With Moving, or ask the move owner to add you, only the person can restore access on the website.",
   },
   revoked: {
     refusalCode: "GRANT_REVOKED",
-    reason: `This connection was revoked in Assist With Moving. Ask the person to approve it again at ${GRANT_MANAGER_URL}, then reconnect.`,
+    reason: `This connection was revoked in Assist With Moving. Ask the person to approve it again at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
   },
+  paused: { refusalCode: "GRANT_PAUSED", reason: `This connection is paused. Only the person can resume it at ${GRANT_MANAGER_URL}.` },
   expired: {
     refusalCode: "GRANT_EXPIRED",
     reason: `This connection has reached its end date. Open ${GRANT_MANAGER_URL} and remove or change its end date, then retry.`,
@@ -342,7 +344,7 @@ export function decideLegacyGatewayAccess(input: {
   const now = input.now ?? Date.now();
 
   if (toolName === "describe_connection") return { allowed: true };
-  if (toolName === "reduce_connection") return grants.some(grant => grant.status === "active" && (effectiveExpiry(grant) === undefined || effectiveExpiry(grant)! > now)) ? { allowed: true } : { allowed: false, refusalCode: "GRANT_REQUIRED", reason: `No active calling connection. The person can restore access at ${GRANT_MANAGER_URL}.` };
+  if (toolName === "reduce_connection") return { allowed: true };
 
   // The product ceiling is checked before anything else, so no grant state and
   // no future scope can talk its way past it.
@@ -397,7 +399,7 @@ export function decideLegacyGatewayAccess(input: {
     return {
       allowed: false,
       refusalCode: "MEDIA_WRITE_NOT_ENABLED",
-      reason: `Uploading or attaching photos is a raised permission a sign-in does not include. Enable it for this connection at ${GRANT_MANAGER_URL}, then reconnect.`,
+      reason: `Uploading or attaching photos is a raised permission a sign-in does not include. Enable it for this connection at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
     };
   }
 
@@ -418,7 +420,7 @@ export function decideLegacyGatewayAccess(input: {
           allowed: false,
           scope: movingScope,
           refusalCode: "GRANT_SCOPE_MISSING",
-          reason: `This connection was not approved for ${movingScope}. The person can add it at ${GRANT_MANAGER_URL}, then you reconnect.`,
+          reason: `This connection was not approved for ${movingScope}. The person can add it at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
         };
   }
 
@@ -436,14 +438,14 @@ export function decideLegacyGatewayAccess(input: {
       allowed: false,
       scope: movingScope,
       refusalCode: "GRANT_MOVE_MISSING",
-      reason: `This connection was not approved for that move. The person can add it at ${GRANT_MANAGER_URL}, then you reconnect.`,
+      reason: `This connection was not approved for that move. The person can add it at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
     };
   }
   return {
     allowed: false,
     scope: movingScope,
     refusalCode: "GRANT_SCOPE_MISSING",
-    reason: `This connection was not approved for ${movingScope}. The person can add it at ${GRANT_MANAGER_URL}, then you reconnect.`,
+    reason: `This connection was not approved for ${movingScope}. The person can add it at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
   };
 }
 

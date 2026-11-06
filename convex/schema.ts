@@ -815,7 +815,14 @@ const aiGrantFields = {
     clientMetadataDigest: v.optional(v.string()),
     // What the client called itself. A label for the person, never authority.
     observedClientName: v.optional(v.string()),
+    inheritedPredecessors: v.optional(v.array(v.object({ grantId: v.id("aiGrants"), version: v.number() }))),
+    releasesPredecessors: v.optional(v.array(v.object({ grantId: v.id("aiGrants"), version: v.number() }))),
     scopes: v.array(movingGrantScope),
+    withheldScopes: v.optional(v.array(v.string())),
+    pausedAt: v.optional(v.number()),
+    narrowedBy: v.optional(v.union(v.literal("person"), v.literal("ai"))),
+    narrowedAt: v.optional(v.number()),
+
     scopeChoice: v.optional(v.union(v.literal("full"), v.literal("chosen"))),
     expiryChoice: v.optional(v.union(v.literal("none"), v.literal("chosen"), v.literal("automatic"))),
     moveScope: v.union(v.literal("allMoves"), v.literal("selectedMoves")),
@@ -1148,6 +1155,11 @@ export default defineSchema({
     tokenPreview: v.string(),
     secretHash: v.string(),
     scopes: v.array(apiKeyScope),
+    withheldScopes: v.optional(v.array(v.string())),
+    pausedAt: v.optional(v.number()),
+    narrowedBy: v.optional(v.union(v.literal("person"), v.literal("ai"))),
+    narrowedAt: v.optional(v.number()),
+
     scopeChoice: v.optional(v.union(v.literal("full"), v.literal("chosen"))),
     version: v.optional(v.number()),
     status: apiKeyStatus,
@@ -1557,6 +1569,13 @@ export default defineSchema({
    * A grant is per OAuth client, so revoking one connected AI does not disturb
    * another. It is never a credential — there is nothing here to connect with.
    */
+  aiConnectionChanges: defineTable({
+    ownerUserId: v.id("users"), connectionId: v.string(),
+    actor: v.union(v.literal("person"), v.literal("ai"), v.literal("system")),
+    before: v.any(), after: v.any(), message: v.string(), createdAt: v.number(), opId: v.string(), requestKey: v.optional(v.string()),
+  }).index("by_connection_op", ["connectionId", "opId"])
+    .index("by_owner_created", ["ownerUserId", "createdAt"]),
+
   aiGrants: defineTable(aiGrantFields)
     .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
     .index("by_owner_updated", ["ownerUserId", "updatedAt"])

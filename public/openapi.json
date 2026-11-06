@@ -61,16 +61,11 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Existing member access or pending invitation updated."
-          },
-          "201": {
-            "description": "Household member access created."
-          },
-          "202": {
-            "description": "Pending household invitation created for an email that has not signed in yet."
+          "403": {
+            "description": "Website-only operation; API key refused."
           }
-        }
+        },
+        "description": "Website-only. API keys cannot create invitations or new share links. The person must use the signed-in website."
       }
     },
     "/moves": {

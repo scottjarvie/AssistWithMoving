@@ -18,8 +18,10 @@ export const apiKeyScopes = [
 ] as const;
 
 /** Only newly explicit full keys follow future scopes; legacy arrays stay exact. */
-export function effectiveApiKeyScopes(key: { scopes: ApiKeyScope[]; scopeChoice?: "full" | "chosen" }): ApiKeyScope[] {
-  return key.scopeChoice === "full" ? [...apiKeyScopes] : key.scopes;
+export function effectiveApiKeyScopes(key: { scopes: ApiKeyScope[]; scopeChoice?: "full" | "chosen"; withheldScopes?: readonly string[] }): ApiKeyScope[] {
+  const baseline = ["moves/read", "moves/write", "inventory/read", "inventory/write", "queue/read", "queue/write", "plans/read", "plans/write", "photos/write", "exports/read", "exports/create", "members/manage"];
+  const withheld = key.withheldScopes ?? (key.scopeChoice === "full" ? [] : baseline.filter(scope => !key.scopes.includes(scope as ApiKeyScope)));
+  return apiKeyScopes.filter(scope => !withheld.includes(scope));
 }
 
 export type ApiKeyScope = (typeof apiKeyScopes)[number];
@@ -33,13 +35,14 @@ export type ApiKeyVerificationInput = {
   secretHash: string;
 };
 
-export type ApiKeyEffectiveStatus = "active" | "expired" | "revoked";
+export type ApiKeyEffectiveStatus = "active" | "expired" | "revoked" | "paused";
 
 export function apiKeyEffectiveStatus(
-  record: Pick<ApiKeyVerificationInput, "status" | "expiresAt">,
+  record: Pick<ApiKeyVerificationInput, "status" | "expiresAt"> & { pausedAt?: number },
   now = Date.now(),
 ): ApiKeyEffectiveStatus {
   if (record.status === "revoked") return "revoked";
+  if (record.pausedAt !== undefined) return "paused";
   if (record.expiresAt !== undefined && record.expiresAt <= now) {
     return "expired";
   }
