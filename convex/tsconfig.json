@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "incremental": false,
+    "plugins": []
+  },
+  "include": ["./**/*"],
+  "exclude": ["./_generated", "./**/*.test.*", "./**/*.spec.*", "../node_modules"]
+}

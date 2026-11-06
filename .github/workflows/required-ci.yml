@@ -79,6 +79,10 @@ jobs:
         if: steps.scope.outputs.run_full == 'true'
         run: npm run typecheck
 
+      - name: Verify the Convex deployment typecheck prerequisite offline
+        if: steps.scope.outputs.run_full == 'true'
+        run: npm run check:convex-typecheck
+
       - name: Verify REST and MCP contract drift
         if: steps.scope.outputs.run_full == 'true'
         run: npm run contract:drift
