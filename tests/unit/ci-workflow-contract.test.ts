@@ -10,7 +10,7 @@ const workflowPath = resolve(
 );
 
 function workflowSource() {
-  return readFileSync(workflowPath, "utf8");
+  return readFileSync(workflowPath, "utf8").replace(/\r\n/g, "\n");
 }
 
 function requiredJobSource(source: string) {
