@@ -264,6 +264,8 @@ export type LegacyGrantBlock =
   | "lookupFailed"
   | "connectionLimit"
   | "revoked"
+  | "initializing"
+  | "superseded"
   | "paused"
   | "expired"
   | "noHousehold";
@@ -284,9 +286,7 @@ const BLOCK_REFUSALS: Record<
   unidentifiedClient: {
     refusalCode: "CLIENT_UNIDENTIFIED",
     reason:
-      "Your AI client did not identify itself, so Assist With Moving will not auto-connect it; an unnamed client cannot be revoked on its own later. Approve this connection yourself at " +
-      GRANT_MANAGER_URL +
-      ", only the person can restore access on the website.",
+      "A verified OAuth client id is required. Reported names do not establish identity. Only the person manages connection access at " + GRANT_MANAGER_URL + ".",
   },
   lookupFailed: {
     refusalCode: "GRANT_LOOKUP_UNAVAILABLE",
@@ -309,6 +309,8 @@ const BLOCK_REFUSALS: Record<
     refusalCode: "GRANT_REVOKED",
     reason: `This connection was revoked in Assist With Moving. Ask the person to approve it again at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
   },
+  initializing: { refusalCode: "ACCESS_INITIALIZING", reason: "Earlier connection limits are still being checked. Call describe_connection again shortly. No access was widened." },
+  superseded: { refusalCode: "CONNECTION_SUPERSEDED", reason: `This registration was superseded. Only the person can restore it at ${GRANT_MANAGER_URL}.` },
   paused: { refusalCode: "GRANT_PAUSED", reason: `This connection is paused. Only the person can resume it at ${GRANT_MANAGER_URL}.` },
   expired: {
     refusalCode: "GRANT_EXPIRED",
@@ -420,7 +422,7 @@ export function decideLegacyGatewayAccess(input: {
           allowed: false,
           scope: movingScope,
           refusalCode: "GRANT_SCOPE_MISSING",
-          reason: `This connection was not approved for ${movingScope}. The person can add it at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
+          reason: `Missing power ${movingScope}. Only the person can restore it at ${GRANT_MANAGER_URL}.`,
         };
   }
 
@@ -438,14 +440,14 @@ export function decideLegacyGatewayAccess(input: {
       allowed: false,
       scope: movingScope,
       refusalCode: "GRANT_MOVE_MISSING",
-      reason: `This connection was not approved for that move. The person can add it at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
+      reason: `Missing power ${movingScope} for that move. Only the person can restore it at ${GRANT_MANAGER_URL}.`,
     };
   }
   return {
     allowed: false,
     scope: movingScope,
     refusalCode: "GRANT_SCOPE_MISSING",
-    reason: `This connection was not approved for ${movingScope}. The person can add it at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
+    reason: `Missing power ${movingScope}. Only the person can restore it at ${GRANT_MANAGER_URL}.`,
   };
 }
 

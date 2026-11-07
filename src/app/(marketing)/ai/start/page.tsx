@@ -97,7 +97,7 @@ export default function AiStartPage() {
           <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <KeyRound className="size-4 text-primary" aria-hidden="true" />
-              What the grant asks you to choose
+              Optional connection limits
             </div>
             <div className="mt-4 grid gap-2">
               {grantChoices.map((option) => (
@@ -153,7 +153,7 @@ export default function AiStartPage() {
             </div>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               A fallback key can read and change your move data according to
-              its scopes, and it is not governed by the grant. Only paste it
+              its powers and the same carried connection limits. Only paste it
               into an AI you trust when the canonical connection is not
               available. Do not put keys in public chats, screenshots, issues,
               or documents. You can revoke connections and keys later in

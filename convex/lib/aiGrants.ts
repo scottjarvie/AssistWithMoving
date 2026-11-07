@@ -221,33 +221,33 @@ export const GRANT_ERRORS = {
   noGrant: {
     code: "GRANT_REQUIRED",
     message:
-      "No active Assist With Moving grant covers this connection yet. Signing in proved who you are; it did not decide what your AI may do.",
+      "This connection is stopped or has not finished its first access check. Call describe_connection for its actual state.",
     recovery:
-      "Open Assist With Moving, go to Settings → AI connections, and approve a grant for the moves and operations you want.",
+      "Only the person can restore access at https://movingmanifest.com/settings/ai.",
   },
   revoked: {
     code: "GRANT_REVOKED",
     message: "That grant was revoked in Assist With Moving.",
     recovery:
-      "Ask the person who owns this move to approve a new grant, only the person can restore access on the website.",
+      "Only the person can restore this connection at https://movingmanifest.com/settings/ai.",
   },
   expired: {
     code: "GRANT_EXPIRED",
     message: "That grant has expired.",
     recovery:
-      "Open https://movingmanifest.com/settings/ai and remove or change this connection’s end date, then retry.",
+      "Only the person can clear or extend the end date at https://movingmanifest.com/settings/ai.",
   },
   outOfScope: {
     code: "GRANT_SCOPE_MISSING",
     message: "This grant does not include the operation you asked for.",
     recovery:
-      "Ask for the smallest additional authority at https://movingmanifest.com/settings/ai, or do the part the grant already covers.",
+      "Only the person can restore this power at https://movingmanifest.com/settings/ai.",
   },
   outOfMoveScope: {
     code: "GRANT_MOVE_MISSING",
     message: "This grant does not cover that move.",
     recovery:
-      "Use a move this connection was approved for, or add it at https://movingmanifest.com/settings/ai.",
+      "Only the person can restore access to this move at https://movingmanifest.com/settings/ai.",
   },
   unknownTool: {
     code: "GRANT_SCOPE_MISSING",

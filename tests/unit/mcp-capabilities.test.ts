@@ -892,7 +892,7 @@ describe("Bring Your AI documentation truth", () => {
       expect(text, `${path} queue loop`).toContain("list_queue_work");
       expect(text, `${path} idempotency`).toMatch(/operationId/);
       expect(text, `${path} stale tools`).toMatch(
-        /stale|disconnect and reconnect|disconnect,? then reconnect/i,
+        /stale|refresh\s+tools\/list/i,
       );
       expect(text, `${path} client identity`).toMatch(
         /Client ID Metadata Document/i,

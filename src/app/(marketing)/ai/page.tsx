@@ -36,12 +36,12 @@ const starterPrompt =
   "Open https://movingmanifest.com/ai and help me use Assist With Moving. If you speak remote Streamable HTTP MCP with compatible OAuth, connect to https://movingmanifest.com/mcp. Connecting creates a full-access grant with no end date by default. I can narrow or revoke it in Settings → AI connections. Call describe_connection if no tools appear, get_move_brief first, search before creating duplicates, and save finished work with save_complete_result.";
 
 // canonical-tool-catalog:start
-// Every tool the canonical door can ever list, with the approval each one
+// Every tool the canonical door can ever list, with the power each one
 // needs. Your AI sees only the rows your grant covers.
 const canonicalToolCatalog = [
   {
     scope: "Always available",
-    label: "No approval needed",
+    label: "Connection controls",
     copy: "How your AI finds out what it may do, and what to tell you when it may do nothing.",
     tools: ["describe_connection", "reduce_connection"],
   },
@@ -97,7 +97,7 @@ const quickCapabilities = [
   },
   {
     title: "Use evidence with inventory",
-    copy: "When you approve evidence reading, your AI can open the private photos for that work, create or correct inventory, keep source notes, and mark what still needs review.",
+    copy: "With evidence reading included, your AI can open the private photos for that work, create or correct inventory, keep source notes, and mark what still needs review.",
     icon: Camera,
   },
   {
@@ -173,7 +173,7 @@ const connectionTruth = [
   {
     status: "Partial",
     title: "Bring your AI",
-    copy: "The endpoint, the five approvals, the grant boundary, the Queue workflow, and immediate revocation are built. No AI product has yet completed a full connect, approve, read, save, revoke, and reconnect run against it, and the provider-side setup for verified client identity is not finished. Any AI that speaks remote Streamable HTTP MCP with compatible OAuth can attempt it; that is a requirement, not a promise about a particular product.",
+    copy: "The endpoint, the five powers, the grant boundary, the Queue workflow, and immediate revocation are built. No AI product has yet completed a full connect, read, save, revoke, and person-restore run against it, and the provider-side setup for verified client identity is not finished. Any AI that speaks remote Streamable HTTP MCP with compatible OAuth can attempt it; that is a requirement, not a promise about a particular product.",
   },
   {
     status: "Current",

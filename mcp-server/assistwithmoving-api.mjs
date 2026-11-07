@@ -2622,3 +2622,11 @@ function removeUndefined(value) {
       .map(([key, entry]) => [key, removeUndefined(entry)])
   );
 }
+
+export async function listArchivedAssignments(config, input) {
+  return assistWithMovingRequest(config, { path: `/moves/${input.moveId}/assignments`, query: { archived: "true", cursor: input.cursor } });
+}
+export async function restoreArchivedAssignment(config, input) {
+  if (input.dryRun) return { dryRun: true, archiveId: input.archiveId };
+  return assistWithMovingRequest(config, { method: "POST", path: `/moves/${input.moveId}/assignments/${input.archiveId}/restore` });
+}

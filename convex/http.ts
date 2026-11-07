@@ -1270,7 +1270,18 @@ const mcpHttpAction = httpAction(async (ctx, request) => {
   let instructions = connectionPolicy.instructions;
   if (identity) {
     const clientId = legacyClientIdFrom(identity.claims);
-    await ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, { subject: identity.subject, clientId, clientName: legacyClientNameFrom(identity.claims) });
+    // Initialize can succeed before a tool authorization callback. It must
+    // validate CIMD too, before it creates or binds any product connection.
+    let resolved;
+    try {
+      resolved = await resolveClientIdentity(clientId.slice("legacy:".length), {
+        declaredClientName: legacyClientNameFrom(identity.claims) ?? (typeof input?.params?.clientInfo?.name === "string" ? input.params.clientInfo.name : undefined),
+        fetchMetadata: id => ctx.runAction(anyApi.mcpClientMetadata.fetchDocument, { clientId: id }),
+      });
+    } catch {
+      return new Response(JSON.stringify({ error: "invalid_client", message: "OAuth client metadata could not be validated." }), { status: 401, headers: { "content-type": "application/json" } });
+    }
+    await ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, { subject: identity.subject, clientId: resolved.clientId, clientName: resolved.clientName });
     const state = await ctx.runQuery(generatedInternal.aiGrants.describeConnection, { subject: identity.subject, clientId });
     instructions += ` Connection state: ${state.status}; changed ${state.changedAt ?? "date unavailable"}; end date ${state.expiresAt ?? "none"}.`;
   }

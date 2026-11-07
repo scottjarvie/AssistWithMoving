@@ -238,6 +238,18 @@
     ],
     "websiteOnly": false
   },
+  "list_archived_box_assignments": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "restore_box_assignment": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
   "remove_item_from_box": {
     "scopes": [
       "inventory/write"
