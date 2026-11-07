@@ -1,3 +1,4 @@
+import { AiAccessFaq } from "@/components/ai-access-faq";
 import Link from "next/link";
 import { ArrowRight, Bot, HelpCircle, Info, LayoutGrid } from "lucide-react";
 
@@ -130,6 +131,7 @@ export default function MarketingPage() {
         </div>
       </section>
 
+      <AiAccessFaq />
       <PublicFooter />
     </main>
   );

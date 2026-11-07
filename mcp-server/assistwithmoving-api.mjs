@@ -293,6 +293,14 @@ export function toolErrorResult(error) {
   };
 }
 
+export async function reduceConnection(config, input) {
+  return await assistWithMovingRequest(config, {
+    path: "/me/access",
+    method: "POST",
+    body: input,
+  });
+}
+
 export async function getApiContext(config) {
   return await assistWithMovingRequest(config, {
     path: "/me",
@@ -2613,4 +2621,12 @@ function removeUndefined(value) {
       .filter(([, entry]) => entry !== undefined)
       .map(([key, entry]) => [key, removeUndefined(entry)])
   );
+}
+
+export async function listArchivedAssignments(config, input) {
+  return assistWithMovingRequest(config, { path: `/moves/${input.moveId}/assignments`, query: { archived: "true", cursor: input.cursor } });
+}
+export async function restoreArchivedAssignment(config, input) {
+  if (input.dryRun) return { dryRun: true, archiveId: input.archiveId };
+  return assistWithMovingRequest(config, { method: "POST", path: `/moves/${input.moveId}/assignments/${input.archiveId}/restore` });
 }

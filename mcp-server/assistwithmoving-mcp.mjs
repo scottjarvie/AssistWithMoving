@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
+import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -38,6 +40,7 @@ import {
   getAiProviderStatus,
   getApiCapabilities,
   getApiContext,
+  reduceConnection,
   getAgentContext,
   getCapacityReport,
   getInlineImages,
@@ -74,6 +77,8 @@ import {
   convertItemToBox,
   convertPlannedItem,
   removeItemFromBox,
+  listArchivedAssignments,
+  restoreArchivedAssignment,
   rejectAiPhotoSuggestions,
   rejectAiTextSuggestions,
   rejectPlanningSuggestions,
@@ -892,6 +897,7 @@ const boxIntakeLinkedItemSchema = z.object({
 export const ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS = [
   "get_api_capabilities",
   "get_api_context",
+  "reduce_connection",
   "list_moves",
   "setup_move",
   "update_move",
@@ -938,7 +944,7 @@ export function createAssistWithMovingMcpServer(apiConfig, options = {}) {
     name: "assistwithmoving",
     version: "0.2.0",
     websiteUrl: "https://movingmanifest.com",
-  });
+  }, { instructions: connectionPolicy.instructions });
   registerTools(target, apiConfig, options);
   return target;
 }
@@ -964,6 +970,14 @@ export function registerTools(target, apiConfig, options = {}) {
     inputSchema: {},
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: () => getApiCapabilities(),
+  });
+
+  registerTool(target, "reduce_connection", {
+    title: "Reduce this connection's access",
+    description: "Narrow only this bearer key's scopes, moveIds (one move), expiry, pause or revoke. Get version from get_api_context. Only the person at https://movingmanifest.com/settings/ai can widen or restore access.",
+    inputSchema: { opId: z.string(), expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: input => reduceConnection(apiConfig, input),
   });
 
   registerTool(target, "get_api_context", {
@@ -1654,10 +1668,23 @@ export function registerTools(target, apiConfig, options = {}) {
     handler: (input) => addItemsToBox(apiConfig, input),
   });
 
+  registerTool(target, "list_archived_box_assignments", {
+    title: "List archived box assignments", description: "Read recoverable AI unassignments and their archive ids, with complete quantity and notes.",
+    inputSchema: { moveId: z.string(), cursor: z.string().optional() },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: input => listArchivedAssignments(apiConfig, input),
+  });
+  registerTool(target, "restore_box_assignment", {
+    title: "Restore box assignment", description: "Restore an archived AI unassignment with its saved quantity and notes. Refuses to overwrite a current assignment.",
+    inputSchema: { moveId: z.string(), archiveId: z.string(), dryRun: z.boolean().optional() },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: input => restoreArchivedAssignment(apiConfig, input),
+  });
+
   registerTool(target, "remove_item_from_box", {
     title: "Remove item from box",
     description:
-      "Remove one item-to-box assignment without deleting the inventory item. Set dryRun true to preview the request without writing.",
+      "Archive one item-to-box assignment, retaining its quantity and notes for restore. Set dryRun true to preview the request without writing.",
     inputSchema: {
       moveId: z.string(),
       boxId: z.string(),
@@ -2722,12 +2749,13 @@ function registerTool(target, name, config) {
     name,
     {
       title: config.title,
-      description: config.description,
+      description: apiToolAccess[name]?.websiteOnly ? "Website-only. API keys cannot create invitations or share links. The person must use https://movingmanifest.com/settings/ai." : config.description,
       inputSchema: config.inputSchema,
       annotations: config.annotations,
     },
     async (input) => {
       try {
+        if (apiToolAccess[name]?.websiteOnly) throw new Error("Invitations and new share links are website-only. The person must use https://movingmanifest.com/settings/ai.");
         const result = await config.handler(input);
         // Most tools return plain data we wrap as a text block. Tools that need
         // to emit native content blocks (e.g. inline images) set rawResult and

@@ -1,227 +1,117 @@
-import { describe, expect, it, vi } from "vitest";
-
-import type { Id } from "../../convex/_generated/dataModel";
-import type { MutationCtx } from "../../convex/_generated/server";
-import { rotateApiKeyForUser } from "../../convex/apiKeys";
-import { authenticateApiKey } from "../../convex/lib/apiKeyAuth";
-import { generateApiKeySecret, hashApiKey } from "../../convex/lib/apiKeys";
-
-const householdId = "household_123" as Id<"households">;
-const apiKeyId = "api_key_123" as Id<"apiKeys">;
-const actorUserId = "user_123" as Id<"users">;
-
-function apiKeyRecord(
-  overrides: Partial<{
-    status: "active" | "revoked";
-    expiresAt: number;
-  }> = {},
-) {
-  return {
-    _id: apiKeyId,
-    _creationTime: 1,
-    householdId,
-    name: "Packing helper",
-    prefix: "lookup-prefix",
-    tokenPreview: "mmk_lookup...secret",
-    secretHash: "stored-hash",
-    scopes: ["moves/read" as const],
-    status: "active" as const,
-    createdByUserId: actorUserId,
-    createdAt: 1,
-    updatedAt: 1,
-    ...overrides,
-  };
-}
-
-function mutationContext(record: ReturnType<typeof apiKeyRecord>) {
-  const get = vi.fn().mockResolvedValue(record);
-  const patch = vi.fn().mockResolvedValue(undefined);
-  const insert = vi.fn().mockResolvedValue("inserted_id");
-
-  return {
-    ctx: { db: { get, patch, insert } } as unknown as MutationCtx,
-    patch,
-    insert,
-  };
-}
-
-describe("API-key rotation lifecycle", () => {
-  it("refuses a revoked key before any write and directs the owner to create a new key", async () => {
-    const { ctx, patch, insert } = mutationContext(
-      apiKeyRecord({ status: "revoked" }),
-    );
-
-    await expect(
-      rotateApiKeyForUser(ctx, { householdId, apiKeyId }, actorUserId, 2_000),
-    ).rejects.toThrow(/revoked.*create a new key/i);
-    expect(patch).not.toHaveBeenCalled();
-    expect(insert).not.toHaveBeenCalled();
+// @vitest-environment node
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { api } from "../../convex/_generated/api";
+import * as history from "../../convex/lib/connectionHistory";
+import { accessFixture } from "../helpers/ai-access";
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
+describe("API-key shared authority and rotation", () => {
+  it.each(["revoked", "paused", "expired"])("cannot rotate a %s connection into wider access", async state => {
+    const f = await accessFixture();
+    const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Key" });
+    const row = (await f.person.query(api.connectionSettings.list, {})).connections[0];
+    await f.person.mutation(api.connectionSettings.change, { connectionId: row.id, expectedVersion: row.version, opId: "stop", action: state === "expired" ? "limits" : state === "revoked" ? "revoke" : "pause", ...(state === "expired" ? { expiresAt: Date.now() + 1000 } : {}) });
+    if (state === "expired") vi.setSystemTime(Date.now() + 1001);
+    const before = await f.root();
+    await expect(f.person.mutation(api.apiKeys.rotate, { householdId: f.householdId, apiKeyId: key.apiKeyId, expectedVersion: before!.revision })).rejects.toThrow(new RegExp(`${state}.*Restore.*website`));
+    expect(await f.root()).toEqual(before);
   });
-
-  it("refuses an expired key before any write and directs the owner to create a new key", async () => {
-    const { ctx, patch, insert } = mutationContext(
-      apiKeyRecord({ expiresAt: 1_000 }),
-    );
-
-    await expect(
-      rotateApiKeyForUser(ctx, { householdId, apiKeyId }, actorUserId, 2_000),
-    ).rejects.toThrow(/expired.*create a new key/i);
-    expect(patch).not.toHaveBeenCalled();
-    expect(insert).not.toHaveBeenCalled();
+  it("preserves selected powers and date, retires the old secret, and never stores the new raw secret", async () => {
+    const f = await accessFixture(); const end = Date.now() + 60000;
+    const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Read key", scopes: ["moves/read"], expiresAt: end });
+    const rotated = await f.person.mutation(api.apiKeys.rotate, { householdId: f.householdId, apiKeyId: key.apiKeyId, expectedVersion: (await f.root())!.revision });
+    expect(rotated.rawKey).toMatch(/^mmk_/); expect(rotated.scopes).toEqual(["moves/read"]);
+    expect((await f.request(key.rawKey, "GET", "moves")).status).toBe(403);
+    expect((await f.request(rotated.rawKey, "GET", "moves")).status).toBe(200);
+    const stored = (await f.t.run(ctx => ctx.db.get(rotated.apiKeyId)))!;
+    expect(stored.expiresAt).toBe(end); expect(JSON.stringify(stored)).not.toContain(rotated.rawKey);
+    const old = (await f.t.run(ctx => ctx.db.get(key.apiKeyId)))!; expect(old.credentialRetiredAt).toBe(Date.now());
+    const history = await f.person.query(api.connectionSettings.list, { superseded: true });
+    await expect(f.person.mutation(api.connectionSettings.change, { connectionId: history.connections[0].id, expectedVersion: (await f.root())!.revision, action: "restore", opId: "restore-retired" })).rejects.toThrow(/rotated credential stays retired/);
   });
-
-  it("preserves a future expiry and returns the raw secret only in the mutation result", async () => {
-    const { ctx, patch, insert } = mutationContext(
-      apiKeyRecord({ expiresAt: 5_000 }),
-    );
-
-    const result = await rotateApiKeyForUser(
-      ctx,
-      { householdId, apiKeyId },
-      actorUserId,
-      2_000,
-    );
-
-    expect(patch).toHaveBeenCalledWith(
-      apiKeyId,
-      expect.objectContaining({ status: "revoked", updatedAt: 2_000 }),
-    );
-    expect(insert).toHaveBeenCalledWith(
-      "apiKeys",
-      expect.objectContaining({
-        expiresAt: 5_000,
-        secretHash: expect.any(String),
-        status: "active",
-      }),
-    );
-    const insertedKey = insert.mock.calls.find(([table]) => table === "apiKeys")?.[1];
-    expect(insertedKey).not.toHaveProperty("rawKey");
-    expect(result.rawKey).toMatch(/^mmk_/);
-    expect(result.rawKey).not.toBe(insertedKey?.secretHash);
+  it("rotation checks the currently loaded revision", async () => {
+    const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Key" });
+    await expect(f.person.mutation(api.apiKeys.rotate, { householdId: f.householdId, apiKeyId: key.apiKeyId, expectedVersion: 0 })).rejects.toThrow(/changed.*Reload Settings/);
+  });
+  it.each(["membership-disabled", "membership-removed", "agent-disabled", "user-disabled"])("rechecks live access: %s", async why => {
+    const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Key" });
+    await f.t.run(async ctx => { if (why === "membership-removed") await ctx.db.delete(f.membershipId); else if (why === "user-disabled") await ctx.db.patch(f.userId, { status: "disabled" }); else await ctx.db.patch(f.membershipId, why === "agent-disabled" ? { apiAccessStatus: "disabled" } : { status: "disabled" }); });
+    const response = await f.request(key.rawKey, "GET", "moves"); expect(response.status).toBe(403); expect(JSON.stringify(response.body)).toMatch(/no longer has active household access|turned off/);
+    expect((await f.t.run(ctx => ctx.db.get(key.apiKeyId)))!.lastUsedAt).toBeUndefined();
+    expect((await f.request(key.rawKey, "GET", "me")).status).toBe(200);
+  });
+  it("records last use only on a successful authenticated call", async () => {
+    const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Key", scopes: ["moves/read"] });
+    expect((await f.request(key.rawKey, "POST", `moves/${f.moveId}/inventory`, { name: "No" })).status).toBe(403);
+    expect((await f.t.run(ctx => ctx.db.get(key.apiKeyId)))!.lastUsedAt).toBeUndefined();
+    expect((await f.request(key.rawKey, "GET", "moves")).status).toBe(200);
+    expect((await f.t.run(ctx => ctx.db.get(key.apiKeyId)))!.lastUsedAction).toBe("GET /api/v1/moves");
+  });
+  it.each(["pause", "revoke"])("scope-free inspection and narrow-only control survive %s", async action => {
+    const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Key" });
+    expect((await f.request(key.rawKey, "POST", "me/access", { expectedVersion: (await f.root())!.revision, opId: action, action })).status).toBe(200);
+    const inspected = await f.request(key.rawKey, "GET", "me"); expect(inspected.status).toBe(200);
+    expect(inspected.body).toMatchObject({ data: { household: null, apiKey: { status: action === "pause" ? "paused" : "revoked", scopes: [], settings: "https://movingmanifest.com/settings/ai" } } });
+    expect((await f.request(key.rawKey, "GET", "moves")).status).toBe(403);
+    const widen = await f.request(key.rawKey, "POST", "me/access", { expectedVersion: (await f.root())!.revision, opId: "restore", action: "restore" });
+    expect(JSON.stringify(widen.body)).toContain("only reduce");
+  });
+  it("every API-key door blocks invitations and share links even with the full catalog", async () => {
+    const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Key" });
+    for (const path of [`households/${f.householdId}/members`, `moves/${f.moveId}/share-links`]) {
+      const response = await f.request(key.rawKey, "POST", path, { email: "new@example.test", permission: "viewer" });
+      expect(response.status).toBe(403); expect(JSON.stringify(response.body)).toContain("website-only");
+    }
   });
 });
 
-describe("API-key last-use receipts", () => {
-  async function authenticationContext(
-    overrides: Partial<ReturnType<typeof apiKeyRecord>> = {},
-    membership: { role: "owner"; status: "active" | "disabled"; apiAccessStatus?: "disabled" } | null = {
-      role: "owner",
-      status: "active",
-    },
-  ) {
-    const rawKey = generateApiKeySecret();
-    const key = {
-      ...apiKeyRecord(),
-      prefix: rawKey.slice("mmk_".length, "mmk_".length + 14),
-      secretHash: await hashApiKey(rawKey),
-      ...overrides,
-    };
-    const patch = vi.fn().mockResolvedValue(undefined);
-    const query = vi.fn((table: string) => ({
-      withIndex: vi.fn(() => ({
-        unique: vi.fn().mockResolvedValue(
-          table === "apiKeys" ? key : membership,
-        ),
-      })),
-    }));
+it("REST rolls back a self-reduction if its private history write fails", async () => {
+  const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Atomic key" });
+  const before = await f.root();
+  vi.spyOn(history, "connectionChange").mockRejectedValueOnce(new Error("Synthetic receipt failure"));
+  const response = await f.request(key.rawKey, "POST", "me/access", { expectedVersion: before!.revision, opId: "atomic", action: "revoke" });
+  expect(response.status).toBeGreaterThanOrEqual(400);
+  expect(JSON.stringify(response.body)).toContain("Synthetic receipt failure");
+  expect(await f.root()).toEqual(before);
+});
 
-    return {
-      rawKey,
-      patch,
-      ctx: { db: { query, patch } } as unknown as MutationCtx,
-    };
+it("archives both box-unassignment paths with full provenance and can restore quantity and notes", async () => {
+  const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Archive key" });
+  const itemResult = await f.request(key.rawKey, "POST", `moves/${f.moveId}/items`, { name: "Three books", quantity: 3 });
+  const boxResult = await f.request(key.rawKey, "POST", `moves/${f.moveId}/boxes`, { label: "Books" });
+  expect(itemResult.status).toBe(201); expect(boxResult.status).toBe(201);
+  const itemId = (itemResult.body as { data: { itemId: string } }).data.itemId;
+  const boxId = (boxResult.body as { data: { boxId: string } }).data.boxId;
+  for (const pathKind of ["assignment", "box"]) {
+    const created = await f.request(key.rawKey, "POST", `moves/${f.moveId}/assignments`, { itemId, boxId, quantity: 3, notes: "Keep this exact note" });
+    const assignmentId = (created.body as { data: { assignmentId: string } }).data.assignmentId;
+    const removed = await f.request(key.rawKey, "DELETE", pathKind === "assignment" ? `moves/${f.moveId}/assignments/${assignmentId}` : `boxes/${boxId}/items/${itemId}`);
+    expect(removed.status).toBe(200);
+    const archiveId = (removed.body as { data: { archiveId: string } }).data.archiveId;
+    const archived = await f.t.run(ctx => ctx.db.query("archivedBoxAssignments").collect());
+    expect(archived.find(row => row._id === archiveId)).toMatchObject({ originalAssignmentId: assignmentId, source: { quantity: 3, notes: "Keep this exact note", itemId, boxId }, archivedByApiKeyId: key.apiKeyId });
+    const restored = await f.request(key.rawKey, "POST", `moves/${f.moveId}/assignments/${archiveId}/restore`);
+    expect(restored.status).toBe(200);
+    expect((await f.t.run(ctx => ctx.db.query("boxItems").collect()))[0]).toMatchObject({ quantity: 3, notes: "Keep this exact note", itemId, boxId });
   }
+});
 
-  it("does not write a last-use receipt when authentication is denied", async () => {
-    const { ctx, rawKey, patch } = await authenticationContext({
-      expiresAt: Date.now() - 1,
-    });
+it("REST cannot retain a partial legacy bootstrap when its system receipt fails", async () => {
+  const f = await accessFixture(); await f.legacyGrant({ scopes: ["moving.context.read"] }); const key = await f.legacyKey();
+  vi.spyOn(history, "connectionChange").mockRejectedValueOnce(new Error("Synthetic bootstrap receipt failure"));
+  const response = await f.request(key.rawKey, "GET", "me");
+  expect(response.status).toBeGreaterThanOrEqual(400);
+  expect(await f.root()).toBeNull();
+  vi.restoreAllMocks();
+  await f.request(key.rawKey, "GET", "me"); await f.finish();
+  expect((await f.root())!.withheldScopes).toContain("inventory/write");
+});
 
-    await expect(
-      authenticateApiKey(ctx, {
-        rawKey,
-        requiredScopes: ["moves/read"],
-        action: "moves:list",
-      }),
-    ).rejects.toThrow(/expired/i);
-    expect(patch).not.toHaveBeenCalled();
-  });
-
-  it("writes the action receipt only after successful authentication", async () => {
-    const { ctx, rawKey, patch } = await authenticationContext({
-      expiresAt: Date.now() + 60_000,
-    });
-
-    await authenticateApiKey(ctx, {
-      rawKey,
-      requiredScopes: ["moves/read"],
-      action: "moves:list",
-    });
-
-    expect(patch).toHaveBeenCalledOnce();
-    expect(patch).toHaveBeenCalledWith(
-      apiKeyId,
-      expect.objectContaining({
-        lastUsedAction: "moves:list",
-        lastUsedAt: expect.any(Number),
-      }),
-    );
-  });
-
-  it("rejects keys whose creator membership is no longer active", async () => {
-    const { ctx, rawKey, patch } = await authenticationContext(
-      {},
-      { role: "owner", status: "disabled" },
-    );
-    await expect(
-      authenticateApiKey(ctx, {
-        rawKey,
-        requiredScopes: ["moves/read"],
-        action: "moves:list",
-      }),
-    ).rejects.toThrow(/no longer has active household access/i);
-    expect(patch).not.toHaveBeenCalled();
-  });
-
-  it("rejects household keys whose creator membership was removed", async () => {
-    const { ctx, rawKey, patch } = await authenticationContext({}, null);
-    await expect(
-      authenticateApiKey(ctx, {
-        rawKey,
-        requiredScopes: ["moves/read"],
-        action: "moves:list",
-      }),
-    ).rejects.toThrow(/no longer has active household access/i);
-    expect(patch).not.toHaveBeenCalled();
-  });
-
-  it("does not fall back to a stored role when live move access is gone", async () => {
-    const rawKey = generateApiKeySecret();
-    const moveId = "move_123" as Id<"moves">;
-    const key = {
-      ...apiKeyRecord(),
-      prefix: rawKey.slice("mmk_".length, "mmk_".length + 14),
-      secretHash: await hashApiKey(rawKey),
-      moveId,
-      participantMoveRole: "owner" as const,
-    };
-    const patch = vi.fn().mockResolvedValue(undefined);
-    const query = vi.fn((table: string) => ({
-      withIndex: vi.fn(() => ({
-        unique: vi.fn().mockResolvedValue(table === "apiKeys" ? key : null),
-      })),
-    }));
-    const get = vi.fn().mockResolvedValue({ _id: moveId, householdId });
-    const ctx = { db: { query, get, patch } } as unknown as MutationCtx;
-    await expect(
-      authenticateApiKey(ctx, {
-        rawKey,
-        requiredScopes: ["moves/read"],
-        householdId,
-        moveId,
-        action: "move:get",
-      }),
-    ).rejects.toThrow(/no access to this move/i);
-    expect(patch).not.toHaveBeenCalled();
-  });
+it("preserves move-only participation without exposing the household, and checks its agent switch", async () => {
+  const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, moveId: f.moveId, name: "Move-only key" });
+  const participant = await f.t.run(async ctx => { await ctx.db.patch(f.membershipId, { status: "disabled" }); return ctx.db.insert("moveParticipants", { householdId: f.householdId, moveId: f.moveId, userId: f.userId, role: "editor", accessKind: "moveOnly", participantType: "helper", status: "active", agentAccessStatus: "enabled", createdAt: Date.now(), updatedAt: Date.now() }); });
+  expect((await f.request(key.rawKey, "GET", `moves/${f.moveId}/items`)).status).toBe(200);
+  expect((await f.request(key.rawKey, "GET", "me")).body).toMatchObject({ data: { household: null } });
+  await f.t.run(ctx => ctx.db.patch(participant, { agentAccessStatus: "disabled" }));
+  expect((await f.request(key.rawKey, "GET", `moves/${f.moveId}/items`)).status).toBe(403);
 });

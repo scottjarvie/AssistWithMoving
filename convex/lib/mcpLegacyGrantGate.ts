@@ -23,6 +23,8 @@
  */
 import {
   MOVING_SCOPES,
+  effectiveScopes,
+  effectiveExpiry,
   findPermittingGrant,
   movingScopes,
   type GrantDecisionInput,
@@ -56,6 +58,8 @@ export const LEGACY_GATEWAY_TOOL_SCOPES: Readonly<
   Record<string, MovingScope>
 > = {
   // --- Reading the move context the person already sees -------------------
+  describe_connection: "moving.context.read",
+  reduce_connection: "moving.context.read",
   get_agent_context: "moving.context.read",
   list_moves: "moving.context.read",
   get_move_summary: "moving.context.read",
@@ -132,23 +136,10 @@ export const LEGACY_GATEWAY_NEVER_PERMITTED_TOOLS: readonly string[] = [
  * believing they granted something they did not.
  *
  * So a first authenticated call writes a real grant row carrying these scopes.
- * `moving.archive` is deliberately absent: archive is the destructive verb,
- * and the connector playbook keeps destructive authority out of what a
- * sign-in hands over. It stays one switch away on `/settings/ai`.
+ * All current and future scopes are included by default. Limits are opt-in.
  */
-export const LEGACY_AUTO_GRANT_SCOPES: readonly MovingScope[] = [
-  "moving.context.read",
-  "moving.evidence.read",
-  "moving.work.write",
-  "moving.queue.work",
-];
-
-/**
- * Scopes a sign-in never hands over. Written as its own list rather than
- * derived by subtracting the defaults, so the two cannot drift apart when a
- * sixth scope is added.
- */
-export const LEGACY_RAISED_SCOPES: readonly MovingScope[] = ["moving.archive"];
+export const LEGACY_AUTO_GRANT_SCOPES: readonly MovingScope[] = movingScopes;
+export const LEGACY_RAISED_SCOPES: readonly MovingScope[] = [];
 
 export function legacyScopeForTool(toolName: string): MovingScope | null {
   return LEGACY_GATEWAY_TOOL_SCOPES[toolName] ?? null;
@@ -273,6 +264,9 @@ export type LegacyGrantBlock =
   | "lookupFailed"
   | "connectionLimit"
   | "revoked"
+  | "initializing"
+  | "superseded"
+  | "paused"
   | "expired"
   | "noHousehold";
 
@@ -292,9 +286,7 @@ const BLOCK_REFUSALS: Record<
   unidentifiedClient: {
     refusalCode: "CLIENT_UNIDENTIFIED",
     reason:
-      "Your AI client did not identify itself, so Assist With Moving will not auto-connect it; an unnamed client cannot be revoked on its own later. Approve this connection yourself at " +
-      GRANT_MANAGER_URL +
-      ", then reconnect.",
+      "A verified OAuth client id is required. Reported names do not establish identity. Only the person manages connection access at " + GRANT_MANAGER_URL + ".",
   },
   lookupFailed: {
     refusalCode: "GRANT_LOOKUP_UNAVAILABLE",
@@ -306,20 +298,23 @@ const BLOCK_REFUSALS: Record<
     reason:
       "This account already has the maximum number of AI connections, so a new one was not created. Revoke one you no longer use at " +
       GRANT_MANAGER_URL +
-      ", then reconnect.",
+      ", only the person can restore access on the website.",
   },
   noHousehold: {
     refusalCode: "NO_WORKSPACE",
     reason:
-      "This account has no household or move yet, so there is nothing to connect an AI to. Create a household in Assist With Moving, or ask the move owner to add you, then reconnect.",
+      "This account has no household or move yet, so there is nothing to connect an AI to. Create a household in Assist With Moving, or ask the move owner to add you, only the person can restore access on the website.",
   },
   revoked: {
     refusalCode: "GRANT_REVOKED",
-    reason: `This connection was revoked in Assist With Moving. Ask the person to approve it again at ${GRANT_MANAGER_URL}, then reconnect.`,
+    reason: `This connection was revoked in Assist With Moving. Ask the person to approve it again at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
   },
+  initializing: { refusalCode: "ACCESS_INITIALIZING", reason: "Earlier connection limits are still being checked. Call describe_connection again shortly. No access was widened." },
+  superseded: { refusalCode: "CONNECTION_SUPERSEDED", reason: `This registration was superseded. Only the person can restore it at ${GRANT_MANAGER_URL}.` },
+  paused: { refusalCode: "GRANT_PAUSED", reason: `This connection is paused. Only the person can resume it at ${GRANT_MANAGER_URL}.` },
   expired: {
     refusalCode: "GRANT_EXPIRED",
-    reason: `This connection's approval has expired. Ask the person to approve it again at ${GRANT_MANAGER_URL}, then reconnect.`,
+    reason: `This connection has reached its end date. Open ${GRANT_MANAGER_URL} and remove or change its end date, then retry.`,
   },
 };
 
@@ -349,6 +344,9 @@ export function decideLegacyGatewayAccess(input: {
 }): LegacyGateDecision {
   const { toolName, grants, moveId, mode, block } = input;
   const now = input.now ?? Date.now();
+
+  if (toolName === "describe_connection") return { allowed: true };
+  if (toolName === "reduce_connection") return { allowed: true };
 
   // The product ceiling is checked before anything else, so no grant state and
   // no future scope can talk its way past it.
@@ -403,7 +401,7 @@ export function decideLegacyGatewayAccess(input: {
     return {
       allowed: false,
       refusalCode: "MEDIA_WRITE_NOT_ENABLED",
-      reason: `Uploading or attaching photos is a raised permission a sign-in does not include. Enable it for this connection at ${GRANT_MANAGER_URL}, then reconnect.`,
+      reason: `Uploading or attaching photos is a raised permission a sign-in does not include. Enable it for this connection at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
     };
   }
 
@@ -415,8 +413,8 @@ export function decideLegacyGatewayAccess(input: {
     const listable = grants.some(
       (grant) =>
         grant.status === "active" &&
-        (grant.expiresAt === undefined || grant.expiresAt > now) &&
-        grant.scopes.includes(movingScope),
+        (effectiveExpiry(grant) === undefined || effectiveExpiry(grant)! > now) &&
+        effectiveScopes(grant).includes(movingScope),
     );
     return listable
       ? { allowed: true, scope: movingScope }
@@ -424,7 +422,7 @@ export function decideLegacyGatewayAccess(input: {
           allowed: false,
           scope: movingScope,
           refusalCode: "GRANT_SCOPE_MISSING",
-          reason: `This connection was not approved for ${movingScope}. The person can add it at ${GRANT_MANAGER_URL}, then you reconnect.`,
+          reason: `Missing power ${movingScope}. Only the person can restore it at ${GRANT_MANAGER_URL}.`,
         };
   }
 
@@ -435,21 +433,21 @@ export function decideLegacyGatewayAccess(input: {
   // Distinguish "you were never approved for this" from "not for that move",
   // because the person fixes them differently.
   const holdsScopeSomewhere = grants.some((grant) =>
-    grant.scopes.includes(movingScope),
+    effectiveScopes(grant).includes(movingScope),
   );
   if (holdsScopeSomewhere) {
     return {
       allowed: false,
       scope: movingScope,
       refusalCode: "GRANT_MOVE_MISSING",
-      reason: `This connection was not approved for that move. The person can add it at ${GRANT_MANAGER_URL}, then you reconnect.`,
+      reason: `Missing power ${movingScope} for that move. Only the person can restore it at ${GRANT_MANAGER_URL}.`,
     };
   }
   return {
     allowed: false,
     scope: movingScope,
     refusalCode: "GRANT_SCOPE_MISSING",
-    reason: `This connection was not approved for ${movingScope}. The person can add it at ${GRANT_MANAGER_URL}, then you reconnect.`,
+    reason: `Missing power ${movingScope}. Only the person can restore it at ${GRANT_MANAGER_URL}.`,
   };
 }
 

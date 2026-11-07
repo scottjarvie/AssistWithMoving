@@ -12,6 +12,7 @@ import {
   type McpToolRegistration,
 } from "convex-mcp-gateway";
 
+import { reductionArgs } from "./lib/connectionReduction";
 import { internal } from "./_generated/api";
 import {
   addImagesArgs,
@@ -46,6 +47,20 @@ import {
 } from "./mcpToolsWrite";
 
 export const tools: McpToolRegistration[] = [
+  defineMcpQuery({
+    name: "describe_connection",
+    description: "Read only your calling connection version and status, even with no domain scopes or selected moves. Use this version for reduce_connection; no household, move or sibling data is returned.",
+    fn: internal.aiGrants.describeLegacyConnection,
+    args: { caller: mcpCallerValidator },
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "reduce_connection",
+    description: "Reduce only your own calling connection: scopes, selected moveIds, expiry, pause or revoke. Requires current expectedVersion from describe_connection. Only the person in Settings can widen or restore access.",
+    fn: internal.aiGrants.reduceLegacyConnection,
+    args: { caller: mcpCallerValidator, ...reductionArgs },
+    identityArg: "caller",
+  }),
   defineMcpQuery({
     name: "get_agent_context",
     description:

@@ -1,3 +1,4 @@
+import { AiAccessFaq } from "@/components/ai-access-faq";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowRight, ChevronDown, HelpCircle, ShieldCheck } from "lucide-react";
@@ -80,10 +81,9 @@ const faqs: Faq[] = [
     question: "Will the AI change my stuff automatically?",
     answer: (
       <>
-        No. It is AI review, not AI autopilot. Your assistant can suggest
-        inventory entries, categories, box contents, duplicates, and load
-        assignments, but a human stays in the loop — you approve changes before
-        they land. The product does not quietly rewrite your records on its own.
+        Your connected AI can save the work you request directly. You can review
+        its activity and limit its access in Settings → AI or by asking it.
+        Any review step you have chosen for individual records still applies.
       </>
     ),
   },
@@ -165,6 +165,7 @@ export default function FaqPage() {
       primaryAction={{ href: "/features", label: "See the features" }}
       secondaryAction={{ href: "/ai", label: "How AI assistants help" }}
     >
+      <AiAccessFaq />
       <PublicBand>
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <div>

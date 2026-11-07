@@ -7,12 +7,15 @@ const mcpServerPath = "mcp-server/assistwithmoving-mcp.mjs";
 
 const restRouteManifest = [
   route("GET", "/me"),
+  route("POST", "/me/access"),
   route("GET", "/households/{householdId}/members"),
   route("POST", "/households/{householdId}/members"),
   route("GET", "/moves"),
   route("POST", "/moves"),
   route("POST", "/moves/setup"),
   route("GET", "/moves/{moveId}/agent-context"),
+  route("GET", "/moves/{moveId}/assignments"),
+  route("POST", "/moves/{moveId}/assignments/{archiveId}/restore"),
   route("GET", "/moves/{moveId}/items"),
   route("POST", "/moves/{moveId}/items"),
   route("POST", "/moves/{moveId}/items/batch-upsert"),
@@ -37,6 +40,7 @@ const restRouteManifest = [
 
 const mcpRequiredRouteKeys = new Set([
   "GET /me",
+  "POST /me/access",
   "GET /households/{householdId}/members",
   "POST /households/{householdId}/members",
   "GET /moves",

@@ -1,3 +1,5 @@
+import { internal as generatedInternal } from "./_generated/api";
+import connectionPolicy from "../shared/ai-connection-policy.json";
 import { anyApi, httpRouter } from "convex/server";
 import type { FunctionReference } from "convex/server";
 
@@ -29,6 +31,7 @@ import {
   decideLegacyGatewayAccess,
   type LegacyGrantBlock,
 } from "./lib/mcpLegacyGrantGate";
+import { oauthClientIdFromClaims, resolveClientIdentity } from "./lib/mcpClientIdentity";
 import type { GrantDecisionInput as LegacyGrantDecisionRow } from "./lib/aiGrants";
 
 const http = httpRouter();
@@ -1111,10 +1114,7 @@ const resolveMcpIdentity: McpIdentityResolver = async (token) => {
  * grant, because an unbound grant is claimable by whatever connects next.
  */
 function legacyClientIdFrom(claims: Record<string, unknown> | undefined): string {
-  const candidate =
-    (typeof claims?.client_id === "string" && claims.client_id) ||
-    (typeof claims?.azp === "string" && claims.azp) ||
-    null;
+  const candidate = oauthClientIdFromClaims(claims);
   // The sentinel is the single value `touchLegacyConnection` refuses to
   // auto-grant, so every unidentified client is turned away rather than sharing
   // one grant row.
@@ -1124,7 +1124,7 @@ function legacyClientIdFrom(claims: Record<string, unknown> | undefined): string
 function legacyClientNameFrom(
   claims: Record<string, unknown> | undefined,
 ): string | undefined {
-  const name = claims?.client_name ?? claims?.azp;
+  const name = claims?.client_name;
   return typeof name === "string" && name.trim() ? name.trim().slice(0, 80) : undefined;
 }
 
@@ -1142,8 +1142,8 @@ function legacyClientNameFrom(
  * an AI is never shown a capability it would only be refused for, and the
  * refusal still exists underneath if it calls one anyway.
  */
-function createLegacyGrantGate(
-  ctx: Pick<ActionCtx, "runMutation">,
+export function createLegacyGrantGate(
+  ctx: Pick<ActionCtx, "runMutation" | "runAction">,
 ): McpAuthorizerHandler {
   let resolved:
     | Promise<{ grants: LegacyGrantDecisionRow[]; block?: LegacyGrantBlock }>
@@ -1160,16 +1160,31 @@ function createLegacyGrantGate(
       });
     }
     const claims = args.identity?.claims;
-    const clientId = legacyClientIdFrom(claims);
+    let clientId: string;
+    try {
+      clientId = legacyClientIdFrom(claims);
+    } catch {
+      return decideLegacyGatewayAccess({ toolName: args.toolName, grants: [], mode: args.mode, block: "unidentifiedClient" });
+    }
     const clientName = legacyClientNameFrom(claims);
 
     if (!resolved) {
-      resolved = ctx
-        .runMutation(internalMutations.aiGrants.touchLegacyConnection, {
-          subject,
-          clientId,
-          clientName,
-        })
+      resolved = (async () => {
+        // The compatibility door cannot bypass CIMD validation by binding the
+        // same credential under its historical legacy: alias.
+        if (clientId !== UNIDENTIFIED_LEGACY_CLIENT) {
+          const identity = await resolveClientIdentity(clientId.slice("legacy:".length), {
+            declaredClientName: clientName,
+            fetchMetadata: id => ctx.runAction(anyApi.mcpClientMetadata.fetchDocument, { clientId: id }),
+          });
+          return ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, {
+            subject, clientId: identity.clientId, clientName: identity.clientName ?? clientName,
+          });
+        }
+        return ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, {
+          subject, clientId, clientName,
+        });
+      })()
         .then(
           (result: {
             grants?: LegacyGrantDecisionRow[];
@@ -1212,7 +1227,9 @@ function createLegacyGrantGate(
 
     // Write a receipt for real calls only. Filtering `tools/list` would
     // otherwise stamp the activity list with a row per tool per connection.
-    if (args.mode === "call") {
+    // Own reductions append their activity and durable audit atomically in the
+    // reduction mutation; a domain-use receipt here would falsely record refusal.
+    if (args.mode === "call" && args.toolName !== "reduce_connection" && args.toolName !== "describe_connection") {
       const record =
         decision.allowed && decision.scope
         ? ctx.runMutation(internalMutations.aiGrants.noteGrantUse, {
@@ -1240,16 +1257,43 @@ function createLegacyGrantGate(
   };
 }
 
-const mcpHttpAction = httpAction((ctx, request) =>
-  mcpGatewayClient.handleMcpRequest(ctx, request, {
-    authorize: createLegacyGrantGate(ctx),
-    resolveIdentity: resolveMcpIdentity,
-    tools: mcpTools,
-    requireAuth: true,
-    cors: true,
+const mcpHttpAction = httpAction(async (ctx, request) => {
+  const input = request.method === "POST" ? await request.clone().json().catch(() => null) : null;
+  const response = await mcpGatewayClient.handleMcpRequest(ctx, request, {
+    authorize: createLegacyGrantGate(ctx), resolveIdentity: resolveMcpIdentity,
+    tools: mcpTools, requireAuth: true, cors: true,
     serverInfo: { name: "assistwithmoving", version: "0.2.0" },
-  }),
-);
+  });
+  if (input?.method !== "initialize" || !response.ok) return response;
+  const bearer = request.headers.get("authorization")?.replace(/^Bearer /i, "");
+  const identity = bearer ? await resolveMcpIdentity(bearer) : null;
+  let instructions = connectionPolicy.instructions;
+  if (identity) {
+    const clientId = legacyClientIdFrom(identity.claims);
+    // Initialize can succeed before a tool authorization callback. It must
+    // validate CIMD too, before it creates or binds any product connection.
+    let resolved;
+    try {
+      resolved = await resolveClientIdentity(clientId.slice("legacy:".length), {
+        declaredClientName: legacyClientNameFrom(identity.claims) ?? (typeof input?.params?.clientInfo?.name === "string" ? input.params.clientInfo.name : undefined),
+        fetchMetadata: id => ctx.runAction(anyApi.mcpClientMetadata.fetchDocument, { clientId: id }),
+      });
+    } catch {
+      return new Response(JSON.stringify({ error: "invalid_client", message: "OAuth client metadata could not be validated." }), { status: 401, headers: { "content-type": "application/json" } });
+    }
+    await ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, { subject: identity.subject, clientId: resolved.clientId, clientName: resolved.clientName });
+    const state = await ctx.runQuery(generatedInternal.aiGrants.describeConnection, { subject: identity.subject, clientId });
+    instructions += ` Connection state: ${state.status}; changed ${state.changedAt ?? "date unavailable"}; end date ${state.expiresAt ?? "none"}.`;
+  }
+  const decorate = (json: string) => {
+    const envelope = JSON.parse(json);
+    if (envelope.result) envelope.result.instructions = instructions;
+    return JSON.stringify(envelope);
+  };
+  const text = await response.text();
+  const body = response.headers.get("content-type")?.includes("text/event-stream") ? text.replace(/^data: (.+)$/gm, (_, data) => `data: ${decorate(data)}`) : decorate(text);
+  return new Response(body, { status: response.status, headers: response.headers });
+});
 
 // Keep the persisted gateway at a compatibility-only path. The canonical
 // /mcp resource is the stateless workflow surface registered below.

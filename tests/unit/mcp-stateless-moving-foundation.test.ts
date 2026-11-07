@@ -246,6 +246,7 @@ async function seedMove() {
       foreignQueueItemId,
     };
   });
+  await t.mutation(internal.aiGrants.touchLegacyConnection, { subject: PRINCIPAL.subject, clientId: PRINCIPAL.clientId });
   return { t, ...ids };
 }
 

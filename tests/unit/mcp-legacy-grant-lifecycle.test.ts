@@ -1,236 +1,142 @@
 // @vitest-environment node
-/* eslint-disable @typescript-eslint/no-explicit-any -- the convex-test internal handle is intentionally synthetic. */
-
-/**
- * Database-side proofs for the legacy connection's grant lifecycle.
- *
- * The pure gate tests in `mcp-legacy-grant-gate.test.ts` cover the decision.
- * These cover `touchLegacyConnection` — the mutation that resolves, and on a
- * true first contact mints, the grant a signing-in client gets. Two of its
- * behaviours are exactly the failures Playbook v1.3.0 §2.6 requires a proof
- * for, because neither shows up in a connect-once/revoke-once test:
- *
- *   1. A revoked grant must stay revoked however many grant rows the account
- *      has accumulated. A windowed `.take(N)` scan resurrects it once the
- *      revoked row ages past the window; an indexed `by clientId` lookup does
- *      not. (Pitfall 1.)
- *   2. Two distinct clients must get two distinct grant rows, so revoking one
- *      leaves the other working. (Pitfall 2 — the flip side of refusing the
- *      shared unidentified sentinel.)
- */
-import { convexTest } from "convex-test";
-import { readdirSync, statSync } from "node:fs";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-import { beforeEach, describe, expect, it } from "vitest";
-
-import { internal } from "../../convex/_generated/api";
-import { UNIDENTIFIED_LEGACY_CLIENT } from "../../convex/lib/mcpLegacyGrantGate";
-import schema from "../../convex/schema";
-
-function buildModuleMap(rootDir: string): Record<string, () => Promise<unknown>> {
-  const modules: Record<string, () => Promise<unknown>> = {};
-  const walk = (directory: string) => {
-    for (const entry of readdirSync(directory)) {
-      const fullPath = path.join(directory, entry);
-      if (statSync(fullPath).isDirectory()) walk(fullPath);
-      else if (/\.(?:ts|tsx|js)$/.test(entry))
-        modules[path.relative(process.cwd(), fullPath).replace(/\\/g, "/")] =
-          () => import(pathToFileURL(fullPath).href);
+/** Real pre-deploy rows, not new grants patched after bootstrap. The approved
+ * one-time import replaces the old capped-history/independent-alias tests. */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { api, internal } from "../../convex/_generated/api";
+import { movingScopes } from "../../convex/lib/aiGrants";
+import { accessFixture } from "../helpers/ai-access";
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
+describe("one-time complete indexed legacy bootstrap", () => {
+  it.each(["unbound", "name-equals-id", "different-name", "no-name"])("inherits a legacy revoke: %s", async shape => {
+    const f = await accessFixture();
+    const source = await f.legacyGrant({ ...(shape === "unbound" ? {} : { clientId: "old-id", ...(shape === "no-name" ? {} : { observedClientName: shape === "name-equals-id" ? "old-id" : "Different app" }) }), status: "revoked", revokedAt: Date.now() - 50 });
+    expect(await f.connect("new-id", "New name")).toMatchObject({ status: "initializing", scopes: [] });
+    await f.finish();
+    expect(await f.connect("new-id", "Other name")).toMatchObject({ status: "revoked", scopes: [], changedAt: Date.now() - 50 });
+    expect((await f.root())!.entries).toEqual([expect.objectContaining({ sourceGrantId: String(source), sourceRevision: 1, revoked: true })]);
+    expect(await f.connect("third")).toMatchObject({ status: "revoked" });
+  });
+  it("checkpoints every grant and key with no cap, stays stopped through partial pages, and keeps every restricted entry", async () => {
+    const f = await accessFixture();
+    for (let i = 0; i < 205; i++) await f.legacyGrant({ clientId: `legacy-${i}`, scopes: ["moving.context.read"], status: i === 204 ? "revoked" : "active" });
+    for (let i = 0; i < 103; i++) await f.legacyKey({ expiresAt: Date.now() - 1, pausedAt: i === 102 ? Date.now() - 20 : undefined });
+    await f.connect("new");
+    let previousEntries = 0, accesses = 0;
+    while (!(await f.root())!.bootstrapped) {
+      const root = (await f.root())!;
+      expect(root.entries.length).toBeGreaterThanOrEqual(previousEntries); previousEntries = root.entries.length;
+      expect((await f.t.query(internal.aiGrants.describeConnection, { subject: "awl-owner", clientId: "new" })).scopes).toEqual([]);
+      await f.t.mutation(internal.aiGrants.continueBootstrap, { ownerUserId: f.userId }); accesses++;
     }
-  };
-  walk(rootDir);
-  return modules;
-}
-
-const modules = buildModuleMap(path.join(process.cwd(), "convex"));
-const ISSUER = "https://moving-legacy-lifecycle.clerk.accounts.dev";
-const SUBJECT = "user_moving_legacy_lifecycle";
-const grants = (internal as any).aiGrants;
-
-beforeEach(() => {
-  process.env.CLERK_JWT_ISSUER_DOMAIN = ISSUER;
-});
-
-async function seedOwner(t: ReturnType<typeof convexTest>) {
-  return t.run(async (ctx) => {
-    const now = Date.now();
-    const userId = await ctx.db.insert("users", {
-      clerkUserId: SUBJECT,
-      email: "moving-legacy-lifecycle@example.test",
-      name: "Legacy Lifecycle Owner",
-      appRole: "member",
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
-      lastSeenAt: now,
-    });
-    const householdId = await ctx.db.insert("households", {
-      name: "Legacy Lifecycle Household",
-      createdByUserId: userId,
-      ownerUserId: userId,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.patch(userId, { defaultHouseholdId: householdId });
-    await ctx.db.insert("householdMemberships", {
-      householdId,
-      userId,
-      role: "owner",
-      status: "active",
-      apiAccessStatus: "enabled",
-      createdByUserId: userId,
-      createdAt: now,
-      updatedAt: now,
-    });
-    return { userId, householdId };
+    expect(accesses).toBeGreaterThan(2);
+    const root = (await f.root())!;
+    expect(root.entries).toHaveLength(308); expect(root.revoked).toBe(true); expect(root.pausedAt).toBe(Date.now() - 20); expect(root.endsAt).toBe(Date.now() - 1);
+    expect(await f.connect("new")).toMatchObject({ status: "revoked", scopes: [] });
+    const unchanged = await f.root(); await f.finish(); expect(await f.root()).toEqual(unchanged);
   });
-}
-
-describe("a revoked connection stays revoked past the old scan window", () => {
-  it("does not resurrect when many other grant rows exist (pitfall 1)", async () => {
-    const t = convexTest(schema, modules);
-    const { userId, householdId } = await seedOwner(t);
-    const client = "legacy:claude-desktop";
-
-    // First contact mints and binds a grant for this client.
-    const first = (await t.mutation(grants.touchLegacyConnection , {
-      subject: SUBJECT,
-      clientId: client,
-      clientName: "Claude",
-    })) as { grants: unknown[]; block?: string };
-    expect(first.block).toBeUndefined();
-    expect(first.grants.length).toBe(1);
-
-    // The person revokes it, then connects and revokes many OTHER clients, so
-    // the original revoked row is far from the newest rows. A `.take(32)` scan
-    // ordered newest-first would no longer see it.
-    await t.run(async (ctx) => {
-      const now = Date.now();
-      const row = await ctx.db
-        .query("aiGrants")
-        .withIndex("by_owner_client_status", (q) =>
-          q.eq("ownerUserId", userId).eq("clientId", client),
-        )
-        .first();
-      if (!row) throw new Error("expected the bound grant row");
-      await ctx.db.patch(row._id, { status: "revoked", updatedAt: now });
-
-      for (let index = 0; index < 40; index += 1) {
-        await ctx.db.insert("aiGrants", {
-          ownerUserId: userId,
-          householdId,
-          label: `Noise ${index}`,
-          clientId: `legacy:noise-${index}`,
-          scopes: ["moving.context.read"],
-          moveScope: "allMoves",
-          status: "revoked",
-          consentBoundaryVersion: "test",
-          consentSnapshot: [],
-          expiresAt: now + 1_000_000,
-          approvedAt: now + index + 1,
-          useCount: 0,
-          version: 1,
-          createdAt: now + index + 1,
-          updatedAt: now + index + 1,
-        });
-      }
-    });
-
-    // The same client signs in again. It must be told the connection was
-    // revoked — not silently handed a fresh grant.
-    const again = (await t.mutation(grants.touchLegacyConnection , {
-      subject: SUBJECT,
-      clientId: client,
-      clientName: "Claude",
-    })) as { grants: unknown[]; block?: string };
-    expect(again.block).toBe("revoked");
-    expect(again.grants.length).toBe(0);
-
-    // And no new active grant was minted for this client behind the scenes.
-    const activeForClient = await t.run(async (ctx) =>
-      ctx.db
-        .query("aiGrants")
-        .withIndex("by_owner_client_status", (q) =>
-          q.eq("ownerUserId", userId).eq("clientId", client).eq("status", "active"),
-        )
-        .collect(),
-    );
-    expect(activeForClient.length).toBe(0);
+  it.each(["revoked", "paused", "expired", "narrowed"])("imports legacy API key %s on OAuth's first access", async state => {
+    const f = await accessFixture();
+    const key = await f.legacyKey({ ...(state === "revoked" ? { status: "revoked" } : state === "paused" ? { pausedAt: Date.now() - 1 } : state === "expired" ? { expiresAt: Date.now() - 1 } : { scopes: ["moves/read"] }) });
+    await f.connect(); await f.finish();
+    const description = await f.connect();
+    expect(description.status).toBe(state === "narrowed" ? "active" : state);
+    if (state === "narrowed") expect(description.scopes).not.toContain("moving.work.write");
+    expect((await f.root())!.entries[0].sourceGrantId).toBe(String(key.apiKeyId));
+  });
+  it.each(["revoked", "paused", "expired", "narrowed"])("imports legacy OAuth %s on API-key first access", async state => {
+    const f = await accessFixture();
+    await f.legacyGrant({ ...(state === "revoked" ? { status: "revoked" } : state === "paused" ? { pausedAt: Date.now() - 1 } : state === "expired" ? { expiresAt: Date.now() - 1 } : { scopes: ["moving.context.read"] }) });
+    const key = await f.legacyKey();
+    const initializing = await f.request(key.rawKey, "GET", "me"); expect(JSON.stringify(initializing.body)).toContain("initializing");
+    await f.finish();
+    const result = await f.request(key.rawKey, "GET", "me"); expect(result.status).toBe(200);
+    expect(JSON.stringify(result.body)).toContain(state === "narrowed" ? "active" : state);
+    expect((await f.root())!.entries.length).toBeGreaterThan(0);
+  });
+  it("lifts only demonstrably automatic defaults, with no rewrite of stored scopes or dates", async () => {
+    const f = await accessFixture(); const approvedAt = Date.now() - 31 * 86400000;
+    const id = await f.legacyGrant({ clientId: "old", scopes: movingScopes.filter(scope => scope !== "moving.archive"), approvedAt, expiresAt: approvedAt + 30 * 86400000 });
+    await f.t.run(ctx => ctx.db.insert("aiGrantActivities", { grantId: id, ownerUserId: f.userId, householdId: f.householdId, type: "approved", outcome: "recorded", message: "Your AI connected by signing in. It can read and save — for 30 days.", createdAt: approvedAt }));
+    const before = (await f.t.run(ctx => ctx.db.get(id)))!;
+    await f.connect("new"); await f.finish();
+    expect(await f.connect("new")).toMatchObject({ status: "active", scopes: [...movingScopes], expiresAt: null });
+    expect(await f.t.run(ctx => ctx.db.get(id))).toMatchObject({ scopes: before.scopes, expiresAt: before.expiresAt, version: before.version });
+    expect((await f.root())!.entries).toEqual([]);
+  });
+  it.each(["no-receipt", "settings-receipt", "owner-marker", "ai-marker", "chosen", "automatic-chosen", "revoked"])("preserves legacy chosen limits when provenance is %s", async provenance => {
+    const f = await accessFixture(); const approvedAt = Date.now() - 31 * 86400000;
+    const id = await f.legacyGrant({ scopes: movingScopes.filter(scope => scope !== "moving.archive"), approvedAt, expiresAt: approvedAt + 30 * 86400000,
+      ...(provenance === "owner-marker" ? { ownerDecisionAt: approvedAt } : provenance === "ai-marker" ? { narrowedBy: "ai" } : provenance === "automatic-chosen" ? { scopeChoice: "chosen", expiryChoice: "automatic" } : provenance === "chosen" ? { scopeChoice: "chosen", expiryChoice: "chosen" } : provenance === "revoked" ? { status: "revoked" } : {}) });
+    if (provenance !== "no-receipt") await f.t.run(ctx => ctx.db.insert("aiGrantActivities", { grantId: id, ownerUserId: f.userId, householdId: f.householdId, type: "approved", outcome: "recorded", message: provenance === "settings-receipt" ? "You approved this connection in Settings." : "Your AI connected by signing in.", createdAt: approvedAt }));
+    await f.connect(); await f.finish(); expect((await f.root())!.endsAt).toBe(approvedAt + 30 * 86400000);
+    expect((await f.root())!.withheldScopes).toContain("moving.archive");
+    expect(await f.connect()).toMatchObject({ status: provenance === "revoked" ? "revoked" : "expired", scopes: [] });
+  });
+  it("keeps a paused legacy predecessor through revoke and exact person restore", async () => {
+    const f = await accessFixture(); const pausedAt = Date.now() - 20;
+    await f.legacyGrant({ status: "revoked", pausedAt, scopes: ["moving.context.read"] });
+    await f.connect(); await f.finish(); await f.change({ action: "restore", opId: "restore" });
+    expect(await f.connect()).toMatchObject({ status: "paused", pausedAt });
+    await f.change({ action: "resume", opId: "resume" }); expect(await f.connect()).toMatchObject({ status: "active", scopes: ["moving.context.read"] });
+  });
+  it("normalizes verified OAuth aliases without losing either raw legacy restriction", async () => {
+    const f = await accessFixture();
+    await f.legacyGrant({ clientId: "https://CLIENT.example:443", scopes: ["moving.context.read"] });
+    await f.legacyGrant({ clientId: "legacy:https://client.example/", pausedAt: Date.now() - 1 });
+    await f.connect("https://client.example/"); await f.finish();
+    expect(await f.connect("https://CLIENT.example:443")).toMatchObject({ status: "paused", scopes: [] });
+    expect((await f.root())!.entries).toHaveLength(2);
+    expect((await f.person.query(api.connectionSettings.list, {})).connections).toHaveLength(1);
+  });
+  it("retains malformed historical URL identities without preventing bootstrap or granting access", async () => {
+    const f = await accessFixture(); await f.legacyGrant({ clientId: "https://broken.example/%", status: "revoked" });
+    await f.connect(); await f.finish(); expect(await f.connect()).toMatchObject({ status: "revoked" });
+  });
+  it("never imports legacy records again after completion", async () => {
+    const f = await accessFixture(); await f.legacyGrant({ scopes: ["moving.context.read"] });
+    await f.connect(); await f.finish();
+    await f.legacyGrant({ status: "revoked" }); // Out-of-band legacy writes are not a supported mutation door.
+    expect(await f.connect("new")).toMatchObject({ status: "active", scopes: ["moving.context.read"] });
+  });
+  it("isolates another owner's restrictions", async () => {
+    const f = await accessFixture();
+    const legacyId = await f.legacyGrant();
+    await f.t.run(async ctx => { const now = Date.now(); const other = await ctx.db.insert("users", { clerkUserId: "other", name: "Other", appRole: "member", status: "active", createdAt: now, updatedAt: now, lastSeenAt: now }); await ctx.db.patch(legacyId, { ownerUserId: other, status: "revoked" }); });
+    expect(await f.connect()).toMatchObject({ status: "active", scopes: [...movingScopes] });
   });
 });
 
-describe("two distinct clients get two distinct grant rows", () => {
-  it("keeps each connection revocable on its own (pitfall 2)", async () => {
-    const t = convexTest(schema, modules);
-    const { userId } = await seedOwner(t);
-
-    const a = (await t.mutation(grants.touchLegacyConnection , {
-      subject: SUBJECT,
-      clientId: "legacy:client-a",
-      clientName: "Assistant A",
-    })) as { grants: unknown[]; block?: string };
-    const b = (await t.mutation(grants.touchLegacyConnection , {
-      subject: SUBJECT,
-      clientId: "legacy:client-b",
-      clientName: "Assistant B",
-    })) as { grants: unknown[]; block?: string };
-    expect(a.block).toBeUndefined();
-    expect(b.block).toBeUndefined();
-
-    const rows = await t.run(async (ctx) =>
-      ctx.db
-        .query("aiGrants")
-        .withIndex("by_owner_status_updated", (q) =>
-          q.eq("ownerUserId", userId).eq("status", "active"),
-        )
-        .collect(),
-    );
-    const clientIds = rows.map((row) => row.clientId).sort();
-    expect(clientIds).toEqual(["legacy:client-a", "legacy:client-b"]);
-
-    // Revoking A must leave B untouched.
-    await t.run(async (ctx) => {
-      const rowA = rows.find((row) => row.clientId === "legacy:client-a");
-      if (!rowA) throw new Error("expected client A's row");
-      await ctx.db.patch(rowA._id, { status: "revoked", updatedAt: Date.now() });
-    });
-    const bStill = (await t.mutation(grants.touchLegacyConnection , {
-      subject: SUBJECT,
-      clientId: "legacy:client-b",
-      clientName: "Assistant B",
-    })) as { grants: unknown[]; block?: string };
-    expect(bStill.block).toBeUndefined();
-    expect(bStill.grants.length).toBeGreaterThan(0);
-
-    const aStill = (await t.mutation(grants.touchLegacyConnection , {
-      subject: SUBJECT,
-      clientId: "legacy:client-a",
-      clientName: "Assistant A",
-    })) as { grants: unknown[]; block?: string };
-    expect(aStill.block).toBe("revoked");
+describe("owner controls and privacy", () => {
+  it.each([{ client_id: "ai-one" }, { clientId: "ai-one" }, { azp: "opaque-ai" }, { scope: "openid" }, { scp: ["openid"] }, { tokenType: "oauth" }, { sid: undefined }, { sid: "" }, { sid: "sess_" }, { sts: "pending" }])("rejects non-person identity %j on controls and private history", async claims => {
+    const f = await accessFixture(); await f.connect(); const id = (await f.connection())!._id;
+    const ai = f.t.withIdentity({ subject: "awl-owner", ...claims });
+    await expect(ai.query(api.connectionSettings.list, {})).rejects.toThrow(/only reduce/);
+    await expect(ai.query(api.connectionSettings.history, { connectionId: id })).rejects.toThrow(/only reduce/);
+    await expect(ai.mutation(api.connectionSettings.change, { connectionId: id, expectedVersion: 1, opId: "restore", action: "restore" })).rejects.toThrow(/only reduce/);
+    await expect(ai.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Escape" })).rejects.toThrow(/only reduce/);
   });
-});
-
-describe("an unidentified client is refused, not shared", () => {
-  it("never mints a grant for the shared sentinel id", async () => {
-    const t = convexTest(schema, modules);
-    const { userId } = await seedOwner(t);
-
-    const result = (await t.mutation(grants.touchLegacyConnection , {
-      subject: SUBJECT,
-      clientId: UNIDENTIFIED_LEGACY_CLIENT,
-      clientName: undefined,
-    })) as { grants: unknown[]; block?: string };
-    expect(result.block).toBe("unidentifiedClient");
-    expect(result.grants.length).toBe(0);
-
-    const rows = await t.run(async (ctx) =>
-      ctx.db
-        .query("aiGrants")
-        .withIndex("by_owner_updated", (q) => q.eq("ownerUserId", userId))
-        .collect(),
-    );
-    expect(rows.length).toBe(0);
+  it("keeps history private from other household administrators", async () => {
+    const f = await accessFixture(); await f.connect();
+    await f.t.run(async ctx => { const now = Date.now(); const id = await ctx.db.insert("users", { clerkUserId: "other", name: "Admin", appRole: "admin", status: "active", createdAt: now, updatedAt: now, lastSeenAt: now }); await ctx.db.insert("householdMemberships", { householdId: f.householdId, userId: id, role: "owner", status: "active", createdByUserId: f.userId, createdAt: now, updatedAt: now }); });
+    const other = f.t.withIdentity({ subject: "other", sid: "sess_other" });
+    expect((await other.query(api.connectionSettings.list, {})).connections).toEqual([]);
+    await expect(other.query(api.connectionSettings.history, { connectionId: (await f.connection())!._id })).rejects.toThrow(/unavailable/);
+    await expect(other.mutation(api.connectionSettings.change, { connectionId: (await f.connection())!._id, opId: "foreign", expectedVersion: 1, action: "restore" })).rejects.toThrow(/unavailable/);
+  });
+  it("validates move narrowing before changing authority and refuses expansion by an AI", async () => {
+    const f = await accessFixture(); await f.connect();
+    await f.reduce({ opId: "move", moveIds: [f.moveId] });
+    await expect(f.reduce({ opId: "empty", moveIds: [] })).rejects.toThrow(/only reduce/);
+    await f.change({ opId: "all-moves", action: "limits", moveIds: null });
+    expect((await f.root())!.moveIds).toBeUndefined();
+  });
+  it("does not permit another user's private move as a narrowing witness", async () => {
+    const f = await accessFixture(); await f.connect();
+    const inaccessible = await f.t.run(async ctx => { const now = Date.now(); const id = await ctx.db.insert("users", { clerkUserId: "stranger", name: "Stranger", appRole: "member", status: "active", createdAt: now, updatedAt: now, lastSeenAt: now }); const household = await ctx.db.insert("households", { name: "Secret", ownerUserId: id, createdByUserId: id, createdAt: now, updatedAt: now }); return ctx.db.insert("moves", { householdId: household, title: "Secret move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: id, createdAt: now, updatedAt: now }); });
+    const before = await f.root(); await expect(f.reduce({ opId: "foreign", moveIds: [inaccessible] })).rejects.toThrow(/access|member/i); expect(await f.root()).toEqual(before);
+  });
+  it("legacy approval endpoints cannot mint an unbound bypass grant", async () => {
+    const f = await accessFixture(); await expect(f.person.mutation(api.aiGrants.approve, { householdId: f.householdId, label: "Bypass" })).rejects.toThrow(/receives full access when it connects/);
   });
 });

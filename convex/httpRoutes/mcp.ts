@@ -1,3 +1,4 @@
+import connectionPolicy from "../../shared/ai-connection-policy.json";
 /**
  * Stateless dual-era remote MCP endpoint and Moving-native workflow tools.
  *
@@ -26,8 +27,7 @@ import {
 } from "../lib/aiGrants";
 import {
   ClientIdentityError,
-  looksLikeClientIdMetadataDocument,
-  normalizeClientIdUrl,
+  oauthClientIdFromClaims,
   resolveClientIdentity,
   type ResolvedClientIdentity,
 } from "../lib/mcpClientIdentity";
@@ -39,6 +39,7 @@ import {
  */
 export const STATELESS_MOVING_TOOL_NAMES = [
   "describe_connection",
+  "reduce_connection",
   "get_move_brief",
   "search_move_records",
   "get_move_records",
@@ -184,6 +185,7 @@ class TokenFault extends Error {}
 function isTokenFault(error: unknown): boolean {
   return (
     error instanceof TokenFault ||
+    error instanceof ClientIdentityError ||
     error instanceof joseErrors.JWTExpired ||
     error instanceof joseErrors.JWTClaimValidationFailed ||
     error instanceof joseErrors.JWTInvalid ||
@@ -281,12 +283,7 @@ async function verifyOAuth(
     if (!subject || !result.payload.exp) {
       throw new TokenFault("Missing OAuth subject or expiry.");
     }
-    const clientId =
-      typeof result.payload.azp === "string"
-        ? result.payload.azp
-        : typeof result.payload.client_id === "string"
-          ? result.payload.client_id
-          : null;
+    const clientId = oauthClientIdFromClaims(result.payload);
     if (!clientId) throw new TokenFault("Missing OAuth client identifier.");
     if (clientId.length > 160) throw new TokenFault("OAuth client identifier is too long.");
     // Clerk's production dynamic-registration access tokens currently omit
@@ -322,6 +319,7 @@ async function verifyOAuth(
       extra: {
         issuer: issuer.toString().replace(/\/$/, ""),
         subject,
+        clientName: typeof result.payload.client_name === "string" ? result.payload.client_name : undefined,
       },
     };
   } catch (error) {
@@ -544,16 +542,18 @@ export function createMovingServer(
   actionCtx: ActionCtx,
   principal: VerifiedPrincipal,
   grantedScopes: readonly MovingScope[] = movingScopes,
+  connectionState?: { status: string; changedAt?: number | null; expiresAt?: number | null },
 ) {
   const granted = new Set<MovingScope>(grantedScopes);
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
       maxToolInputElements: MAX_MCP_TOOL_INPUT_ELEMENTS,
-      instructions: [
+      instructions: [connectionPolicy.instructions,
         granted.size === 0
-          ? "This sign-in has no active Assist With Moving grant, so no tools are available. The person opens Settings → AI connections in Assist With Moving and approves what this AI may do, then you reconnect."
+          ? `Connection state: ${connectionState?.status ?? "limited"}; changed ${connectionState?.changedAt ?? "date unavailable"}; end date ${connectionState?.expiresAt ?? "none"}. Only the person can restore it at https://movingmanifest.com/settings/ai. describe_connection remains available.`
           : `This connection holds ${[...granted].join(", ")}. Only tools inside those are listed.`,
+        "New connections default to all entitled current and future scopes, all owned moves, and no end date. Use reduce_connection to narrow only your own access; only the person in Settings can widen or restore it.",
         "Call get_move_brief first and use only returned move and record IDs.",
         "Search before creating duplicates; hydrate only the records needed for the work.",
         "Use get_evidence_media for private photos rather than normal web fetch.",
@@ -642,10 +642,21 @@ export function createMovingServer(
         next:
           granted.size > 0
             ? "Call get_move_brief, then list_queue_work if you hold moving.queue.work."
-            : "Ask the person to open Assist With Moving → Settings → AI connections and approve what this AI may do, then reconnect. Signing in proved who they are; it did not decide what you may do.",
+            : "Ask the person to open Assist With Moving → Settings → AI connections and approve what this AI may do, only the person can restore access on the website. Signing in starts full access; any saved limits remain in force.",
         grantManager: "https://movingmanifest.com/settings/ai",
+        connection: await actionCtx.runQuery(internal.aiGrants.describeConnection, { subject: principal.subject, clientId: principal.clientId }),
       }),
   );
+
+  server.registerTool("reduce_connection", {
+    title: "Reduce this connection's access",
+    description: "Reduce only this calling connection. Narrow scopes or moveIds, add/shorten expiresAt, pause, or revoke. Only the person in Settings can increase or restore access.",
+    inputSchema: z.object({ opId: z.string(), expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  }, async input => {
+    try { return toolResult(await actionCtx.runMutation((internal as any).aiGrants.reduceConnection, { ...input, subject: principal.subject, clientId: principal.clientId })); }
+    catch (error) { return toolError(error); }
+  });
 
   registerGranted(
     "get_move_brief",
@@ -1257,8 +1268,10 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       },
     );
   }
-  const declaredClientName =
-    request.headers.get("mcp-client-name")?.slice(0, 160) || undefined;
+  const initialization = await request.clone().json().catch(() => null);
+  const initializeName = initialization?.method === "initialize" ? initialization.params?.clientInfo?.name : undefined;
+  const registeredName = auth.extra?.clientName;
+  const declaredClientName = typeof registeredName === "string" ? registeredName.slice(0, 160) : typeof initializeName === "string" ? initializeName.slice(0, 160) : undefined;
 
   // Metadata-document first, dynamic registration as the labelled fallback.
   // A client id that claims to be a metadata document and fails to validate is
@@ -1269,33 +1282,31 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
     "clientId" | "clientName" | "registrationMethod" | "metadataDigest"
   >;
   let grantedScopes: MovingScope[] = [];
+  let connectionState: { status: string; changedAt?: number | null; expiresAt?: number | null } | undefined;
   try {
-    const claimsMetadata = looksLikeClientIdMetadataDocument(auth.clientId);
-    const clientId = claimsMetadata
-      ? normalizeClientIdUrl(auth.clientId).toString()
-      : auth.clientId;
-
-    // Read the grant before any client-controlled outbound request. Without a
-    // grant, only describe_connection is available; leave metadata unverified
-    // (registration method unknown) rather than fetching or claiming DCR.
+    // Validate required client metadata before any issuance or binding. The
+    // mutation below re-reads current history atomically after network I/O.
+    identity = await resolveClientIdentity(auth.clientId, {
+      declaredClientName,
+      fetchMetadata: (metadataClientId) =>
+        actionCtx.runAction((internal as any).mcpClientMetadata.fetchDocument, {
+          clientId: metadataClientId,
+        }),
+    });
+    const clientId = identity.clientId;
     try {
+      const connected = await actionCtx.runMutation((internal as any).aiGrants.touchLegacyConnection, {
+        subject, clientId, clientName: identity.clientName ?? declaredClientName,
+      });
       const access = (await actionCtx.runQuery(
         (internal as any).aiGrants.grantsForPrincipal,
         { subject, clientId },
-      )) as { scopes: MovingScope[] };
+      )) as { scopes: MovingScope[]; connectionState?: { status: string; changedAt?: number | null; expiresAt?: number | null } };
       grantedScopes = access.scopes ?? [];
+      connectionState = access.connectionState ?? (connected?.block ? { status: connected.block } : undefined);
     } catch (error) {
       console.error("[MCP] Could not read product grants", error);
-    }
-    identity = { clientId };
-    if (grantedScopes.length > 0 || !claimsMetadata) {
-      identity = await resolveClientIdentity(clientId, {
-        declaredClientName,
-        fetchMetadata: (metadataClientId) =>
-          actionCtx.runAction((internal as any).mcpClientMetadata.fetchDocument, {
-            clientId: metadataClientId,
-          }),
-      });
+      connectionState = { status: "lookup-unavailable" };
     }
   } catch (error) {
     if (error instanceof ClientIdentityError) {
@@ -1331,6 +1342,7 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
           metadataDigest: identity.metadataDigest,
         },
         grantedScopes,
+        connectionState,
       ).server,
     {
       legacy: "stateless",
@@ -1339,7 +1351,21 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       onerror: (error) => console.error("[MCP] Protocol error", error),
     },
   );
-  return await handler.fetch(request, { authInfo: auth });
+  const envelope = await request.clone().json().catch(() => null);
+  const response = await handler.fetch(request, { authInfo: auth });
+  const power = envelope?.method === "tools/call" && typeof envelope.params?.name === "string" ? scopeForTool(envelope.params.name) : null;
+  // Filtered tools remain discoverable through describe_connection. A client
+  // with a cached catalogue must receive the real missing-power recovery,
+  // rather than the SDK's generic unknown-tool error.
+  if (power && !grantedScopes.includes(power) && response.headers.get("content-type")?.includes("application/json")) {
+    const reply = await response.clone().json().catch(() => null);
+    if (reply?.error) {
+      reply.error.message = `Missing power ${power}. Only the person can restore it at https://movingmanifest.com/settings/ai.`;
+      reply.error.data = { missingPower: power, reason: connectionState?.status ?? "power removed", settings: "https://movingmanifest.com/settings/ai" };
+      return new Response(JSON.stringify(reply), { status: response.status, headers: response.headers });
+    }
+  }
+  return response;
 }
 
 /**

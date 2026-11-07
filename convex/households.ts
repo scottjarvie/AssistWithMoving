@@ -3,7 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireCurrentUser } from "./lib/auth";
 import { recordAuditEvent } from "./lib/audit";
-import { countEffectivelyActiveApiKeys } from "./lib/apiKeys";
+import { readActiveApiKeyCount } from "./lib/apiKeys";
 import { addOrInviteHouseholdMemberByEmail } from "./lib/householdInvitations";
 import {
   memberManagementBlockReason,
@@ -92,12 +92,7 @@ export const summaryStats = query({
           q.eq("householdId", args.householdId).eq("status", "invited"),
         )
         .collect(),
-      ctx.db
-        .query("apiKeys")
-        .withIndex("by_household_status", (q) =>
-          q.eq("householdId", args.householdId).eq("status", "active"),
-        )
-        .collect(),
+      readActiveApiKeyCount(ctx.db, args.householdId),
       ctx.db
         .query("items")
         .withIndex("by_household", (q) =>
@@ -128,7 +123,8 @@ export const summaryStats = query({
         .length,
       itemCount: items.filter((item) => item.deletedAt === undefined).length,
       boxCount: boxes.filter((box) => box.archivedAt === undefined).length,
-      activeApiKeyCount: countEffectivelyActiveApiKeys(activeApiKeys),
+      activeApiKeyCount: activeApiKeys.count,
+      activeApiKeyCountTruncated: activeApiKeys.truncated,
       activeMemberCount: memberships.filter(
         (membership) => membership.status === "active",
       ).length,

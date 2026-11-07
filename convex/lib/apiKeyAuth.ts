@@ -1,158 +1,62 @@
+import { makeFunctionReference } from "convex/server";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import {
-  apiKeyHasScopes,
-  apiKeyPrefix,
-  validateApiKeyRecord,
-  verifyApiKeyHash,
-  type ApiKeyScope,
-} from "./apiKeys";
+import { apiKeyPrefix, verifyApiKeyHash, type ApiKeyScope } from "./apiKeys";
+import { keyScopes, accessState, snapshot, SETTINGS_URL, type Access, type Connection } from "./carriedAccess";
 import { agentAccessDisabled, resolveMoveAccess } from "./moveAccess";
 import { visibilityForHouseholdRole, type HouseholdRole } from "./roles";
 
-export async function authenticateApiKey(
-  ctx: MutationCtx,
-  {
-    rawKey,
-    requiredScopes,
-    householdId,
-    moveId,
-    action,
-    allowRestrictedKeyWithoutMoveId = false,
-  }: {
-    rawKey: string;
-    requiredScopes: ApiKeyScope[];
-    householdId?: Id<"households">;
-    moveId?: Id<"moves">;
-    action: string;
-    allowRestrictedKeyWithoutMoveId?: boolean;
-  }
-) {
+export async function authenticateApiKey(ctx: MutationCtx, {
+  rawKey, requiredScopes, householdId, moveId, action,
+  allowRestrictedKeyWithoutMoveId = false, recordUse = true, inspectConnection = false,
+}: {
+  rawKey: string; requiredScopes: ApiKeyScope[]; householdId?: Id<"households">; moveId?: Id<"moves">; action: string;
+  allowRestrictedKeyWithoutMoveId?: boolean; recordUse?: boolean; inspectConnection?: boolean;
+}) {
   const prefix = apiKeyPrefix(rawKey);
-  const key = await ctx.db
-    .query("apiKeys")
-    .withIndex("by_prefix", (q) => q.eq("prefix", prefix))
-    .unique();
-
-  if (!key) {
-    throw new Error("Invalid API key.");
+  const key = await ctx.db.query("apiKeys").withIndex("by_prefix", q => q.eq("prefix", prefix)).unique();
+  if (!key || !await verifyApiKeyHash({ rawKey, expectedHash: key.secretHash })) throw new Error("Invalid API key.");
+  if (/^POST .*\/households\/[^/]+\/members$/.test(action) || /^POST .*\/share-links$/.test(action)) throw new Error(`Invitations and new share links are website-only. The person must use ${SETTINGS_URL}.`);
+  const { access, connection } = await ctx.runMutation(makeFunctionReference<"mutation", { apiKeyId: Id<"apiKeys"> }, { access: Access; connection: Connection }>("apiKeys:connectCallingKey"), { apiKeyId: key._id });
+  let state = key.credentialRetiredAt !== undefined ? "superseded" : accessState(access, connection);
+  const scopes = keyScopes(access);
+  if (!inspectConnection && state !== "active") throw new Error(state === "initializing" ? "Earlier connection limits are still being checked. Call get_api_context again shortly; no access was widened." : `This connection is ${state}. Only the person can restore it at ${SETTINGS_URL}.`);
+  if (householdId && householdId !== key.householdId) throw new Error("API key is not scoped to this household.");
+  const restricted = access.moveIds !== undefined;
+  const singleMoveId = access.moveIds?.length === 1 ? access.moveIds[0] : undefined;
+  const effectiveMoveId = moveId ?? (allowRestrictedKeyWithoutMoveId ? singleMoveId : undefined);
+  if (!inspectConnection && restricted && effectiveMoveId && !access.moveIds!.includes(effectiveMoveId)) throw new Error(`Missing power: access to that move. Only the person can restore it at ${SETTINGS_URL}.`);
+  if (!inspectConnection && restricted && !effectiveMoveId && action !== "GET /api/v1/moves") throw new Error(`This connection is move-restricted; use a move-scoped endpoint. Only the person can restore all moves at ${SETTINGS_URL}.`);
+  const missing = requiredScopes.filter(scope => !scopes.includes(scope));
+  if (missing.length) throw new Error(`API key is missing required scope: ${missing.join(", ")}. Only the person can restore it at ${SETTINGS_URL}.`);
+  const membership = await ctx.db.query("householdMemberships").withIndex("by_household_user", q => q.eq("householdId", key.householdId).eq("userId", key.createdByUserId)).unique();
+  const creator = await ctx.db.get(key.createdByUserId);
+  const noMembership = membership?.status !== "active" && !effectiveMoveId && !singleMoveId;
+  const disabled = creator?.status !== "active" || noMembership || (membership?.status === "active" && membership.apiAccessStatus === "disabled");
+  if (disabled && !inspectConnection) throw new Error(`The API key creator no longer has active household access, or agent access was turned off. Only the person can restore it at ${SETTINGS_URL}.`);
+  let effectiveRole: HouseholdRole = membership?.role ?? "guest";
+  let blocked = Boolean(disabled);
+  const roleMove = effectiveMoveId ?? singleMoveId;
+  if (roleMove && !blocked && state === "active") {
+    try {
+      const accessToMove = await resolveMoveAccess(ctx, key.createdByUserId, key.householdId, roleMove);
+      if (agentAccessDisabled(accessToMove)) throw new Error("Agent access for this connection was turned off by an owner.");
+      effectiveRole = accessToMove.role;
+    } catch (error) { if (!inspectConnection) throw error; blocked = true; }
   }
-  const hashMatches = await verifyApiKeyHash({
-    rawKey,
-    expectedHash: key.secretHash,
-  });
-  if (!hashMatches) {
-    throw new Error("Invalid API key.");
+  if (blocked && state === "active") state = "blocked";
+  if (recordUse) {
+    await ctx.db.patch(key._id, { lastUsedAt: Date.now(), lastUsedAction: action, updatedAt: Date.now() });
+    if (connection) await ctx.db.patch(connection._id, { lastUsedAt: Date.now(), lastToolName: action });
   }
-  const effectiveMoveId =
-    allowRestrictedKeyWithoutMoveId && !moveId ? key.moveId : moveId;
-  if (key.status !== "active") {
-    throw new Error("API key is revoked or inactive.");
-  }
-  if (key.expiresAt !== undefined && key.expiresAt <= Date.now()) {
-    throw new Error("API key is expired.");
-  }
-  if (householdId && key.householdId !== householdId) {
-    throw new Error("API key is not scoped to this household.");
-  }
-  if (key.moveId && effectiveMoveId && key.moveId !== effectiveMoveId) {
-    throw new Error("API key is restricted to a different move.");
-  }
-  if (key.moveId && !effectiveMoveId) {
-    throw new Error("API key is move-restricted; use a move-scoped endpoint.");
-  }
-  if (!apiKeyHasScopes(key.scopes, requiredScopes)) {
-    const missingScopes = requiredScopes.filter(
-      (scope) => !key.scopes.includes(scope),
-    );
-    throw new Error(
-      `API key is missing required scope${
-        missingScopes.length === 1 ? "" : "s"
-      }: ${missingScopes.join(", ")}. Create or rotate a key in Settings with the needed scope.`,
-    );
-  }
-  if (
-    !validateApiKeyRecord({
-      record: {
-        status: key.status,
-        scopes: key.scopes,
-        householdId: key.householdId,
-        moveId: key.moveId,
-        expiresAt: key.expiresAt,
-      },
-      householdId,
-      moveId: effectiveMoveId,
-      requiredScopes,
-    })
-  ) {
-    throw new Error("API key is not allowed for this operation.");
-  }
-
-  // Owner kill-switch: if an owner has turned off the key creator's agent access
-  // (householdMemberships.apiAccessStatus), the key stops working immediately —
-  // without needing to revoke each key. Enforced here so every REST endpoint
-  // inherits it.
-  const creatorMembership = await ctx.db
-    .query("householdMemberships")
-    .withIndex("by_household_user", (q) =>
-      q.eq("householdId", key.householdId).eq("userId", key.createdByUserId),
-    )
-    .unique();
-  if (creatorMembership && creatorMembership.status !== "active") {
-    throw new Error("The API key creator no longer has active household access.");
-  }
-  if (!key.moveId && !creatorMembership) {
-    throw new Error("The API key creator no longer has active household access.");
-  }
-  if (creatorMembership?.apiAccessStatus === "disabled") {
-    throw new Error(
-      "Agent access for this connection has been turned off by an owner.",
-    );
-  }
-
-  // Compute the key creator's effective visibility so REST item reads redact the
-  // same sensitive fields (values, serials) the web/gateway do. Defense-in-depth:
-  // today all keys are admin-created (api_keys:manage → admin) so this resolves
-  // to full visibility, but if key creation is ever opened below admin (e.g. a
-  // move-only participant connecting their own agent), the wall already holds.
-  let effectiveRole: HouseholdRole = creatorMembership?.role ?? "guest";
-  if (key.moveId) {
-    const moveAccess = await resolveMoveAccess(
-      ctx,
-      key.createdByUserId,
-      key.householdId,
-      key.moveId,
-    );
-    if (agentAccessDisabled(moveAccess)) {
-      throw new Error(
-        "Agent access for this connection has been turned off by an owner.",
-      );
-    }
-    effectiveRole = moveAccess.role;
-  }
-  const visibility = visibilityForHouseholdRole(effectiveRole);
-
-  const now = Date.now();
-  await ctx.db.patch(key._id, {
-    lastUsedAt: now,
-    lastUsedAction: action,
-    updatedAt: now,
-  });
-
+  const permitted = state === "active" ? scopes : [];
   return {
-    actor: {
-      type: "apiKey" as const,
-      apiKeyId: String(key._id),
-      scopes: key.scopes,
-    },
-    apiKeyId: key._id,
-    apiKeyName: key.name,
-    apiKeyTokenPreview: key.tokenPreview,
-    createdByUserId: key.createdByUserId,
-    householdId: key.householdId,
-    moveId: key.moveId,
-    scopes: key.scopes,
-    effectiveRole,
-    visibility,
+    actor: { type: "apiKey" as const, apiKeyId: String(key._id), scopes: permitted },
+    version: access.revision, status: state, changedAt: snapshot(access, connection).changedAt, revokedAt: access.revokedAt, pausedAt: access.pausedAt, expiresAt: access.endsAt,
+    apiKeyId: key._id, apiKeyName: key.name, apiKeyTokenPreview: key.tokenPreview,
+    createdByUserId: key.createdByUserId, householdId: key.householdId,
+    moveId: singleMoveId, allowedMoveIds: access.moveIds, moveRestricted: restricted,
+    householdVisible: membership?.status === "active", scopes: permitted,
+    effectiveRole, visibility: visibilityForHouseholdRole(effectiveRole),
   };
 }
