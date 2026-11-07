@@ -371,7 +371,7 @@ describe("refusals name the actor who can lift them", () => {
       block: "unidentifiedClient",
     });
     expect(decision.allowed).toBe(false);
-    expect(decision.reason).toMatch(/did not identify itself/i);
+    expect(decision.reason).toMatch(/verified OAuth client id is required/i);
     expect(decision.reason).toContain("/settings/ai");
   });
 

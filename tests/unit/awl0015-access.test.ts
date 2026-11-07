@@ -1,132 +1,146 @@
 // @vitest-environment node
-import { convexTest } from "convex-test";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Id } from "../../convex/_generated/dataModel";
-import schema from "../../convex/schema";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../../convex/_generated/api";
 import { effectiveScopes, movingScopes } from "../../convex/lib/aiGrants";
+import { apiKeyScopes } from "../../convex/lib/apiKeys";
 import { safeConnectionText } from "../../convex/lib/connectionHistory";
-afterEach(() => vi.restoreAllMocks());
-const modules = import.meta.glob("../../convex/**/*.ts");
-async function setup() {
-  const t = convexTest(schema, modules);
-  const seeded = await t.run(async ctx => {
-    const now = Date.now();
-    const userId = await ctx.db.insert("users", { clerkUserId: "awl-owner", name: "Owner", status: "active", appRole: "member", createdAt: now, updatedAt: now, lastSeenAt: now });
-    const householdId = await ctx.db.insert("households", { name: "Home", ownerUserId: userId, createdByUserId: userId, createdAt: now, updatedAt: now });
-    await ctx.db.insert("householdMemberships", { householdId, userId, role: "owner", status: "active", apiAccessStatus: "enabled", createdByUserId: userId, createdAt: now, updatedAt: now });
-    return { userId, householdId };
+import { connectOAuth } from "../../convex/lib/carriedAccess";
+import { accessFixture } from "../helpers/ai-access";
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
+describe("AWL-0015 durable owner authority", () => {
+  it("starts full without approval or an end date and records its system receipt", async () => {
+    const f = await accessFixture();
+    expect(await f.connect()).toMatchObject({ status: "active", scopes: [...movingScopes], expiresAt: null, heldBack: [] });
+    const row = (await f.person.query(api.connectionSettings.list, {})).connections[0];
+    expect((await f.person.query(api.connectionSettings.history, { connectionId: row.id })).history).toEqual([expect.objectContaining({ actor: "system", before: null, opId: expect.any(String) })]);
+    expect(await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: "awl-owner", clientId: "" })).toMatchObject({ block: "unidentifiedClient" });
   });
-  const person = t.withIdentity({ subject: "awl-owner", sid: "sess_awl_owner" });
-  const connect = async (clientId = "ai-one", clientName = "Test AI") => {
-    await t.mutation(internal.aiGrants.touchLegacyConnection, { subject: "awl-owner", clientId, clientName });
-    return t.query(internal.aiGrants.describeConnection, { subject: "awl-owner", clientId });
-  };
-  return { t, person, connect, ...seeded };
-}
-
-describe("AWL-0015 connection contract", () => {
-  it("starts full with no end date and creates a dated system receipt", async () => {
-    const { t, person, connect } = await setup();
-    expect(await connect()).toMatchObject({ status: "active", scopes: [...movingScopes], expiresAt: null, heldBack: [] });
-    const result = await person.query(api.connectionSettings.list, {});
-    expect(result.history).toEqual([expect.objectContaining({ actor: "system", before: null, createdAt: expect.any(Number), opId: expect.any(String) })]);
-    await expect(t.mutation(internal.aiGrants.touchLegacyConnection, { subject: "awl-owner", clientId: "" })).resolves.toMatchObject({ block: "unidentifiedClient" });
+  it("also connects before the person creates any household", async () => {
+    const f = await accessFixture();
+    await f.t.run(async ctx => { await ctx.db.delete(f.membershipId); await ctx.db.delete(f.moveId); await ctx.db.delete(f.householdId); });
+    expect(await f.connect()).toMatchObject({ status: "active", scopes: [...movingScopes], expiresAt: null });
   });
-  it("narrows atomically, rejects stale/widening writes and replays one opId", async () => {
-    const { t, person, connect } = await setup(); await connect();
-    const input = { subject: "awl-owner", clientId: "ai-one", opId: "narrow-one", expectedVersion: 1, scopes: ["moving.context.read"] };
-    const receipt = await t.mutation(internal.aiGrants.reduceConnection, input);
-    expect(await t.mutation(internal.aiGrants.reduceConnection, input)).toEqual(receipt);
-    await expect(t.mutation(internal.aiGrants.reduceConnection, { ...input, scopes: [] })).rejects.toThrow(/different connection change/);
-    await expect(t.mutation(internal.aiGrants.reduceConnection, { ...input, opId: "stale", expectedVersion: 1 })).rejects.toThrow(/changed/);
-    await expect(t.mutation(internal.aiGrants.reduceConnection, { ...input, opId: "widen", expectedVersion: 2, scopes: [...movingScopes] })).rejects.toThrow(/only reduce/);
-    const listed = await person.query(api.connectionSettings.list, {});
-    expect(listed.history.filter(row => row.actor === "ai")).toHaveLength(1);
-    expect(listed.connections.find(row => row.kind === "oauth")!).toMatchObject({ narrowedBy: "ai", scopes: ["moving.context.read"] });
+  it("atomically narrows, rejects stale/widening writes, and replays one opId once", async () => {
+    const f = await accessFixture(); await f.connect();
+    const input = { opId: "read", expectedVersion: 1, scopes: ["moving.context.read"] };
+    const receipt = await f.reduce(input);
+    expect(await f.reduce(input)).toEqual(receipt);
+    await expect(f.reduce({ ...input, scopes: [] })).rejects.toThrow(/different connection change/);
+    await expect(f.reduce({ ...input, opId: "stale" })).rejects.toThrow(/changed/);
+    await expect(f.reduce({ opId: "widen", scopes: [...movingScopes] })).rejects.toThrow(/only reduce.*https:\/\/movingmanifest.com\/settings\/ai/);
+    const history = await f.person.query(api.connectionSettings.history, { connectionId: (await f.connection())!._id });
+    expect(history.history.filter(row => row.actor === "ai")).toHaveLength(1);
+    expect(history.history[0]).toMatchObject({ before: { scopes: [...movingScopes], version: 1 }, after: { scopes: ["moving.context.read"], version: 2 } });
   });
-  it("keeps paused state separate from the end date; only the website resumes", async () => {
-    const { t, person, connect } = await setup(); await connect();
-    const end = Date.now() + 86400000;
-    await t.mutation(internal.aiGrants.reduceConnection, { subject: "awl-owner", clientId: "ai-one", opId: "pause", expectedVersion: 1, action: "pause", expiresAt: end });
-    expect(await connect()).toMatchObject({ status: "paused", scopes: [], expiresAt: end, heldBack: expect.arrayContaining([expect.objectContaining({ missingPower: "moving.work.write", reason: "paused" })]) });
-    const row = (await person.query(api.connectionSettings.list, {})).connections.find(row => row.kind === "oauth")!;
-    const oauth = t.withIdentity({ subject: "awl-owner", client_id: "ai-one" });
-    const input = { grantId: row.id as Id<"aiGrants">, expectedVersion: row.version, opId: "resume", action: "resume" as const };
-    await expect(oauth.mutation(api.connectionSettings.change, input)).rejects.toThrow(/only reduce/);
-    await person.mutation(api.connectionSettings.change, input);
-    expect(await connect()).toMatchObject({ status: "active", expiresAt: end });
+  it.each(["restore", "resume", "full", "extend"])("refuses AI %s with the specific narrow-only refusal", async action => {
+    const f = await accessFixture(); await f.connect();
+    await expect(f.reduce({ opId: action, action })).rejects.toThrow(/Your AI can only reduce its own connection/);
   });
-  it("inherits revocation on re-registration by reported name; restores previous powers exactly", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(Date.now());
-    const { t, person, connect } = await setup(); await connect();
-    await t.mutation(internal.aiGrants.reduceConnection, { subject: "awl-owner", clientId: "ai-one", opId: "read", expectedVersion: 1, scopes: ["moving.context.read"] });
-    await t.mutation(internal.aiGrants.reduceConnection, { subject: "awl-owner", clientId: "ai-one", opId: "revoke", expectedVersion: 2, action: "revoke" });
-    const originalId = (await person.query(api.connectionSettings.list, {})).connections[0].id;
-    expect(await connect("new-registration")).toMatchObject({ status: "revoked", scopes: [] });
-    const row = (await person.query(api.connectionSettings.list, {})).connections.find(row => row.kind === "oauth" && row.id !== originalId)!;
-    await person.mutation(api.connectionSettings.change, { grantId: row.id as Id<"aiGrants">, expectedVersion: row.version, opId: "person-restore", action: "restore" });
-    expect(await connect("new-registration")).toMatchObject({ status: "active", scopes: ["moving.context.read"] });
-    expect(await connect("third-registration")).toMatchObject({ status: "active", scopes: ["moving.context.read"] });
+  it.each([null, 1e20, -1e20])("refuses invalid/widening expiry %s", async expiresAt => {
+    const f = await accessFixture(); await f.connect();
+    await expect(f.reduce({ opId: "bad-date", expiresAt })).rejects.toThrow(/only reduce/);
+    expect((await f.root())!.revision).toBe(1);
   });
-  it("lifts an expired automatic legacy grant in code without changing the stored row", async () => {
-    const { t, person, connect } = await setup(); await connect();
-    const row = (await person.query(api.connectionSettings.list, {})).connections.find(row => row.kind === "oauth")!;
-    await t.run(async ctx => {
-      const old = (await ctx.db.get(row.id as Id<"aiGrants">))!;
-      await ctx.db.patch(row.id, { scopes: movingScopes.filter(scope => scope !== "moving.archive"), scopeChoice: undefined, expiryChoice: undefined, approvedAt: Date.now() - 31 * 86400000, expiresAt: Date.now() - 86400000 });
-      await ctx.db.insert("aiGrantActivities", { grantId: row.id as Id<"aiGrants">, ownerUserId: old.ownerUserId, householdId: old.householdId, type: "approved", outcome: "recorded", message: "Test AI connected by signing in. It can read and save — for 30 days.", createdAt: old.approvedAt });
-    });
-    const before = await t.run(ctx => ctx.db.get(row.id as Id<"aiGrants">));
-    expect(await connect()).toMatchObject({ status: "active", scopes: [...movingScopes], expiresAt: null });
-    expect(await t.run(ctx => ctx.db.get(row.id as Id<"aiGrants">))).toEqual(before);
-    await t.run(ctx => ctx.db.patch(row.id, { ownerDecisionAt: Date.now() }));
-    expect(await connect()).toMatchObject({ status: "expired" });
+  it("keeps pause through revoke, re-registration and person restore; resume is separate", async () => {
+    const f = await accessFixture(); await f.connect();
+    const end = Date.now() + 60000;
+    await f.reduce({ opId: "pause", action: "pause", expiresAt: end, scopes: ["moving.context.read"] });
+    const paused = (await f.root())!.pausedAt;
+    await f.reduce({ opId: "revoke", action: "revoke" });
+    expect(await f.connect("second", "Different name")).toMatchObject({ status: "revoked", pausedAt: paused, expiresAt: end });
+    await f.change({ opId: "restore", action: "restore" }, "second");
+    expect(await f.connect("second")).toMatchObject({ status: "paused", pausedAt: paused, expiresAt: end, scopes: [] });
+    await f.change({ opId: "resume", action: "resume" }, "second");
+    expect(await f.connect("second")).toMatchObject({ status: "active", scopes: ["moving.context.read"], expiresAt: end });
+    expect(await f.connect()).toMatchObject({ status: "superseded", scopes: [] });
   });
-  it("receives new powers while keeping only explicitly removed powers withheld", () => {
-    const catalog = movingScopes as unknown as string[];
-    catalog.push("moving.future.test");
-    try { expect(effectiveScopes({ scopes: ["moving.context.read"], withheldScopes: ["moving.work.write"] })).toContain("moving.future.test"); expect(effectiveScopes({ scopes: [], withheldScopes: ["moving.work.write"] })).not.toContain("moving.work.write"); }
-    finally { catalog.pop(); }
+  it("restores a revoked connection with its exact chosen date even after it passes", async () => {
+    const f = await accessFixture(); await f.connect(); const endsAt = Date.now() + 1000;
+    await f.reduce({ opId: "date", expiresAt: endsAt }); await f.reduce({ opId: "revoke", action: "revoke" });
+    vi.setSystemTime(endsAt + 1);
+    await f.change({ opId: "restore", action: "restore" });
+    expect(await f.connect()).toMatchObject({ status: "expired", expiresAt: endsAt });
+    await f.change({ opId: "clear", action: "limits", expiresAt: null });
+    expect(await f.connect()).toMatchObject({ status: "active", expiresAt: null });
   });
-  it.each(["pause", "revoke"] as const)("keeps API key inspection working after %s and blocks invitations/share links", async action => {
-    const { t, person, householdId } = await setup();
-    const key = await person.mutation(api.apiKeys.create, { householdId, name: "Test key" });
-    const request = (method: "GET" | "POST", path: string, body?: unknown) => t.mutation(internal.restApi.handle, { method, path, query: {}, authorization: `Bearer ${key.rawKey}`, body });
-    for (const path of [`households/${householdId}/members`, "moves/fake/share-links"]) {
-      const response = await request("POST", path, { email: "new@example.test" });
-      expect(response.status).toBeGreaterThanOrEqual(400);
-      expect(JSON.stringify(response.body)).toContain("website-only");
+  it.each([undefined, "Same name", "Different name", "https://different.example/client.json"])("a new self-reported name %s cannot prove independence", async name => {
+    const f = await accessFixture(); await f.connect("ai-one", "Original"); await f.reduce({ opId: "revoke", action: "revoke" });
+    for (const client of ["second", "third", "fourth"]) expect(await f.connect(client, name)).toMatchObject({ status: "revoked", scopes: [] });
+  });
+  it.each(["pause", "revoke", "narrow", "expiry"])("later predecessor %s counts again after the person's revision-bound release", async kind => {
+    const f = await accessFixture(); await f.connect(); await f.reduce({ opId: "revoke", action: "revoke" });
+    await f.connect("second"); await f.change({ opId: "restore", action: "restore" }, "second");
+    expect(await f.connect("third")).toMatchObject({ status: "active", scopes: [...movingScopes] });
+    const releasedRevision = (await f.root())!.revision;
+    await f.reduce({ opId: "later", ...(kind === "narrow" ? { scopes: ["moving.context.read"] } : kind === "expiry" ? { expiresAt: Date.now() + 60000 } : { action: kind }) });
+    expect((await f.root())!.entries).toEqual([expect.objectContaining({ sourceRevision: releasedRevision + 1 })]);
+    const description = await f.connect("fourth");
+    expect(description.status).toBe(kind === "pause" ? "paused" : kind === "revoke" ? "revoked" : "active");
+    if (kind === "narrow") expect(description.scopes).toEqual(["moving.context.read"]);
+    if (kind === "expiry") expect(description.expiresAt).toBe(Date.now() + 60000);
+  });
+  it("same-millisecond release and later restriction order by revision", async () => {
+    const f = await accessFixture(); await f.connect(); await f.reduce({ opId: "old", action: "revoke" });
+    await f.connect("second"); await f.change({ opId: "release", action: "restore" }, "second");
+    await f.reduce({ opId: "new", action: "revoke" });
+    expect(await f.connect("third")).toMatchObject({ status: "revoked" });
+  });
+  it("all live members share one authority; revoking one stops every stale sibling token", async () => {
+    const f = await accessFixture(); await f.connect(); await f.connect("second");
+    await f.reduce({ opId: "stop-all", action: "revoke" });
+    for (const id of ["ai-one", "second"]) {
+      expect(await f.t.query(internal.aiGrants.grantsForPrincipal, { subject: "awl-owner", clientId: id })).toMatchObject({ scopes: [], grants: [], connectionState: { status: "revoked" } });
     }
-    expect((await request("POST", "me/access", { opId: action, expectedVersion: 1, action })).status).toBe(200);
-    const result = await request("GET", "me");
-    expect(result.status).toBe(200);
-    const body = result.body as { data: { apiKey: unknown; household: unknown } };
-    expect(body.data.apiKey).toMatchObject({ status: action === "pause" ? "paused" : "revoked", scopes: [], settings: "https://movingmanifest.com/settings/ai" });
-    expect(body.data.household).toBeNull();
-    expect((await request("GET", "moves")).status).toBeGreaterThanOrEqual(400);
+    expect(await f.connect("third")).toMatchObject({ status: "revoked" });
+    expect(await f.connect("second")).toMatchObject({ status: "superseded" });
   });
-  it("does not let an older registration escape a later sibling limit by changing its reported name", async () => {
-    const { t, connect } = await setup(); await connect(); await connect("second-id");
-    const current = await connect();
-    await t.mutation(internal.aiGrants.reduceConnection, { subject: "awl-owner", clientId: "ai-one", opId: "family-read", expectedVersion: current.version!, scopes: ["moving.context.read"] });
-    expect(await connect("second-id")).toMatchObject({ scopes: ["moving.context.read"] });
-    await t.mutation(internal.aiGrants.noteGrantUse, { subject: "awl-owner", clientId: "second-id", clientName: "Different reported name", scope: "moving.context.read", toolName: "get_move_brief" });
-    expect(await connect("second-id", "Different reported name")).toMatchObject({ scopes: ["moving.context.read"] });
-  });
-  it("keeps owner settings usable with more than 128 historical grants", async () => {
-    const { t, person, connect } = await setup(); await connect();
-    const original = (await person.query(api.connectionSettings.list, {})).connections.find(row => row.kind === "oauth")!;
-    await t.run(async ctx => {
-      const row = (await ctx.db.get(original.id as Id<"aiGrants">))!;
-      const { _id: ignored, _creationTime: ignoredTime, ...fields } = row; void ignored; void ignoredTime;
-      for (let i = 0; i < 130; i++) await ctx.db.insert("aiGrants", { ...fields, observedClientName: undefined, clientId: `old-${i}`, status: "revoked", revokedAt: Date.now() });
+  it("uses only the durable record after bootstrap, even when connecting a new identity", async () => {
+    const f = await accessFixture(); await f.connect(); await f.reduce({ opId: "stop", action: "revoke" });
+    await f.t.run(async ctx => {
+      const query = ctx.db.query.bind(ctx.db);
+      vi.spyOn(ctx.db, "query").mockImplementation(table => {
+        if (["aiGrants", "apiKeys", "aiGrantActivities", "aiConnectionChanges"].includes(table)) throw new Error(`History scan: ${table}`);
+        return query(table);
+      });
+      const user = (await ctx.db.get(f.userId))!;
+      const { access } = await connectOAuth(ctx, user, "new-no-history", "Unrelated claim");
+      expect(access.revoked).toBe(true);
     });
-    expect((await person.query(api.connectionSettings.list, {})).connections).toHaveLength(131);
-    await person.mutation(api.connectionSettings.change, { grantId: original.id as Id<"aiGrants">, opId: "large-history", expectedVersion: 1, action: "pause" });
-    expect(await connect()).toMatchObject({ status: "paused" });
   });
-  it("redacts secret-shaped free text", () => {
+  it("keeps all current connections paginated and superseded registrations separate", async () => {
+    const f = await accessFixture();
+    for (let i = 0; i < 57; i++) await f.connect(`ai-${i}`);
+    let cursor: string | undefined, count = 0;
+    do { const page = await f.person.query(api.connectionSettings.list, cursor ? { cursor } : {}); count += page.connections.length; cursor = page.nextCursor ?? undefined; } while (cursor);
+    expect(count).toBe(57);
+    await f.reduce({ opId: "revoke", action: "revoke" }, "ai-0"); await f.connect("successor");
+    expect((await f.person.query(api.connectionSettings.list, {})).connections).toHaveLength(1);
+    let oldCursor: string | undefined, oldCount = 0;
+    do { const page = await f.person.query(api.connectionSettings.list, { superseded: true, ...(oldCursor ? { cursor: oldCursor } : {}) }); oldCount += page.connections.length; oldCursor = page.nextCursor ?? undefined; } while (oldCursor);
+    expect(oldCount).toBe(57);
+  });
+  it("a narrowed grant receives future tools except explicitly withheld powers", () => {
+    const scopes = movingScopes as unknown as string[]; scopes.push("moving.future.test");
+    try { expect(effectiveScopes({ scopes: ["moving.context.read"], withheldScopes: ["moving.work.write"] })).toContain("moving.future.test"); }
+    finally { scopes.pop(); }
+  });
+  it("scrubs secret-shaped names and refuses secret-shaped opIds", async () => {
     expect(safeConnectionText("Bearer secret mmk_exampletoken eyJabc.e30.sig")).toBe("[redacted] [redacted] [redacted]");
+    const f = await accessFixture(); await f.connect("ai-one", "mmk_secret");
+    await expect(f.reduce({ opId: "mmk_secret", action: "pause" })).rejects.toThrow(/non-secret opId/);
+    expect((await f.connection())!.label).toBe("[redacted]");
+  });
+  it("projects OAuth restrictions onto API keys and key restrictions back onto OAuth", async () => {
+    const f = await accessFixture(); await f.connect(); await f.reduce({ opId: "read", scopes: ["moving.context.read"] });
+    const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "New key" });
+    expect(key.scopes).not.toContain("inventory/write");
+    const root = (await f.root())!;
+    expect((await f.request(key.rawKey, "POST", "me/access", { opId: "stop-key", expectedVersion: root.revision, action: "revoke" })).status).toBe(200);
+    expect(await f.connect("yet-another")).toMatchObject({ status: "revoked" });
+  });
+  it("full API keys have all current powers and no default end date", async () => {
+    const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Full" });
+    expect(key.scopes).toEqual([...apiKeyScopes]); expect((await f.root())!.endsAt).toBeUndefined();
   });
 });

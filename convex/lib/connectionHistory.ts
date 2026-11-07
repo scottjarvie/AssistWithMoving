@@ -19,7 +19,7 @@ export async function previousChange(ctx: MutationCtx, connectionId: string, opI
   return row;
 }
 export async function connectionChange(ctx: MutationCtx, input: {
-  ownerUserId: Id<"users">; connectionId: string; actor: "person" | "ai" | "system";
+  ownerUserId: Id<"users">; accessOwnerId?: Id<"aiAccessOwners">; connectionId: string; actor: "person" | "ai" | "system";
   before: unknown; after: unknown; message: string; opId: string; requestKey?: string;
 }) {
   requireOpId(input.opId);

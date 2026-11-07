@@ -2,16 +2,10 @@
 import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
 import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { pathToFileURL } from "node:url";
-import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
-import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
-import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 
-import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
-import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import {
   addItemFromPhoto,
   addItemsToBox,
@@ -83,6 +77,8 @@ import {
   convertItemToBox,
   convertPlannedItem,
   removeItemFromBox,
+  listArchivedAssignments,
+  restoreArchivedAssignment,
   rejectAiPhotoSuggestions,
   rejectAiTextSuggestions,
   rejectPlanningSuggestions,
@@ -1672,10 +1668,23 @@ export function registerTools(target, apiConfig, options = {}) {
     handler: (input) => addItemsToBox(apiConfig, input),
   });
 
+  registerTool(target, "list_archived_box_assignments", {
+    title: "List archived box assignments", description: "Read recoverable AI unassignments and their archive ids, with complete quantity and notes.",
+    inputSchema: { moveId: z.string(), cursor: z.string().optional() },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: input => listArchivedAssignments(apiConfig, input),
+  });
+  registerTool(target, "restore_box_assignment", {
+    title: "Restore box assignment", description: "Restore an archived AI unassignment with its saved quantity and notes. Refuses to overwrite a current assignment.",
+    inputSchema: { moveId: z.string(), archiveId: z.string(), dryRun: z.boolean().optional() },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: input => restoreArchivedAssignment(apiConfig, input),
+  });
+
   registerTool(target, "remove_item_from_box", {
     title: "Remove item from box",
     description:
-      "Remove one item-to-box assignment without deleting the inventory item. Set dryRun true to preview the request without writing.",
+      "Archive one item-to-box assignment, retaining its quantity and notes for restore. Set dryRun true to preview the request without writing.",
     inputSchema: {
       moveId: z.string(),
       boxId: z.string(),

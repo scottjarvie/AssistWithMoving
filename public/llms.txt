@@ -171,7 +171,7 @@ email contact is not available.
 Status: Partial. The canonical endpoint, the five product scopes, the grant
 boundary, the Queue workflow, and immediate revocation are implemented. No AI
 product has completed a full connect → consent → grant → tool list → bounded
-read → evidence → complete save → revoke → reconnect lifecycle against it, and
+read → evidence → complete save → revoke → person restores lifecycle against it, and
 the provider-side configuration for the metadata-document client path is not yet
 done. Describe the requirement — any AI that speaks remote Streamable HTTP MCP
 with compatible OAuth — rather than naming an AI product as supported.
@@ -226,8 +226,8 @@ out is listed under `skipped` with a reason; prefer `save_complete_result` (with
 `completeQueueItem: true` and `relatedQueueItemId` to close a Queue handoff in
 the same approval) and use the granular saves for corrections; reuse the same
 `operationId` on a retry so it corrects instead of duplicating; and if a tool
-stops existing after a deployment, disconnect and reconnect rather than assuming
-the connection is broken.
+is missing or refused, call describe_connection and refresh tools/list. Only
+the person restores access at https://movingmanifest.com/settings/ai.
 
 Queue loop: `list_queue_work` → `claim_queue_work` → `ask_queue_question` or
 `release_queue_work` when needed → `complete_queue_work`. A Queue directive says

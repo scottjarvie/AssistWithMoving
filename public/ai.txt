@@ -21,7 +21,7 @@ actions.
 
 Capability status: Partial. The endpoint, the grant boundary, the tool catalog,
 and immediate revocation are implemented. No AI product has completed a full
-connect → consent → grant → read → evidence → save → revoke → reconnect
+connect → full access → read → evidence → save → revoke → person restores
 lifecycle against it, and the provider-side metadata-document configuration is
 not yet in place. Requirement, not endorsement: any AI that speaks remote
 Streamable HTTP MCP with compatible OAuth may attempt this connection.
@@ -108,9 +108,9 @@ question instead of assuming.
 Retries: every write takes an operationId. Reusing the same operationId on a
 retry corrects the earlier attempt instead of duplicating it.
 
-Stale tools after a deployment: if a tool that used to exist now fails or a new
-one never appears, the client is holding an old catalog. Disconnect and
-reconnect the connection. Saved move work is unaffected.
+If a tool fails or is missing, call describe_connection for the current state
+and refresh tools/list. Only the person restores withheld access at
+https://movingmanifest.com/settings/ai. Reconnecting does not remove limits.
 
 This connection can never:
 

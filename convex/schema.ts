@@ -804,19 +804,18 @@ const exportJobType = v.union(
 // Shared validator keeps immutable owner history identical to the original source.
 const aiGrantFields = {
     ownerUserId: v.id("users"),
-    householdId: v.id("households"),
+    householdId: v.optional(v.id("households")),
     // What the person called this connection, for their own screen.
     label: v.string(),
     // The OAuth client this grant is bound to. Absent means the person approved
     // the grant before any client connected; the first matching client claims it.
     clientId: v.optional(v.string()),
+    accessOwnerId: v.optional(v.id("aiAccessOwners")),
     registrationMethod: v.optional(mcpClientRegistrationMethod),
     // SHA-256 of the Client ID Metadata Document, so a swapped document shows up.
     clientMetadataDigest: v.optional(v.string()),
     // What the client called itself. A label for the person, never authority.
     observedClientName: v.optional(v.string()),
-    inheritedPredecessors: v.optional(v.array(v.object({ grantId: v.id("aiGrants"), version: v.number() }))),
-    releasesPredecessors: v.optional(v.array(v.object({ grantId: v.id("aiGrants"), version: v.number() }))),
     scopes: v.array(movingGrantScope),
     withheldScopes: v.optional(v.array(v.string())),
     pausedAt: v.optional(v.number()),
@@ -1148,6 +1147,8 @@ export default defineSchema({
     .index("by_expires", ["expiresAt"]),
 
   apiKeys: defineTable({
+    accessOwnerId: v.optional(v.id("aiAccessOwners")),
+    credentialRetiredAt: v.optional(v.number()),
     householdId: v.id("households"),
     moveId: v.optional(v.id("moves")),
     name: v.string(),
@@ -1566,18 +1567,51 @@ export default defineSchema({
    * they may reach. That is what makes revocation immediate: the token is still
    * cryptographically valid, and the very next call is still refused.
    *
-   * A grant is per OAuth client, so revoking one connected AI does not disturb
-   * another. It is never a credential — there is nothing here to connect with.
+   * Metadata stays per verified client. Unproven app independence shares the
+   * owner's durable carried authority. These rows contain no credentials.
    */
+  // One authoritative carried-restrictions record for identities whose
+  // independence has not been established. Regular gates never scan history.
+  aiAccessOwners: defineTable({
+    ownerUserId: v.id("users"), bootstrapped: v.boolean(),
+    grantsDone: v.boolean(), keysDone: v.boolean(),
+    grantCursor: v.union(v.string(), v.null()), keyCursor: v.union(v.string(), v.null()),
+    revision: v.number(), currentGeneration: v.number(), connectionCount: v.number(), latestRegistrationId: v.optional(v.id("aiAccessConnections")),
+    withheldScopes: v.array(v.string()), revoked: v.boolean(), revokedAt: v.optional(v.number()),
+    pausedAt: v.optional(v.number()), endsAt: v.optional(v.number()), moveIds: v.optional(v.array(v.id("moves"))),
+    entries: v.array(v.object({
+      sourceGrantId: v.string(), sourceRevision: v.number(),
+      withheldScopes: v.array(v.string()), pausedAt: v.optional(v.number()),
+      revoked: v.boolean(), revokedAt: v.optional(v.number()), endsAt: v.optional(v.number()), moveIds: v.optional(v.array(v.id("moves"))),
+    })),
+    changedBy: v.union(v.literal("person"), v.literal("ai"), v.literal("system")),
+    changedAt: v.number(), createdAt: v.number(), bootstrappedAt: v.optional(v.number()),
+  }).index("by_owner", ["ownerUserId"]),
+
+  aiAccessConnections: defineTable({
+    ownerUserId: v.id("users"), accessOwnerId: v.id("aiAccessOwners"),
+    verifiedClientId: v.string(), kind: v.union(v.literal("oauth"), v.literal("key")),
+    grantId: v.optional(v.id("aiGrants")), apiKeyId: v.optional(v.id("apiKeys")),
+    label: v.string(), isCurrent: v.boolean(), generation: v.number(), createdAt: v.number(),
+    supersededAt: v.optional(v.number()), lastUsedAt: v.optional(v.number()), lastToolName: v.optional(v.string()),
+  }).index("by_owner_client", ["ownerUserId", "verifiedClientId"])
+    .index("by_owner_current", ["ownerUserId", "isCurrent"])
+    .index("by_owner_generation", ["ownerUserId", "generation", "isCurrent"])
+    .index("by_access_current", ["accessOwnerId", "isCurrent"])
+    .index("by_grant", ["grantId"]).index("by_api_key", ["apiKeyId"]),
+
   aiConnectionChanges: defineTable({
-    ownerUserId: v.id("users"), connectionId: v.string(),
+    ownerUserId: v.id("users"), accessOwnerId: v.optional(v.id("aiAccessOwners")), connectionId: v.string(),
     actor: v.union(v.literal("person"), v.literal("ai"), v.literal("system")),
     before: v.any(), after: v.any(), message: v.string(), createdAt: v.number(), opId: v.string(), requestKey: v.optional(v.string()),
-  }).index("by_connection_op", ["connectionId", "opId"])
+  }).index("by_access_created", ["accessOwnerId", "createdAt"])
+    .index("by_connection_created", ["connectionId", "createdAt"])
+    .index("by_connection_op", ["connectionId", "opId"])
     .index("by_owner_created", ["ownerUserId", "createdAt"]),
 
   aiGrants: defineTable(aiGrantFields)
     .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
+    .index("by_owner_created", ["ownerUserId"])
     .index("by_owner_updated", ["ownerUserId", "updatedAt"])
     .index("by_owner_client_status", ["ownerUserId", "clientId", "status"])
     .index("by_owner_recovered_client", ["ownerUserId", "recoveredClientKey"])
@@ -1789,6 +1823,14 @@ export default defineSchema({
     .index("by_assigned_trip", ["assignedTripId"])
     .index("by_current_space", ["currentSpaceId"])
     .index("by_household", ["householdId"]),
+
+  // AI unassignments move the complete relationship here instead of purging it.
+  archivedBoxAssignments: defineTable({
+    householdId: v.id("households"), moveId: v.id("moves"), originalAssignmentId: v.id("boxItems"),
+    source: v.object({ householdId: v.id("households"), moveId: v.id("moves"), boxId: v.id("boxes"), itemId: v.id("items"), quantity: v.number(), notes: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number() }),
+    archivedAt: v.number(), archivedByUserId: v.id("users"), archivedByApiKeyId: v.id("apiKeys"),
+    restoredAssignmentId: v.optional(v.id("boxItems")), restoredAt: v.optional(v.number()),
+  }).index("by_move_archived", ["moveId", "archivedAt"]),
 
   boxItems: defineTable({
     householdId: v.id("households"),

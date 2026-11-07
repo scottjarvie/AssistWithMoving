@@ -259,12 +259,16 @@ export const ASSISTWITHMOVING_API_CAPABILITIES = [
       "POST /api/v1/boxes/:boxId/items",
       "POST /api/v1/photos/upload",
       "DELETE /api/v1/boxes/:boxId/items/:itemId",
+      "GET /api/v1/moves/:moveId/assignments?archived=true",
+      "POST /api/v1/moves/:moveId/assignments/:archiveId/restore",
     ],
     mcpTools: [
       "save_box_intake",
       "create_box",
       "add_items_to_box",
       "remove_item_from_box",
+      "list_archived_box_assignments",
+      "restore_box_assignment",
     ],
     agentWorkflows: [
       "Use save_box_intake when a user wants to add or update a box with dimensions, weight, description, photos, newly described contents, or existing itemIds in one agent call.",
