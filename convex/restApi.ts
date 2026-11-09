@@ -1,3 +1,5 @@
+import { createQueueItem, readQueueSuggestions, reviewQueueSuggestion, type QueueResultRef } from "./lib/queueService";
+import { ConvexError } from "convex/values";
 import { withSharedPublishing } from "./lib/sharedPublishing";
 import { readAccess, readConnection, connectionAccess, accessState, keyScopes } from "./lib/carriedAccess";
 import { previewPublicPacket } from "./publicPackets";
@@ -678,6 +680,7 @@ async function routeRequest(
     return await routeMoveSpaces(ctx, args, auth, moveId, nestedId);
   }
 
+  if (["ai-text-suggestions","ai-photo-suggestions","planning-suggestions"].includes(nested??"") && args.method === "POST" && ["approve","reject"].includes(nestedId??"")) throw new ConvexError("Only the person can accept, dismiss or edit-accept AI proposals on the website.");
   if (nested === "queue") {
     return await routeQueue(ctx, args, auth, moveId, nestedId, segments[4]);
   }
@@ -846,13 +849,53 @@ async function routeQueue(
   action?: string,
 ) {
   const actor = await queueApiActor(ctx, auth, moveId);
+  if (args.method === "POST" && !queueItemIdSegment) {
+    if (!args.idempotencyKey)
+      throw new ConvexError("Idempotency-Key is required for Queue adds.");
+    const body = bodyObject(args.body);
+    if (
+      body.addedBy === "ai_suggestion" &&
+      !auth.scopes.includes("queue/suggest")
+    )
+      throw new ConvexError(
+        "Propose suggestions is off; requested work remains available.",
+      );
+    return restOk(
+      {
+        data: shapeQueueItem(
+          await createQueueItem(ctx, actor, {
+            householdId: auth.householdId,
+            moveId,
+            directive: asString(body.directive) ?? "",
+            addedBy: body.addedBy as "ai_on_request" | "ai_suggestion",
+            reason: asString(body.reason),
+            options: body.options as string[] | undefined,
+            evidence: asString(body.evidence),
+            fromRecord: body.fromRecord as QueueResultRef | undefined,
+            idempotencyKey: args.idempotencyKey,
+          }),
+        ),
+      },
+      201,
+    );
+  }
+  if (args.method === "GET" && queueItemIdSegment === "suggestions")
+    return restOk({
+      data: await readQueueSuggestions(ctx, actor, {
+        moveId,
+        archived: args.query.archived === "true",
+          cursor:args.query.cursor,limit:args.query.limit?Number(args.query.limit):undefined,
+      }),
+    });
   if (args.method === "GET" && !queueItemIdSegment) {
     const limit = Math.min(
       Math.max(Math.floor(Number(args.query.limit || "50")), 1),
       100,
     );
     const state = restQueueState(args.query.state);
-    const requestedOwnerUserId = args.query.ownerUserId as Id<"users"> | undefined;
+    const requestedOwnerUserId = args.query.ownerUserId as
+      | Id<"users">
+      | undefined;
     const runnableOwnerIds = await resolveRunnableQueueOwnerIds(
       ctx,
       auth.householdId,
@@ -871,19 +914,17 @@ async function routeQueue(
     const cursor = args.query.cursor || null;
     const page = ownerUserId
       ? await ctx.db
-        .query("queueItems")
-        .withIndex("by_move_owner_updated", (q) =>
-          q
-            .eq("moveId", moveId)
-            .eq("ownerUserId", ownerUserId),
-        )
-        .order("desc")
-        .paginate({ cursor, numItems: limit })
+          .query("queueItems")
+          .withIndex("by_move_owner_updated", (q) =>
+            q.eq("moveId", moveId).eq("ownerUserId", ownerUserId),
+          )
+          .order("desc")
+          .paginate({ cursor, numItems: limit })
       : await ctx.db
-        .query("queueItems")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
-        .order("desc")
-        .paginate({ cursor, numItems: limit });
+          .query("queueItems")
+          .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+          .order("desc")
+          .paginate({ cursor, numItems: limit });
     const now = Date.now();
     const visible = page.page.filter((item) => {
       if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
@@ -948,7 +989,9 @@ async function routeQueue(
     });
   }
   if (!canPerformHouseholdAction(auth.effectiveRole, "queue:run")) {
-    throw new Error("This API key's participant role is not allowed to run Queue work.");
+    throw new Error(
+      "This API key's participant role is not allowed to run Queue work.",
+    );
   }
   if (!args.idempotencyKey) {
     throw new Error("Idempotency-Key is required for Queue commands.");
@@ -961,20 +1004,53 @@ async function routeQueue(
     expectedVersion: restExpectedVersion(body),
     idempotencyKey: args.idempotencyKey,
   };
+  if (
+    action === "withdraw" ||
+    action === "accept" ||
+    action === "dismiss" ||
+    action === "edit-accept"
+  ) {
+    if (action !== "withdraw")
+      throw new ConvexError(
+        "Only the person can accept, dismiss or edit-accept suggestions.",
+      );
+    return restOk({
+      data: shapeQueueItem(
+        await reviewQueueSuggestion(ctx, actor, {
+          ...base,
+          action: "withdraw",
+          reason: asString(body.reason),
+          idempotencyKey: args.idempotencyKey,
+        }),
+      ),
+    });
+  }
   if (action === "claim") {
     const nextStep = asString(body.nextStep);
     if (!nextStep) throw new Error("nextStep is required.");
-    return restOk({ data: shapeQueueItem(await claimQueueItem(ctx, actor, { ...base, nextStep })) });
+    return restOk({
+      data: shapeQueueItem(
+        await claimQueueItem(ctx, actor, { ...base, nextStep }),
+      ),
+    });
   }
   if (action === "release") {
     const reason = asString(body.reason);
     if (!reason) throw new Error("reason is required.");
-    return restOk({ data: shapeQueueItem(await releaseQueueItem(ctx, actor, { ...base, reason })) });
+    return restOk({
+      data: shapeQueueItem(
+        await releaseQueueItem(ctx, actor, { ...base, reason }),
+      ),
+    });
   }
   if (action === "needs-you") {
     const requiredAction = asString(body.requiredAction);
     if (!requiredAction) throw new Error("requiredAction is required.");
-    return restOk({ data: shapeQueueItem(await requestQueueInput(ctx, actor, { ...base, requiredAction })) });
+    return restOk({
+      data: shapeQueueItem(
+        await requestQueueInput(ctx, actor, { ...base, requiredAction }),
+      ),
+    });
   }
   if (action === "complete") {
     const resultRefs = Array.isArray(body.resultRefs)

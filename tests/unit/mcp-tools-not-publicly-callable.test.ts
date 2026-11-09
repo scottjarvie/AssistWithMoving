@@ -75,7 +75,7 @@ describe("MCP tool handlers are not publicly callable", () => {
       "convex/mcpToolsImages.ts": 5,
       "convex/mcpToolsQueue.ts": 3,
       "convex/mcpToolsSetup.ts": 9,
-      "convex/mcpToolsCanonicalQueue.ts": 7,
+      "convex/mcpToolsCanonicalQueue.ts": 10,
     });
   });
 
@@ -106,6 +106,6 @@ describe("the gateway reaches the handlers internally", () => {
   });
 
   it("registers one tool per catalogued name", () => {
-    expect([...registry.matchAll(/^\s+fn: internal\./gm)].length).toBe(31);
+    expect([...registry.matchAll(/^\s+fn: internal\./gm)].length).toBe(34);
   });
 });

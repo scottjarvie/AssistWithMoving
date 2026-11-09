@@ -48,6 +48,9 @@ export const STATELESS_MOVING_TOOL_NAMES = [
   "save_inventory",
   "save_planning_record",
   "save_complete_result",
+  "add_queue_item",
+  "list_queue_suggestions",
+  "withdraw_queue_suggestion",
   "list_queue_work",
   "claim_queue_work",
   "release_queue_work",
@@ -978,6 +981,99 @@ export function createMovingServer(
     },
   );
 
+  registerGranted(
+    "add_queue_item",
+    {
+      title: "Add to Queue",
+      description:
+        "Explicit addedBy is required: ai_on_request for requested work, ai_suggestion for your own work idea. Missing/uncertain authorization is a suggestion. Domain draft edits remain AI proposals on their records.",
+      inputSchema: z
+        .object({
+          moveId: id,
+          directive: z.string(),
+          addedBy: z.enum(["ai_on_request", "ai_suggestion"]).optional(),
+          reason: z.string().optional(),
+          options: z.array(z.string()).max(26).optional(),
+          evidence: z.string().optional(),
+          fromRecord: z
+            .object({
+              type: z.string(),
+              id: z.string(),
+              label: z.string().optional(),
+            })
+            .optional(),
+          operationId: z.string(),
+        })
+        .strict(),
+      annotations: { readOnlyHint: false },
+    },
+    async (input) => {
+      try {
+        return toolResult(
+          await actionCtx.runMutation(
+            (internal as any).mcpQueueWork.addQueueItem,
+            { ...input, principal: convexPrincipal(principal) },
+          ),
+        );
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+  registerGranted(
+    "list_queue_suggestions",
+    {
+      title: "Read AI suggestions",
+      description:
+        "Read your person's open suggestions, or archived decisions with dismissal reasons and withdrawals.",
+      inputSchema: z
+        .object({ moveId: id, archived: z.boolean().optional() })
+        .strict(),
+      annotations: { readOnlyHint: true },
+    },
+    async (input) => {
+      try {
+        return toolResult(
+          await actionCtx.runQuery(
+            (internal as any).mcpQueueWork.listSuggestions,
+            { ...input, principal: convexPrincipal(principal) },
+          ),
+        );
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+  registerGranted(
+    "withdraw_queue_suggestion",
+    {
+      title: "Withdraw your suggestion",
+      description:
+        "Withdraw only your own suggestion before the person acts. Only the person can accept or dismiss.",
+      inputSchema: z
+        .object({
+          moveId: id,
+          queueItemId: id,
+          expectedVersion: z.number(),
+          operationId: z.string(),
+          reason: z.string().optional(),
+        })
+        .strict(),
+      annotations: { readOnlyHint: false },
+    },
+    async (input) => {
+      try {
+        return toolResult(
+          await actionCtx.runMutation(
+            (internal as any).mcpQueueWork.withdrawSuggestion,
+            { ...input, principal: convexPrincipal(principal) },
+          ),
+        );
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
   // --- Queue workflow -----------------------------------------------------
   // The loop that makes a connection useful: see what is waiting, take it,
   // ask if something is genuinely unclear, and hand back a finished result.

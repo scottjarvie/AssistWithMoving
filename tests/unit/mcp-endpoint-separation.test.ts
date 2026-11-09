@@ -193,6 +193,7 @@ describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", 
         "moving.work.write",
         "moving.queue.work",
         "moving.archive",
+        "moving.suggestions.propose",
       ]);
       expect(moving.grantManager).toBe("https://movingmanifest.test/settings/ai");
       expect(moving.doors.canonical).toBe("https://movingmanifest.test/mcp");

@@ -19,7 +19,7 @@ import { isSupportedConnectionExpiry } from "./connectionReduction";
  * Stored on each grant so a person can later see exactly what they approved,
  * rather than today's rendering of it.
  */
-export const GRANT_BOUNDARY_VERSION = "2026-10-23";
+export const GRANT_BOUNDARY_VERSION = "2026-11-09";
 
 export const movingScopes = [
   "moving.context.read",
@@ -27,6 +27,7 @@ export const movingScopes = [
   "moving.work.write",
   "moving.queue.work",
   "moving.archive",
+  "moving.suggestions.propose",
 ] as const;
 
 /** Explicit consent protocol; old forms must reload rather than guess intent. */
@@ -110,6 +111,7 @@ export type MovingScopeInfo = {
  * `/ai`, and the plain-text AI guides all render from this one array.
  */
 export const MOVING_SCOPES: readonly MovingScopeInfo[] = [
+  {scope:"moving.suggestions.propose",label:"Propose suggestions",grants:"Add your AI’s own work ideas privately to your Queue for you to decide.",doesNotImply:"It never allows an AI to accept, dismiss or work an unaccepted suggestion. Requested work remains available when this is off.",writes:true},
   {
     scope: "moving.context.read",
     label: "Read the move context you choose",
@@ -200,6 +202,9 @@ export const MOVING_TOOL_SCOPES: Readonly<Record<string, MovingScope>> = {
   save_inventory: "moving.work.write",
   save_planning_record: "moving.work.write",
   save_complete_result: "moving.work.write",
+  add_queue_item: "moving.queue.work",
+  list_queue_suggestions: "moving.queue.work",
+  withdraw_queue_suggestion: "moving.queue.work",
   list_queue_work: "moving.queue.work",
   claim_queue_work: "moving.queue.work",
   release_queue_work: "moving.queue.work",

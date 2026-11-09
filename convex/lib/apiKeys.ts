@@ -9,6 +9,7 @@ export const apiKeyScopes = [
   "inventory/write",
   "queue/read",
   "queue/write",
+  "queue/suggest",
   "plans/read",
   "plans/write",
   "photos/write",

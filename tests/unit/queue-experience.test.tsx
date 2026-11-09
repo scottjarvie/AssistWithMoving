@@ -23,12 +23,12 @@ function queueItem(
     state,
     stateLabel:
       state === "needsYou"
-        ? "Needs You"
+        ? "Needs your input"
         : state === "waitingForAi"
-          ? "Waiting for your AI"
+          ? "Waiting on AI"
           : state === "working"
             ? "Working"
-            : "Done",
+            : "Answered",
     requiredAction: state === "needsYou" ? "Which mover should receive the inventory?" : null,
     nextStep: state === "working" ? "Compare the two mover estimates." : null,
     waitingReason: state === "waitingForAi" ? "connectionUnknown" : null,
@@ -94,15 +94,15 @@ function renderDesk(
 }
 
 describe("QueueDesk", () => {
-  it("uses exactly the four person-facing Queue states", () => {
+  it("uses three lifecycle tabs plus input and Everything filters", () => {
     renderDesk();
 
     const nav = screen.getByRole("navigation", { name: "Queue states" });
-    expect(within(nav).getAllByRole("button")).toHaveLength(4);
-    expect(within(nav).getByRole("button", { name: /Needs You/ })).toBeInTheDocument();
-    expect(within(nav).getByRole("button", { name: /Working/ })).toBeInTheDocument();
-    expect(within(nav).getByRole("button", { name: /Waiting for your AI/ })).toBeInTheDocument();
-    expect(within(nav).getByRole("button", { name: /Done/ })).toBeInTheDocument();
+    expect(within(nav).getAllByRole("button")).toHaveLength(5);
+    expect(within(nav).getByRole("button", { name: /Needs your input/ })).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: /AI working/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: /Waiting on AI/ })).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: /Answered/ })).toBeInTheDocument();
     expect(screen.queryByText(/^To do$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Review$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Archive$/i)).not.toBeInTheDocument();
@@ -116,14 +116,14 @@ describe("QueueDesk", () => {
       screen.getByText("Which mover should receive the inventory?"),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Working/ }));
+    await user.click(screen.getByRole("button", { name: /AI working/i }));
     expect(screen.getByText("Compare the two mover estimates.")).toBeInTheDocument();
     expect(screen.getByText("Claimed by Scott's chosen AI")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Waiting for your AI/ }));
+    await user.click(within(screen.getByRole("navigation",{name:"Queue states"})).getByRole("button", { name: /Waiting on AI/ }));
     expect(screen.getByText("Ready for your chosen AI to claim.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Done/ }));
+    await user.click(screen.getByRole("button", { name: /Answered/ }));
     expect(screen.getByText("Comparison saved to the move.")).toBeInTheDocument();
   });
 
@@ -147,7 +147,7 @@ describe("QueueDesk", () => {
     expect(createDirective).toHaveBeenCalledWith(
       "Check the packing list for missing room labels.",
     );
-    expect(screen.getByRole("heading", { name: "Waiting for your AI" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Waiting on AI" })).toBeInTheDocument();
   });
 
   it("keeps a linked MCP result readable without inventing a Queue transition", async () => {
@@ -190,9 +190,9 @@ describe("QueueDesk", () => {
       "href",
       "/app/moves/move_1/overview#planning-results",
     );
-    expect(screen.getAllByText("Waiting for your AI").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Waiting on AI").length).toBeGreaterThan(0);
     expect(screen.getByText("Result Linked")).toBeInTheDocument();
-    expect(screen.getByText(/Your AI via MCP · Waiting for your AI → Waiting for your AI/)).toBeInTheDocument();
+    expect(screen.getByText(/Your AI via MCP · Waiting on AI → Waiting on AI/)).toBeInTheDocument();
     expect(screen.queryByText("Recorded result")).not.toBeInTheDocument();
   });
 
@@ -207,7 +207,7 @@ describe("QueueDesk", () => {
     expect(onSelectItem).toHaveBeenCalledWith(expect.objectContaining({ id: "queue_needsYou" }));
     expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
     expect(screen.getByText("Asked which mover should receive the inventory.")).toBeInTheDocument();
-    expect(screen.getByText(/Scott's chosen AI · Working → Needs You/)).toBeInTheDocument();
+    expect(screen.getByText(/Scott's chosen AI · AI working → Needs your input/)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Your answer"), "Mesa Moving Company");
     await user.click(screen.getByRole("button", { name: "Send answer" }));
@@ -224,8 +224,8 @@ describe("QueueDesk", () => {
     expect(screen.getByLabelText("Loading Queue")).toBeInTheDocument();
 
     rerender(<QueueDesk {...props} items={[]} loading={false} />);
-    expect(screen.getByText("Nothing needs you")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Done/ }));
+    expect(screen.getByText("No handoffs are waiting")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Answered/ }));
     expect(screen.getByText("No completed handoffs yet")).toBeInTheDocument();
   });
 
@@ -325,7 +325,7 @@ describe("QueueDesk", () => {
     const onStateChange = vi.fn();
     renderDesk({ selectedState: "needsYou", onStateChange });
 
-    await user.click(screen.getByRole("button", { name: /Waiting for your AI/ }));
+    await user.click(within(screen.getByRole("navigation",{name:"Queue states"})).getByRole("button", { name: /Waiting on AI/ }));
 
     expect(onStateChange).toHaveBeenCalledWith("waitingForAi");
   });

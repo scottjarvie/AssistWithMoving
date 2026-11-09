@@ -111,7 +111,7 @@ describe("Queue service integration", () => {
       idempotencyKey: "create-1",
     });
     expect(replayedCreate._id).toBe(created._id);
-    expect(shapeQueueItem(created).stateLabel).toBe("Waiting for your AI");
+    expect(shapeQueueItem(created).stateLabel).toBe("Waiting on AI");
 
     const claimed = await claimQueueItem(ctx, agent, {
       householdId,
@@ -174,7 +174,8 @@ describe("Queue service integration", () => {
       expectedVersion: reclaimed.version,
       idempotencyKey: "needs-you-1",
     });
-    expect(needsYou.state).toBe("needsYou");
+    expect(needsYou.state).toBe("working");
+    expect(needsYou.needsInput).toBe(true);
     expect(needsYou.requiredAction).toMatch(/page 3/);
 
     const answered = await provideQueueInput(ctx, human, {
@@ -185,17 +186,11 @@ describe("Queue service integration", () => {
       expectedVersion: needsYou.version,
       idempotencyKey: "answer-1",
     });
-    expect(answered.state).toBe("waitingForAi");
+    expect(answered.state).toBe("working");
+    expect(answered.needsInput).toBe(false);
     expect(answered.expiresAt).toBeDefined();
 
-    const finalClaim = await claimQueueItem(ctx, agent, {
-      householdId,
-      moveId,
-      queueItemId: created._id,
-      nextStep: "Finish the normalized comparison with the new page.",
-      expectedVersion: answered.version,
-      idempotencyKey: "claim-3",
-    });
+    const finalClaim = answered; // Input does not release or restart the working item.
     expect(finalClaim.latestHumanResponse).toBe(
       "Page 3 is now attached to the move documents.",
     );
@@ -226,7 +221,6 @@ describe("Queue service integration", () => {
       "claimed",
       "inputRequested",
       "inputProvided",
-      "claimed",
       "completed",
     ]);
     expect(db.tables.get("auditLogs")).toHaveLength(activities.length);

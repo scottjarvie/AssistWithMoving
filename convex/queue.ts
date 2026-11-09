@@ -1,3 +1,8 @@
+import {
+  reviewQueueSuggestion,
+  readQueueSuggestions,
+} from "./lib/queueService";
+import { queueIsWork, queueNeedsInput } from "./lib/queue";
 import { ConvexError, v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 
@@ -10,6 +15,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import {
+  effectiveQueueState,
   queueContextKindValidator,
   queueDomainKindValidator,
   queuePriorityValidator,
@@ -96,21 +102,30 @@ async function validateCreateDirectiveReferences(
     moveId: Id<"moves">;
     contextKind?: "move" | "room" | "belongings";
     contextRefId?: string;
-    domainKind?: "general" | "capture" | "moveQuestion" | "reviewSuggestion" | "export";
+    domainKind?:
+      | "general"
+      | "capture"
+      | "moveQuestion"
+      | "reviewSuggestion"
+      | "export";
     domainRefType?: string;
     domainRefId?: string;
   },
 ) {
-  const sameMove = (record: { householdId: Id<"households">; moveId: Id<"moves"> } | null) =>
+  const sameMove = (
+    record: { householdId: Id<"households">; moveId: Id<"moves"> } | null,
+  ) =>
     Boolean(
       record &&
-        record.householdId === args.householdId &&
-        record.moveId === args.moveId,
+      record.householdId === args.householdId &&
+      record.moveId === args.moveId,
     );
   if (args.contextRefId) {
     if ((args.contextKind ?? "move") === "move") {
       if (args.contextRefId !== args.moveId) {
-        throw new ConvexError("Move context reference must be the selected move.");
+        throw new ConvexError(
+          "Move context reference must be the selected move.",
+        );
       }
     } else if (args.contextKind === "room") {
       const room = await getQueueDirectiveReference(
@@ -118,14 +133,17 @@ async function validateCreateDirectiveReferences(
         "moveSpaces",
         args.contextRefId,
       );
-      if (!sameMove(room)) throw new ConvexError("Room context does not belong to this move.");
+      if (!sameMove(room))
+        throw new ConvexError("Room context does not belong to this move.");
     } else {
       const [item, box] = await Promise.all([
         getQueueDirectiveReference(ctx, "items", args.contextRefId),
         getQueueDirectiveReference(ctx, "boxes", args.contextRefId),
       ]);
       if (!sameMove(item) && !sameMove(box)) {
-        throw new ConvexError("Belongings context does not belong to this move.");
+        throw new ConvexError(
+          "Belongings context does not belong to this move.",
+        );
       }
     }
   }
@@ -149,7 +167,11 @@ async function validateCreateDirectiveReferences(
       );
       break;
     case "aiJobs":
-      record = await getQueueDirectiveReference(ctx, "aiJobs", args.domainRefId);
+      record = await getQueueDirectiveReference(
+        ctx,
+        "aiJobs",
+        args.domainRefId,
+      );
       break;
     case "aiTextSuggestions":
       record = await getQueueDirectiveReference(
@@ -173,7 +195,11 @@ async function validateCreateDirectiveReferences(
       );
       break;
     case "exportJobs":
-      record = await getQueueDirectiveReference(ctx, "exportJobs", args.domainRefId);
+      record = await getQueueDirectiveReference(
+        ctx,
+        "exportJobs",
+        args.domainRefId,
+      );
       break;
     case "items":
       record = await getQueueDirectiveReference(ctx, "items", args.domainRefId);
@@ -182,10 +208,18 @@ async function validateCreateDirectiveReferences(
       record = await getQueueDirectiveReference(ctx, "boxes", args.domainRefId);
       break;
     case "moveSpaces":
-      record = await getQueueDirectiveReference(ctx, "moveSpaces", args.domainRefId);
+      record = await getQueueDirectiveReference(
+        ctx,
+        "moveSpaces",
+        args.domainRefId,
+      );
       break;
     case "floorPlans":
-      record = await getQueueDirectiveReference(ctx, "floorPlans", args.domainRefId);
+      record = await getQueueDirectiveReference(
+        ctx,
+        "floorPlans",
+        args.domainRefId,
+      );
       break;
     case "planProposals":
       record = await getQueueDirectiveReference(
@@ -198,7 +232,9 @@ async function validateCreateDirectiveReferences(
       throw new ConvexError("Unsupported Queue domain reference type.");
   }
   if (!sameMove(record)) {
-    throw new ConvexError("Queue domain reference does not belong to this move.");
+    throw new ConvexError(
+      "Queue domain reference does not belong to this move.",
+    );
   }
 }
 
@@ -224,7 +260,8 @@ export const listForMove = query({
       args.moveId,
       actor,
     );
-    const ownerUserId = args.ownerUserId ?? (actor.isManager ? undefined : actor.userId);
+    const ownerUserId =
+      args.ownerUserId ?? (actor.isManager ? undefined : actor.userId);
     if (ownerUserId && !runnableOwnerIds.includes(ownerUserId)) {
       throw new ConvexError("You cannot view this Queue owner's items.");
     }
@@ -235,7 +272,9 @@ export const listForMove = query({
       page = await ctx.db
         .query("queueItems")
         .withSearchIndex("search_directive", (q) => {
-          let searchQuery = q.search("directive", search).eq("moveId", args.moveId);
+          let searchQuery = q
+            .search("directive", search)
+            .eq("moveId", args.moveId);
           if (ownerUserId) {
             searchQuery = searchQuery.eq("ownerUserId", ownerUserId);
           }
@@ -263,7 +302,8 @@ export const listForMove = query({
       page: page.page
         .filter((item) => {
           if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
-          if (!queueItemMatchesEffectiveState(item, args.state, now)) return false;
+          if (!queueItemMatchesEffectiveState(item, args.state, now))
+            return false;
           return canViewQueueEntry({
             actorUserId: actor.userId,
             ownerUserId: item.ownerUserId,
@@ -294,8 +334,23 @@ function shapeCaptureAdapterEntry(
     },
     ownerUserId: queueEntryOwnerUserId(entry),
     directive: entry.instructions ?? entry.targetLabel ?? "Review this capture",
-    state,
-    stateLabel: queueStateLabels[state],
+    state:
+      state === "needsYou"
+        ? entry.status === "processed"
+          ? ("done" as const)
+          : ("waitingForAi" as const)
+        : state,
+    needsInput: state === "needsYou",
+    addedBy: entry.addedBy ?? "person",
+    addedByLabel: entry.agentLabel ?? null,
+    stateLabel:
+      queueStateLabels[
+        state === "needsYou"
+          ? entry.status === "processed"
+            ? "done"
+            : "waitingForAi"
+          : state
+      ],
     legacyStatus: entry.status,
     requiredAction:
       state === "needsYou"
@@ -337,7 +392,8 @@ export const listCaptureAdapter = query({
       args.moveId,
       "queue:read",
     );
-    const ownerUserId = args.ownerUserId ?? (actor.isManager ? undefined : actor.userId);
+    const ownerUserId =
+      args.ownerUserId ?? (actor.isManager ? undefined : actor.userId);
     if (ownerUserId) {
       const runnableOwnerIds = await resolveRunnableQueueOwnerIds(
         ctx,
@@ -374,7 +430,14 @@ export const listCaptureAdapter = query({
             now,
           );
           return (
-            (!args.state || state === args.state) &&
+            (!args.state ||
+              (args.state === "needsYou"
+                ? state === "needsYou"
+                : (state === "needsYou"
+                    ? entry.status === "processed"
+                      ? "done"
+                      : "waitingForAi"
+                    : state) === args.state)) &&
             canViewQueueEntry({
               actorUserId: actor.userId,
               ownerUserId: queueEntryOwnerUserId(entry),
@@ -436,7 +499,14 @@ export const listLegacyCaptureAdapter = query({
             now,
           );
           return (
-            (!args.state || state === args.state) &&
+            (!args.state ||
+              (args.state === "needsYou"
+                ? state === "needsYou"
+                : (state === "needsYou"
+                    ? entry.status === "processed"
+                      ? "done"
+                      : "waitingForAi"
+                    : state) === args.state)) &&
             canViewQueueEntry({
               actorUserId: actor.userId,
               ownerUserId: queueEntryOwnerUserId(entry),
@@ -471,7 +541,9 @@ export const connectionStatus = query({
         actor,
       );
       if (!runnableOwnerIds.includes(args.ownerUserId)) {
-        throw new ConvexError("You cannot view this Queue owner's connection status.");
+        throw new ConvexError(
+          "You cannot view this Queue owner's connection status.",
+        );
       }
     }
     const [activeKeys, memberships, participants] = await Promise.all([
@@ -502,16 +574,15 @@ export const connectionStatus = query({
     );
     const now = Date.now();
     return {
-      queueCapableApiKeyCount: activeKeys.filter(
-        (key) =>
-          apiKeyCanReachQueueOwner({
-            now,
-            key,
-            moveId: args.moveId,
-            ownerUserId: args.ownerUserId,
-            membership: membershipByUser.get(key.createdByUserId),
-            participant: participantByUser.get(key.createdByUserId),
-          }),
+      queueCapableApiKeyCount: activeKeys.filter((key) =>
+        apiKeyCanReachQueueOwner({
+          now,
+          key,
+          moveId: args.moveId,
+          ownerUserId: args.ownerUserId,
+          membership: membershipByUser.get(key.createdByUserId),
+          participant: participantByUser.get(key.createdByUserId),
+        }),
       ).length,
     };
   },
@@ -630,6 +701,7 @@ export const provideInput = mutation({
     moveId: v.id("moves"),
     queueItemId: v.id("queueItems"),
     response: v.string(),
+    clearOnly: v.optional(v.boolean()),
     aiConnectionRequired: v.optional(v.boolean()),
     expectedVersion: v.optional(v.number()),
     idempotencyKey: v.optional(v.string()),
@@ -705,7 +777,8 @@ export const maintainLeasesAndExpiry = internalMutation({
         householdId: item.householdId,
         moveId: item.moveId,
         queueItemId: item._id,
-        reason: "The previous claim lease expired; the handoff is available again.",
+        reason:
+          "The previous claim lease expired; the handoff is available again.",
         expectedVersion: item.version,
         idempotencyKey: `claim-expired:${item.claimExpiresAt}`,
       });
@@ -726,7 +799,8 @@ export const maintainLeasesAndExpiry = internalMutation({
         householdId: current.householdId,
         moveId: current.moveId,
         queueItemId: current._id,
-        reason: "This handoff reached its configured expiry without completion.",
+        reason:
+          "This handoff reached its configured expiry without completion.",
         terminalReason: "expired",
         expectedVersion: current.version,
         idempotencyKey: `item-expired:${current.expiresAt}`,
@@ -739,3 +813,178 @@ export const maintainLeasesAndExpiry = internalMutation({
 
 // Compile-time guard: adapters intentionally accept the existing domain row.
 export type LegacyCaptureQueueRow = Doc<"ingestionQueueEntries">;
+
+export const suggestionView = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    archived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await resolveWebQueueActor(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "queue:read",
+    );
+    return readQueueSuggestions(ctx, actor, args);
+  },
+});
+export const reviewSuggestion = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    queueItemId: v.id("queueItems"),
+    action: v.union(
+      v.literal("accept"),
+      v.literal("dismiss"),
+      v.literal("restore"),
+      v.literal("archive"),
+    ),
+    directive: v.optional(v.string()),
+    optionIndex: v.optional(v.number()),
+    reason: v.optional(v.string()),
+    expectedVersion: v.number(),
+    operationId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actor = await resolveWebQueueActor(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "queue:write",
+    );
+    return shapeQueueItem(
+      await reviewQueueSuggestion(ctx, actor, {
+        ...args,
+        idempotencyKey: args.operationId,
+      }),
+    );
+  },
+});
+export const counts = query({
+  args: { householdId: v.id("households"), moveId: v.id("moves") },
+  handler: async (ctx, args) => {
+    const actor = await resolveWebQueueActor(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "queue:read",
+    );
+    const rows = await ctx.db
+      .query("queueItems")
+      .withIndex("by_move_owner_updated", (q) =>
+        q.eq("moveId", args.moveId).eq("ownerUserId", actor.userId),
+      )
+      .collect();
+    const captures = await ctx.db
+      .query("ingestionQueueEntries")
+      .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+      .collect();
+    const work = rows.filter(queueIsWork);
+    const now = Date.now();
+    const totals = {
+      waitingForAi: 0,
+      working: 0,
+      done: 0,
+      needsYou: 0,
+      everything: work.length,
+      needsInputOpen: 0,
+      suggestions: rows.filter(
+        (i) =>
+          i.addedBy === "ai_suggestion" &&
+          i.suggestionStatus === "open" &&
+          i.archivedAt === undefined,
+      ).length,
+    };
+    for (const item of work) {
+      totals[
+        effectiveQueueState(item, now) as "waitingForAi" | "working" | "done"
+      ]++;
+      if (queueNeedsInput(item)) {
+        totals.needsYou++;
+        if (item.state !== "done") totals.needsInputOpen++;
+      }
+    }
+    for (const item of captures.filter(
+      (i) => (i.ownerUserId ?? i.createdByUserId) === actor.userId,
+    )) {
+      const state = ingestionStatusToQueueState(
+        item.status,
+        item.claimExpiresAt,
+        now,
+      );
+      totals[
+        state === "needsYou"
+          ? item.status === "processed"
+            ? "done"
+            : "waitingForAi"
+          : state
+      ]++;
+      totals.everything++;
+      if (state === "needsYou") {
+        totals.needsYou++;
+        if (item.status !== "processed") totals.needsInputOpen++;
+      }
+    }
+    return totals;
+  },
+});
+export const archived = query({
+  args: { householdId: v.id("households"), moveId: v.id("moves") },
+  handler: async (ctx, args) => {
+    const actor = await resolveWebQueueActor(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "queue:read",
+    );
+    const rows = await ctx.db
+      .query("queueItems")
+      .withIndex("by_move_owner_updated", (q) =>
+        q.eq("moveId", args.moveId).eq("ownerUserId", actor.userId),
+      )
+      .collect();
+    return rows
+      .filter((i) => i.archivedAt !== undefined)
+      .map((i) => shapeQueueItem(i));
+  },
+});
+
+/** Reactive, bounded suggestion pages; exact counts come from counts, not page length. */
+export const suggestionPage = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    archived: v.optional(v.boolean()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const actor = await resolveWebQueueActor(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "queue:read",
+    );
+    const page = await ctx.db
+      .query("queueItems")
+      .withIndex("by_move_owner_updated", (q) =>
+        q.eq("moveId", args.moveId).eq("ownerUserId", actor.userId),
+      )
+      .filter((q) =>
+        args.archived
+          ? q.neq(q.field("archivedAt"), undefined)
+          : q.and(
+              q.eq(q.field("addedBy"), "ai_suggestion"),
+              q.eq(q.field("suggestionStatus"), "open"),
+              q.eq(q.field("archivedAt"), undefined),
+            ),
+      )
+      .order("desc")
+      .paginate({
+        ...args.paginationOpts,
+        numItems: normalizeQueueLimit(args.paginationOpts.numItems),
+      });
+    return { ...page, page: page.page.map((item) => shapeQueueItem(item)) };
+  },
+});

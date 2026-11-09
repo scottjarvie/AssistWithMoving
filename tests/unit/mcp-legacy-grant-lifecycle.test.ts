@@ -57,7 +57,7 @@ describe("one-time complete indexed legacy bootstrap", () => {
   });
   it("lifts only demonstrably automatic defaults, with no rewrite of stored scopes or dates", async () => {
     const f = await accessFixture(); const approvedAt = Date.now() - 31 * 86400000;
-    const id = await f.legacyGrant({ clientId: "old", scopes: movingScopes.filter(scope => scope !== "moving.archive"), approvedAt, expiresAt: approvedAt + 30 * 86400000 });
+    const id = await f.legacyGrant({ clientId: "old", scopes: movingScopes.filter(scope => scope !== "moving.archive" && scope !== "moving.suggestions.propose"), approvedAt, expiresAt: approvedAt + 30 * 86400000 });
     await f.t.run(ctx => ctx.db.insert("aiGrantActivities", { grantId: id, ownerUserId: f.userId, householdId: f.householdId, type: "approved", outcome: "recorded", message: "Your AI connected by signing in. It can read and save — for 30 days.", createdAt: approvedAt }));
     const before = (await f.t.run(ctx => ctx.db.get(id)))!;
     await f.connect("new"); await f.finish();
@@ -67,7 +67,7 @@ describe("one-time complete indexed legacy bootstrap", () => {
   });
   it.each(["no-receipt", "settings-receipt", "owner-marker", "ai-marker", "chosen", "automatic-chosen", "revoked"])("preserves legacy chosen limits when provenance is %s", async provenance => {
     const f = await accessFixture(); const approvedAt = Date.now() - 31 * 86400000;
-    const id = await f.legacyGrant({ scopes: movingScopes.filter(scope => scope !== "moving.archive"), approvedAt, expiresAt: approvedAt + 30 * 86400000,
+    const id = await f.legacyGrant({ scopes: movingScopes.filter(scope => scope !== "moving.archive" && scope !== "moving.suggestions.propose"), approvedAt, expiresAt: approvedAt + 30 * 86400000,
       ...(provenance === "owner-marker" ? { ownerDecisionAt: approvedAt } : provenance === "ai-marker" ? { narrowedBy: "ai" } : provenance === "automatic-chosen" ? { scopeChoice: "chosen", expiryChoice: "automatic" } : provenance === "chosen" ? { scopeChoice: "chosen", expiryChoice: "chosen" } : provenance === "revoked" ? { status: "revoked" } : {}) });
     if (provenance !== "no-receipt") await f.t.run(ctx => ctx.db.insert("aiGrantActivities", { grantId: id, ownerUserId: f.userId, householdId: f.householdId, type: "approved", outcome: "recorded", message: provenance === "settings-receipt" ? "You approved this connection in Settings." : "Your AI connected by signing in.", createdAt: approvedAt }));
     await f.connect(); await f.finish(); expect((await f.root())!.endsAt).toBeUndefined();
@@ -97,7 +97,7 @@ describe("one-time complete indexed legacy bootstrap", () => {
     const f = await accessFixture(); await f.legacyGrant({ scopes: ["moving.context.read"] });
     await f.connect(); await f.finish();
     await f.legacyGrant({ status: "revoked" }); // Out-of-band legacy writes are not a supported mutation door.
-    expect(await f.connect("new")).toMatchObject({ status: "active", scopes: ["moving.context.read"] });
+    expect(await f.connect("new")).toMatchObject({ status: "active", scopes: ["moving.context.read", "moving.suggestions.propose"] });
   });
   it("isolates another owner's restrictions", async () => {
     const f = await accessFixture();

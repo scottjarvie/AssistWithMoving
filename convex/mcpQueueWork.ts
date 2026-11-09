@@ -1,3 +1,10 @@
+import { oauthIdentity } from "./lib/carriedAccess";
+import { queueAddFields } from "./lib/queueSuggestions";
+import {
+  createQueueItem,
+  readQueueSuggestions,
+  reviewQueueSuggestion,
+} from "./lib/queueService";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 /**
  * Canonical Queue workflow for a connected AI.
@@ -38,6 +45,7 @@ import {
 import { canPerformHouseholdAction } from "./lib/roles";
 import {
   effectiveQueueState,
+  queueIsActionable,
   normalizeQueueLimit,
   queueResultRefValidator,
   queueStateLabels,
@@ -95,6 +103,7 @@ async function queueActorFor(
     grantId: grant._id,
     actor: {
       userId: policy.actor.userId,
+      connectionId: oauthIdentity(principal.clientId),
       actorType: "agent",
       label: principal.clientName?.slice(0, 80) ?? "Your AI",
       isManager: queueManagerRecoveryAllowed({
@@ -115,7 +124,8 @@ async function queueActorFor(
 /** Turn a queueService ConvexError into the MCP recovery envelope. */
 function asMcpQueueError(error: unknown): never {
   if (error instanceof ConvexError) {
-    const raw = typeof error.data === "string" ? error.data : String(error.message);
+    const raw =
+      typeof error.data === "string" ? error.data : String(error.message);
     if (raw.includes("MCP_MOVING_ERROR:")) throw error;
     mcpError(
       "QUEUE_CONFLICT",
@@ -175,6 +185,16 @@ export const listQueueWork = internalQuery({
       .query("queueItems")
       .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
       .order("desc")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("archivedAt"), undefined),
+          q.neq(q.field("suggestionStatus"), "open"),
+          q.neq(q.field("suggestionStatus"), "dismissed"),
+          q.neq(q.field("suggestionStatus"), "withdrawn"),
+          q.neq(q.field("needsInput"), true),
+          q.neq(q.field("state"), "needsYou"),
+        ),
+      )
       .take(MAX_WORK_ROWS * 4);
 
     const actionable = rows
@@ -188,6 +208,7 @@ export const listQueueWork = internalQuery({
       )
       .filter((item) => runnableOwnerIds.includes(item.ownerUserId))
       .filter((item) => {
+        if (!queueIsActionable(item)) return false;
         const state = effectiveQueueState(item, now);
         if (state === "waitingForAi") return true;
         // Resuming work this same connection already holds is normal; picking
@@ -398,3 +419,79 @@ export async function completeQueueForResult(
   });
   return shapeQueueItem(completed);
 }
+
+export const addQueueItem = aiMutation({
+  args: {
+    principal: mcpPrincipalValidator,
+    moveId: v.id("moves"),
+    ...queueAddFields,
+  },
+  handler: async (ctx, args) => {
+    try {
+      const { actor, householdId } = await queueActorFor(
+        ctx,
+        args.principal,
+        args.moveId,
+        "queue:run",
+      );
+      if (args.addedBy === "ai_suggestion")
+        await requireMcpMove(
+          ctx,
+          args.principal,
+          args.moveId,
+          "queue:run",
+          "moving.suggestions.propose",
+        );
+      return shapeQueueItem(
+        await createQueueItem(ctx, actor, {
+          ...args,
+          householdId,
+          idempotencyKey: args.operationId,
+        }),
+      );
+    } catch (error) {
+      asMcpQueueError(error);
+    }
+  },
+});
+export const listSuggestions = internalQuery({
+  args: {
+    principal: mcpPrincipalValidator,
+    moveId: v.id("moves"),
+    archived: v.optional(v.boolean()),
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await queueActorFor(
+      ctx,
+      args.principal,
+      args.moveId,
+      "queue:read",
+    );
+    return readQueueSuggestions(ctx, actor, args);
+  },
+});
+export const withdrawSuggestion = aiMutation({
+  args: { ...commandArgs, reason: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    try {
+      const { actor, householdId } = await queueActorFor(
+        ctx,
+        args.principal,
+        args.moveId,
+        "queue:run",
+      );
+      return shapeQueueItem(
+        await reviewQueueSuggestion(ctx, actor, {
+          ...args,
+          householdId,
+          action: "withdraw",
+          idempotencyKey: args.operationId,
+        }),
+      );
+    } catch (error) {
+      asMcpQueueError(error);
+    }
+  },
+});

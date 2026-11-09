@@ -30,7 +30,7 @@ export function QueueWorkspacePage() {
           <Button asChild variant="ghost" size="sm">
             <Link href={moveWorkspacePath(moveId, "ai-review")}>
               <Sparkles aria-hidden="true" />
-              Review AI suggestions
+              Review record proposals
             </Link>
           </Button>
         ) : null}

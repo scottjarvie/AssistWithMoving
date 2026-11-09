@@ -389,7 +389,7 @@ function PlanningSuggestionSummary({
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap gap-1">
-        <Badge variant="outline">{suggestion.type}</Badge>
+        <Badge variant="outline">AI proposal · {suggestion.type}</Badge>
         <Badge variant="secondary">{suggestion.confidence}</Badge>
       </div>
       <div className="mt-2 break-words text-xs text-muted-foreground">

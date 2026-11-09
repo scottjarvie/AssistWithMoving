@@ -22,10 +22,10 @@ export const queueStateValidator = v.union(
 );
 
 export const queueStateLabels: Record<QueueState, string> = {
-  needsYou: "Needs You",
-  working: "Working",
-  waitingForAi: "Waiting for your AI",
-  done: "Done",
+  needsYou: "Needs your input",
+  working: "AI working",
+  waitingForAi: "Waiting on AI",
+  done: "Answered",
 };
 
 export const queuePriorities = ["normal", "urgent"] as const;
@@ -96,6 +96,9 @@ export const queueWaitingReasonValidator = v.union(
 
 export const queueActivityTypes = [
   "created",
+  "suggestionReviewed",
+  "archived",
+  "restored",
   "claimed",
   "released",
   "inputRequested",
@@ -110,6 +113,9 @@ export const queueActivityTypes = [
 export type QueueActivityType = (typeof queueActivityTypes)[number];
 export const queueActivityTypeValidator = v.union(
   v.literal("created"),
+  v.literal("suggestionReviewed"),
+  v.literal("archived"),
+  v.literal("restored"),
   v.literal("claimed"),
   v.literal("released"),
   v.literal("inputRequested"),
@@ -158,15 +164,21 @@ export function effectiveQueueState(
   item: { state: QueueState; claimExpiresAt?: number },
   now: number,
 ): QueueState {
+  if (item.state === "needsYou") return "waitingForAi"; // Legacy requests had released their claim.
   return queueClaimIsExpired(item, now) ? "waitingForAi" : item.state;
 }
 
 export function queueItemMatchesEffectiveState(
-  item: { state: QueueState; claimExpiresAt?: number },
+  item: QueueVisibility,
   requestedState: QueueState | undefined,
   now: number,
 ): boolean {
-  return requestedState === undefined || effectiveQueueState(item, now) === requestedState;
+  if (!queueIsWork(item)) return false;
+  if (requestedState === "needsYou") return queueNeedsInput(item);
+  return (
+    requestedState === undefined ||
+    effectiveQueueState(item, now) === requestedState
+  );
 }
 
 export type QueueStateInvariantInput = {
@@ -188,7 +200,8 @@ export function queueStateInvariantError(
     return "Needs You requires the exact human decision or action.";
   }
   if (input.state === "working") {
-    if (!input.nextStep?.trim()) return "Working requires the current next step.";
+    if (!input.nextStep?.trim())
+      return "Working requires the current next step.";
     if (!input.claimExpiresAt) return "Working requires a bounded claim lease.";
     if (!input.claimedByUserId && !input.claimedByApiKeyId) {
       return "Working requires an attributable claimant.";
@@ -205,7 +218,7 @@ export function queueStateInvariantError(
     if (
       input.terminalReason === "completed" &&
       !input.resultSummary?.trim() &&
-      !(input.resultRefs?.length)
+      !input.resultRefs?.length
     ) {
       return "Completed work requires a readable result or result reference.";
     }
@@ -238,7 +251,13 @@ export function normalizeQueueText(
 
 /** Honest adapter for the existing capture pipeline; it does not rename storage. */
 export function ingestionStatusToQueueState(
-  status: "queued" | "claimed" | "processed" | "needsInput" | "resolved" | "discarded",
+  status:
+    | "queued"
+    | "claimed"
+    | "processed"
+    | "needsInput"
+    | "resolved"
+    | "discarded",
   claimExpiresAt: number | undefined,
   now: number,
 ): QueueState {
@@ -258,7 +277,8 @@ export function queueFailureTransition(input: {
   retryable: boolean;
 }) {
   const nextAttemptCount = input.attemptCount + 1;
-  const retryAvailable = input.retryable && nextAttemptCount < input.maxAttempts;
+  const retryAvailable =
+    input.retryable && nextAttemptCount < input.maxAttempts;
   return {
     nextAttemptCount,
     state: retryAvailable ? ("waitingForAi" as const) : ("needsYou" as const),
@@ -274,4 +294,27 @@ export function assertExpectedQueueVersion(actual: number, expected?: number) {
       `Queue item changed since it was read (expected version ${expected}, current version ${actual}). Refresh before retrying.`,
     );
   }
+}
+
+/** Persisted needsYou rows remain readable without rewriting historical data. */
+export type QueueVisibility = {
+  state: QueueState;
+  claimExpiresAt?: number;
+  addedBy?: string;
+  suggestionStatus?: string;
+  archivedAt?: number;
+  needsInput?: boolean;
+  requiredAction?: string;
+};
+export function queueNeedsInput(item: QueueVisibility) {
+  return item.needsInput ?? item.state === "needsYou";
+}
+export function queueIsWork(item: QueueVisibility) {
+  return (
+    item.archivedAt === undefined &&
+    !(item.addedBy === "ai_suggestion" && item.suggestionStatus !== "accepted")
+  );
+}
+export function queueIsActionable(item: QueueVisibility) {
+  return queueIsWork(item) && !queueNeedsInput(item);
 }

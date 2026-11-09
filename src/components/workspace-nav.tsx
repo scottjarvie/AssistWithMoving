@@ -1,5 +1,8 @@
 "use client";
 
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { useMoveWorkspace } from "@/components/move-workspace-context";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -25,8 +28,10 @@ const navIcons = {
 
 export function WorkspaceNav({
   variant = "sidebar",
+  countsEnabled = false,
 }: {
   variant?: "sidebar" | "mobile";
+  countsEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const mobile = variant === "mobile";
@@ -52,7 +57,7 @@ export function WorkspaceNav({
               active &&
                 (mobile
                   ? "text-foreground"
-                  : "bg-sidebar-accent text-sidebar-accent-foreground")
+                  : "bg-sidebar-accent text-sidebar-accent-foreground"),
             )}
           >
             <Icon
@@ -65,9 +70,38 @@ export function WorkspaceNav({
             <span className={mobile ? "max-w-full truncate" : undefined}>
               {mobile ? (item.shortLabel ?? item.label) : item.label}
             </span>
+            {item.iconKey === "queue" && countsEnabled ? (
+              <QueueNavCounts />
+            ) : null}
           </Link>
         );
       })}
     </nav>
   );
+}
+
+function QueueNavCounts() {
+  const { householdId, moveId } = useMoveWorkspace();
+  const counts = useQuery(
+    api.queue.counts,
+    householdId && moveId ? { householdId, moveId } : "skip",
+  );
+  return counts ? (
+    <span className="inline-flex gap-1 text-xs tabular-nums">
+      <span
+        className="text-muted-foreground"
+        aria-label={`${counts.suggestions} AI suggestions`}
+      >
+        {counts.suggestions}
+      </span>
+      {counts.needsInputOpen ? (
+        <span
+          className="rounded-full bg-primary px-1 text-primary-foreground"
+          aria-label={`${counts.needsInputOpen} need your input`}
+        >
+          {counts.needsInputOpen}
+        </span>
+      ) : null}
+    </span>
+  ) : null;
 }

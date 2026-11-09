@@ -141,7 +141,7 @@ describe("AiReviewQueue responsive review surface", () => {
       within(reviewCards).getByText("Estimate suggestion"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("columnheader", { name: "Suggestion" }),
+      screen.getByRole("columnheader", { name: "AI proposal" }),
     ).toBeInTheDocument();
     expect(screen.getAllByLabelText("Use Lamp")).toHaveLength(2);
     expect(screen.getAllByText("2 duplicates").length).toBeGreaterThan(0);

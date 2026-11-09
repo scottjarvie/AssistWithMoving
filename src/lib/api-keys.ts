@@ -5,6 +5,7 @@ export const apiKeyScopeOptions = [
   ["inventory/write", "Write inventory"],
   ["queue/read", "Read Queue handoffs"],
   ["queue/write", "Run Queue handoffs"],
+  ["queue/suggest", "Propose suggestions"],
   ["plans/read", "Read plans"],
   ["plans/write", "Write plans"],
   ["photos/write", "Upload photos"],

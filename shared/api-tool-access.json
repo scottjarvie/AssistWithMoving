@@ -281,6 +281,24 @@
     ],
     "websiteOnly": false
   },
+  "add_queue_item": {
+    "scopes": [
+      "queue/write"
+    ],
+    "websiteOnly": false
+  },
+  "list_queue_suggestions": {
+    "scopes": [
+      "queue/read"
+    ],
+    "websiteOnly": false
+  },
+  "withdraw_queue_suggestion": {
+    "scopes": [
+      "queue/write"
+    ],
+    "websiteOnly": false
+  },
   "list_queue_items": {
     "scopes": [
       "queue/read"

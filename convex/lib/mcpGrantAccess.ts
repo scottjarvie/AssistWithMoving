@@ -106,6 +106,7 @@ export async function requireMcpGrant(
     grants.map((grant) => ({
       doc: grant,
       scopes: [...effectiveScopes(grant)],
+      withheldScopes: grant.withheldScopes,
       scopeChoice: effectiveScopeChoice(grant),
       moveScope: grant.moveScope,
       moveIds: (grant.moveIds ?? []).map(String),
@@ -144,6 +145,7 @@ export async function hasQueueWorkGrant(
         grants.map((grant) => ({
           doc: grant,
           scopes: [...effectiveScopes(grant)],
+      withheldScopes: grant.withheldScopes,
           scopeChoice: effectiveScopeChoice(grant),
           moveScope: grant.moveScope,
           moveIds: (grant.moveIds ?? []).map(String),

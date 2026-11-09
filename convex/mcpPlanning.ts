@@ -1,3 +1,4 @@
+import { queueIsWork, queueNeedsInput, effectiveQueueState } from "./lib/queue";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 import { effectiveScopes } from "./lib/aiGrants";
 import { ConvexError, v } from "convex/values";
@@ -488,9 +489,9 @@ export const getMoveBrief = internalQuery({
       queue: {
         note:
           "These are person-facing Queue summaries only. This stateless OAuth surface does not claim or complete canonical Queue work until Moving has a distinct chosen-AI grant.",
-        needsYou: queueNeedsYou.map(shapeQueueSummary),
-        working: queueWorking.map(shapeQueueSummary),
-        waitingForAi: queueWaiting.map(shapeQueueSummary),
+        needsInput: [...queueNeedsYou,...queueWorking,...queueWaiting].filter(queueIsWork).filter(queueNeedsInput).map(shapeQueueSummary),
+        working: [...queueNeedsYou,...queueWorking,...queueWaiting].filter(queueIsWork).filter(row=>effectiveQueueState(row,Date.now())==="working").map(shapeQueueSummary),
+        waitingForAi: [...queueNeedsYou,...queueWorking,...queueWaiting].filter(queueIsWork).filter(row=>effectiveQueueState(row,Date.now())==="waitingForAi").map(shapeQueueSummary),
       },
       next:
         "Use search_move_records to avoid duplicates, get_move_records for full context, get_evidence_media for private photos, save_complete_result for normal finished work, and granular save tools for corrections.",
@@ -520,7 +521,8 @@ export const resolveMoveScope = internalQuery({
 function shapeQueueSummary(row: Doc<"queueItems">) {
   return {
     queueItemId: row._id,
-    state: row.state,
+    needsInput: queueNeedsInput(row),
+    state: effectiveQueueState(row,Date.now()),
     directive: row.directive,
     summary: row.summary ?? null,
     requiredAction: row.requiredAction ?? null,
@@ -688,6 +690,7 @@ export const searchMoveRecords = internalQuery({
         .order("desc")
         .take(MAX_SEARCH_CANDIDATES_PER_KIND);
       for (const row of rows) {
+        if (!queueIsWork(row)) continue;
         const haystack = [row.directive, row.summary, row.resultSummary, row.requiredAction]
           .filter(Boolean)
           .join(" ")
@@ -842,6 +845,8 @@ export const getMoveRecords = internalQuery({
         const queue = row as Doc<"queueItems">;
         if (queue.ownerUserId !== policy.user._id) {
           results.push({ ...reference, error: { code: "FORBIDDEN", message: "Queue item is not in this person's Queue." } });
+        } else if (!queueIsWork(queue)) {
+          results.push({...reference,error:{code:"NOT_ACTIONABLE",message:"Unaccepted or archived suggestions are not work. Read them through list_queue_suggestions."}});
         } else {
           results.push({ kind: "queue", ...shapeQueueSummary(queue), resultSummary: queue.resultSummary ?? null, resultRefs: queue.resultRefs ?? [] });
         }

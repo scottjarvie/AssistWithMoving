@@ -73,6 +73,9 @@ const canonicalToolCatalog = [
     label: "Work the Queue handoffs you hand over",
     copy: "See what is waiting, take it, ask you the smallest question, hand it back, or mark it Done with its result attached.",
     tools: [
+      "add_queue_item",
+      "list_queue_suggestions",
+      "withdraw_queue_suggestion",
       "list_queue_work",
       "claim_queue_work",
       "release_queue_work",

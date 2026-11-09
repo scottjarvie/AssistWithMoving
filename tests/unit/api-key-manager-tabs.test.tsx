@@ -104,7 +104,7 @@ describe("ApiKeyManager task tabs", () => {
     await user.click(screen.getByRole("tab", { name: "Advanced" }));
     expect(screen.getByLabelText("End date (optional days)")).toHaveValue("");
     const checks = screen.getAllByRole("checkbox");
-    expect(checks).toHaveLength(12);
+    expect(checks).toHaveLength(13);
     checks.forEach(check => expect(check).toBeChecked());
     await user.click(checks[0]);
     await user.type(screen.getByLabelText("End date (optional days)"), "7");

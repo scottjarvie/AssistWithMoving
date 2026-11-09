@@ -88,6 +88,9 @@ const canonicalToolCatalog = [
   {
     scope: "moving.queue.work",
     tools: [
+      "add_queue_item",
+      "list_queue_suggestions",
+      "withdraw_queue_suggestion",
       "list_queue_work",
       "claim_queue_work",
       "release_queue_work",
