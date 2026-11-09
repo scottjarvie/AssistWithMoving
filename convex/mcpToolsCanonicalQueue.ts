@@ -1,3 +1,4 @@
+import { queueWorkFilter } from "./lib/queue";
 import { requireQueueConnection } from "./lib/queueConnection";
 import { queueAddFields } from "./lib/queueSuggestions";
 import {
@@ -32,7 +33,7 @@ import {
   requestQueueInput as requestQueueInputRecord,
   requireQueueItem,
   requireQueueItemVisible,
-  shapeQueueItem,
+  shapeQueueItemForRead,
   type QueueAccessActor,
 } from "./lib/queueService";
 import {
@@ -123,27 +124,31 @@ export const listQueueItems = internalQuery({
             q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
           )
           .order("desc")
+          .filter(queueWorkFilter)
           .paginate({ cursor: args.cursor ?? null, numItems: limit })
       : await ctx.db
           .query("queueItems")
           .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
           .order("desc")
+          .filter(queueWorkFilter)
           .paginate({ cursor: args.cursor ?? null, numItems: limit });
     const now = Date.now();
     return {
-      items: page.page
-        .filter((item) => {
-          if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
-          if (!queueItemMatchesEffectiveState(item, args.state, now))
-            return false;
-          return canViewQueueEntry({
-            actorUserId: actor.userId,
-            ownerUserId: item.ownerUserId,
-            isManager: actor.isManager,
-            delegatedOwnerIds: actor.delegatedOwnerIds,
-          });
-        })
-        .map((item) => shapeQueueItem(item, now)),
+      items: await Promise.all(
+        page.page
+          .filter((item) => {
+            if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
+            if (!queueItemMatchesEffectiveState(item, args.state, now))
+              return false;
+            return canViewQueueEntry({
+              actorUserId: actor.userId,
+              ownerUserId: item.ownerUserId,
+              isManager: actor.isManager,
+              delegatedOwnerIds: actor.delegatedOwnerIds,
+            });
+          })
+          .map(async (item) => await shapeQueueItemForRead(ctx, item, now)),
+      ),
       cursor: page.continueCursor,
       isDone: page.isDone,
       states: queueStateLabels,
@@ -179,7 +184,7 @@ export const getQueueItem = internalQuery({
       .order("desc")
       .take(normalizeQueueLimit(args.activityLimit ?? 25));
     return {
-      item: shapeQueueItem(item),
+      item: await shapeQueueItemForRead(ctx, item),
       activities: activities.map((activity) => ({
         type: activity.type,
         actorType: activity.actorType,
@@ -215,7 +220,10 @@ export const claimQueueItem = aiMutation({
       args.moveId,
       "queue:run",
     );
-    return shapeQueueItem(await claimQueueItemRecord(ctx, actor, args));
+    return await shapeQueueItemForRead(
+      ctx,
+      await claimQueueItemRecord(ctx, actor, args),
+    );
   },
 });
 
@@ -230,7 +238,10 @@ export const releaseQueueItem = aiMutation({
       args.moveId,
       "queue:run",
     );
-    return shapeQueueItem(await releaseQueueItemRecord(ctx, actor, args));
+    return await shapeQueueItemForRead(
+      ctx,
+      await releaseQueueItemRecord(ctx, actor, args),
+    );
   },
 });
 
@@ -249,7 +260,10 @@ export const requestQueueInput = aiMutation({
       args.moveId,
       "queue:run",
     );
-    return shapeQueueItem(await requestQueueInputRecord(ctx, actor, args));
+    return await shapeQueueItemForRead(
+      ctx,
+      await requestQueueInputRecord(ctx, actor, args),
+    );
   },
 });
 
@@ -269,7 +283,10 @@ export const completeQueueItem = aiMutation({
       args.moveId,
       "queue:run",
     );
-    return shapeQueueItem(await completeQueueItemRecord(ctx, actor, args));
+    return await shapeQueueItemForRead(
+      ctx,
+      await completeQueueItemRecord(ctx, actor, args),
+    );
   },
 });
 
@@ -294,7 +311,10 @@ export const reportQueueFailure = aiMutation({
     if (args.retryAfterMs !== undefined && args.retryAfterMs < 0) {
       throw new ConvexError("retryAfterMs cannot be negative.");
     }
-    return shapeQueueItem(await reportQueueFailureRecord(ctx, actor, args));
+    return await shapeQueueItemForRead(
+      ctx,
+      await reportQueueFailureRecord(ctx, actor, args),
+    );
   },
 });
 
@@ -316,7 +336,8 @@ export const addQueueItem = aiMutation({
       args.moveId,
       args.addedBy === "ai_suggestion",
     );
-    return shapeQueueItem(
+    return await shapeQueueItemForRead(
+      ctx,
       await createQueueItem(ctx, actor, {
         ...args,
         idempotencyKey: args.operationId,
@@ -364,7 +385,8 @@ export const withdrawSuggestion = aiMutation({
       args.moveId,
       false,
     );
-    return shapeQueueItem(
+    return await shapeQueueItemForRead(
+      ctx,
       await reviewQueueSuggestion(ctx, actor, {
         ...args,
         action: "withdraw",

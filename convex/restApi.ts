@@ -1,3 +1,5 @@
+import {queueNeedsInput} from "./lib/queue";
+import {queueWorkFilter} from "./lib/queue";
 import { createQueueItem, readQueueSuggestions, reviewQueueSuggestion, type QueueResultRef } from "./lib/queueService";
 import { ConvexError } from "convex/values";
 import { withSharedPublishing } from "./lib/sharedPublishing";
@@ -124,7 +126,7 @@ import {
   requestQueueInput,
   requireQueueItem,
   requireQueueItemVisible,
-  shapeQueueItem,
+  shapeQueueItemForRead,
   type QueueAccessActor,
 } from "./lib/queueService";
 import {
@@ -849,6 +851,8 @@ async function routeQueue(
   action?: string,
 ) {
   const actor = await queueApiActor(ctx, auth, moveId);
+  const queueInput = args.body && typeof args.body === "object" && !Array.isArray(args.body) ? args.body as Record<string,unknown> : {};
+  if(args.method!=="GET" && args.body && typeof args.body === "object" && (queueInput.needsInput === false || queueInput.clearOnly === true || queueInput.clearNeedsInput === true)) throw new ConvexError("Only the person can clear Needs your input");
   if (args.method === "POST" && !queueItemIdSegment) {
     if (!args.idempotencyKey)
       throw new ConvexError("Idempotency-Key is required for Queue adds.");
@@ -862,7 +866,7 @@ async function routeQueue(
       );
     return restOk(
       {
-        data: shapeQueueItem(
+        data: await shapeQueueItemForRead(ctx,
           await createQueueItem(ctx, actor, {
             householdId: auth.householdId,
             moveId,
@@ -919,12 +923,12 @@ async function routeQueue(
             q.eq("moveId", moveId).eq("ownerUserId", ownerUserId),
           )
           .order("desc")
-          .paginate({ cursor, numItems: limit })
+          .filter(queueWorkFilter).paginate({ cursor, numItems: limit })
       : await ctx.db
           .query("queueItems")
           .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
           .order("desc")
-          .paginate({ cursor, numItems: limit });
+          .filter(queueWorkFilter).paginate({ cursor, numItems: limit });
     const now = Date.now();
     const visible = page.page.filter((item) => {
       if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
@@ -937,7 +941,7 @@ async function routeQueue(
       });
     });
     return restOk({
-      data: visible.map((item) => shapeQueueItem(item, now)),
+      data: await Promise.all(visible.map(async (item) => await shapeQueueItemForRead(ctx, item, now))),
       page: {
         limit,
         nextCursor: page.isDone ? null : page.continueCursor,
@@ -968,7 +972,7 @@ async function routeQueue(
       .order("desc")
       .take(50);
     return restOk({
-      data: shapeQueueItem(item),
+      data: await shapeQueueItemForRead(ctx, item),
       activity: activities.map((entry) => ({
         type: entry.type,
         actorType: entry.actorType,
@@ -981,6 +985,11 @@ async function routeQueue(
     });
   }
 
+  if(args.method!=="GET" && (action === "archive" || queueInput.archived === true || queueInput.archivedAt !== undefined || queueInput.state === "archived")) {
+   const item=await requireQueueItem(ctx,{householdId:auth.householdId,moveId,queueItemId});requireQueueItemVisible(actor,item);
+   if(queueNeedsInput(item))throw new ConvexError("Only the person can clear Needs your input");
+   throw new ConvexError("Only the person can archive a Queue item on the website.");
+  }
   if (args.method !== "POST") {
     return restError({
       status: 405,
@@ -1015,7 +1024,7 @@ async function routeQueue(
         "Only the person can accept, dismiss or edit-accept suggestions.",
       );
     return restOk({
-      data: shapeQueueItem(
+      data: await shapeQueueItemForRead(ctx,
         await reviewQueueSuggestion(ctx, actor, {
           ...base,
           action: "withdraw",
@@ -1029,7 +1038,7 @@ async function routeQueue(
     const nextStep = asString(body.nextStep);
     if (!nextStep) throw new Error("nextStep is required.");
     return restOk({
-      data: shapeQueueItem(
+      data: await shapeQueueItemForRead(ctx,
         await claimQueueItem(ctx, actor, { ...base, nextStep }),
       ),
     });
@@ -1038,7 +1047,7 @@ async function routeQueue(
     const reason = asString(body.reason);
     if (!reason) throw new Error("reason is required.");
     return restOk({
-      data: shapeQueueItem(
+      data: await shapeQueueItemForRead(ctx,
         await releaseQueueItem(ctx, actor, { ...base, reason }),
       ),
     });
@@ -1047,7 +1056,7 @@ async function routeQueue(
     const requiredAction = asString(body.requiredAction);
     if (!requiredAction) throw new Error("requiredAction is required.");
     return restOk({
-      data: shapeQueueItem(
+      data: await shapeQueueItemForRead(ctx,
         await requestQueueInput(ctx, actor, { ...base, requiredAction }),
       ),
     });
@@ -1057,7 +1066,7 @@ async function routeQueue(
       ? (body.resultRefs as Array<{ type: string; id: string; label?: string }>)
       : undefined;
     return restOk({
-      data: shapeQueueItem(
+      data: await shapeQueueItemForRead(ctx,
         await completeQueueItem(ctx, actor, {
           ...base,
           resultSummary: asString(body.resultSummary),
@@ -1073,7 +1082,7 @@ async function routeQueue(
       throw new Error("code, message, and retryable are required.");
     }
     return restOk({
-      data: shapeQueueItem(
+      data: await shapeQueueItemForRead(ctx,
         await reportQueueFailure(ctx, actor, {
           ...base,
           code,

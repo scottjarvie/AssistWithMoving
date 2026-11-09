@@ -1950,6 +1950,9 @@ export default defineSchema({
   // Capture-now, process-later work orders for the user's own AI agent.
   // Evidence lives in itemPhotos (image/audio/video); entries reference it.
   ingestionQueueEntries: defineTable({
+    needsInput: v.optional(v.boolean()),
+    needsInputAt: v.optional(v.number()),
+    needsInputBy: v.optional(v.string()),
     addedBy: v.optional(v.union(v.literal("person"),v.literal("ai_on_request"))),
     agentLabel: v.optional(v.string()),
     addOperationId: v.optional(v.string()),
@@ -2023,6 +2026,9 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_move_owner_input", ["moveId", "ownerUserId", "needsInput"])
+    .index("by_move_creator_owner_input", ["moveId", "createdByUserId", "ownerUserId", "needsInput"])
+    .index("by_move_creator_owner_status", ["moveId", "createdByUserId", "ownerUserId", "status"])
     .index("by_move_status_order", ["moveId", "status", "sortOrder"])
     .index("by_move_owner_status", ["moveId", "ownerUserId", "status", "sortOrder"])
     .index("by_move_add_operation", ["moveId", "createdByUserId", "addOperationId"])
@@ -2051,7 +2057,9 @@ export default defineSchema({
     suggestionReason: v.optional(v.string()),
     suggestionOptions: v.optional(v.array(v.string())),
     suggestionEvidence: v.optional(v.string()),
+    // Permanent first person accept, dismiss, edit or reply; restore never clears it.
     suggestionActedAt: v.optional(v.number()),
+    suggestionDismissedAt: v.optional(v.number()),
     dismissReason: v.optional(v.string()),
     fromRecord: v.optional(queueResultRefValidator),
     archivedAt: v.optional(v.number()),
@@ -2097,6 +2105,10 @@ export default defineSchema({
     updatedAt: v.number(),
     completedAt: v.optional(v.number()),
   })
+    .index("by_move_owner_input", ["moveId", "ownerUserId", "needsInput"])
+    .index("by_move_owner_review", ["moveId", "ownerUserId", "suggestionStatus"])
+    .index("by_move_owner_directive_dismissed_reason", ["moveId", "ownerUserId", "directive", "suggestionReason", "suggestionDismissedAt"])
+    .index("by_move_owner_directive_review_reason", ["moveId", "ownerUserId", "directive", "suggestionStatus", "suggestionReason"])
     .index("by_move_state_updated", ["moveId", "state", "updatedAt"])
     .index("by_move_owner_state_updated", [
       "moveId",

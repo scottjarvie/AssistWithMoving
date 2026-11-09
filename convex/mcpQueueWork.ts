@@ -1,3 +1,4 @@
+import { queueWorkFilter } from "./lib/queue";
 import { oauthIdentity } from "./lib/carriedAccess";
 import { queueAddFields } from "./lib/queueSuggestions";
 import {
@@ -56,7 +57,7 @@ import {
   releaseQueueItem as releaseQueueItemRecord,
   requestQueueInput as requestQueueInputRecord,
   requireQueueItem,
-  shapeQueueItem,
+  shapeQueueItemForRead,
   type QueueAccessActor,
 } from "./lib/queueService";
 import {
@@ -181,57 +182,80 @@ export const listQueueWork = internalQuery({
       MAX_WORK_ROWS,
     );
     const now = Date.now();
-    const rows = await ctx.db
-      .query("queueItems")
-      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-      .order("desc")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("archivedAt"), undefined),
-          q.neq(q.field("suggestionStatus"), "open"),
-          q.neq(q.field("suggestionStatus"), "dismissed"),
-          q.neq(q.field("suggestionStatus"), "withdrawn"),
-          q.neq(q.field("needsInput"), true),
-          q.neq(q.field("state"), "needsYou"),
+    const rows = (
+      await Promise.all(
+        runnableOwnerIds.map((ownerUserId) =>
+          ctx.db
+            .query("queueItems")
+            .withIndex("by_move_owner_updated", (q) =>
+              q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
+            )
+            .filter(queueWorkFilter)
+            .filter((q) =>
+              q.and(
+                q.neq(q.field("needsInput"), true),
+                q.neq(q.field("state"), "needsYou"),
+                q.or(
+                  q.eq(q.field("state"), "waitingForAi"),
+                  q.and(
+                    q.eq(q.field("state"), "working"),
+                    q.or(
+                      q.eq(q.field("claimExpiresAt"), undefined),
+                      q.lte(q.field("claimExpiresAt"), now),
+                      args.includeMine === true
+                        ? q.eq(q.field("claimedByUserId"), actor.userId)
+                        : q.eq(q.field("state"), "waitingForAi"),
+                    ),
+                  ),
+                ),
+              ),
+            )
+            .order("desc")
+            .take(limit),
         ),
       )
-      .take(MAX_WORK_ROWS * 4);
+    )
+      .flat()
+      .sort((a, b) => b.updatedAt - a.updatedAt);
 
-    const actionable = rows
-      .filter((item) =>
-        canViewQueueEntry({
-          actorUserId: actor.userId,
-          ownerUserId: item.ownerUserId,
-          isManager: actor.isManager,
-          delegatedOwnerIds: actor.delegatedOwnerIds,
+    const actionable = await Promise.all(
+      rows
+        .filter((item) =>
+          canViewQueueEntry({
+            actorUserId: actor.userId,
+            ownerUserId: item.ownerUserId,
+            isManager: actor.isManager,
+            delegatedOwnerIds: actor.delegatedOwnerIds,
+          }),
+        )
+        .filter((item) => runnableOwnerIds.includes(item.ownerUserId))
+        .filter((item) => {
+          if (!queueIsActionable(item)) return false;
+          const state = effectiveQueueState(item, now);
+          if (state === "waitingForAi") return true;
+          // Resuming work this same connection already holds is normal; picking
+          // up someone else's live claim is not.
+          return (
+            state === "working" &&
+            (item.claimExpiresAt === undefined ||
+              (args.includeMine === true &&
+                item.claimedByUserId === actor.userId))
+          );
+        })
+        .slice(0, limit)
+        .map(async (item) => {
+          const shaped = await shapeQueueItemForRead(ctx, item, now);
+          return {
+            ...shaped,
+            // The version is what a claim must echo back, so surface it plainly
+            // rather than making the AI guess where optimistic concurrency lives.
+            claimWith: {
+              queueItemId: item._id,
+              expectedVersion: item.version,
+            },
+          };
         }),
-      )
-      .filter((item) => runnableOwnerIds.includes(item.ownerUserId))
-      .filter((item) => {
-        if (!queueIsActionable(item)) return false;
-        const state = effectiveQueueState(item, now);
-        if (state === "waitingForAi") return true;
-        // Resuming work this same connection already holds is normal; picking
-        // up someone else's live claim is not.
-        return (
-          args.includeMine === true &&
-          state === "working" &&
-          item.claimedByUserId === actor.userId
-        );
-      })
-      .slice(0, limit)
-      .map((item) => {
-        const shaped = shapeQueueItem(item, now);
-        return {
-          ...shaped,
-          // The version is what a claim must echo back, so surface it plainly
-          // rather than making the AI guess where optimistic concurrency lives.
-          claimWith: {
-            queueItemId: item._id,
-            expectedVersion: item.version,
-          },
-        };
-      });
+    );
 
     return {
       moveId: args.moveId,
@@ -263,7 +287,7 @@ export const claimQueueWork = aiMutation({
         expectedVersion: args.expectedVersion,
         idempotencyKey: args.operationId,
       });
-      return { queue: shapeQueueItem(item), grantId };
+      return { queue: await shapeQueueItemForRead(ctx, item), grantId };
     } catch (error) {
       asMcpQueueError(error);
     }
@@ -288,7 +312,7 @@ export const releaseQueueWork = aiMutation({
         expectedVersion: args.expectedVersion,
         idempotencyKey: args.operationId,
       });
-      return { queue: shapeQueueItem(item), grantId };
+      return { queue: await shapeQueueItemForRead(ctx, item), grantId };
     } catch (error) {
       asMcpQueueError(error);
     }
@@ -320,7 +344,7 @@ export const askQueueQuestion = aiMutation({
         expectedVersion: args.expectedVersion,
         idempotencyKey: args.operationId,
       });
-      return { queue: shapeQueueItem(item), grantId };
+      return { queue: await shapeQueueItemForRead(ctx, item), grantId };
     } catch (error) {
       asMcpQueueError(error);
     }
@@ -366,7 +390,7 @@ export const completeQueueWork = aiMutation({
           grantId,
         },
       });
-      return { queue: shapeQueueItem(item), grantId };
+      return { queue: await shapeQueueItemForRead(ctx, item), grantId };
     } catch (error) {
       asMcpQueueError(error);
     }
@@ -417,7 +441,7 @@ export async function completeQueueForResult(
     expectedVersion: item.version,
     idempotencyKey: `${input.operationId}:queue-complete`,
   });
-  return shapeQueueItem(completed);
+  return await shapeQueueItemForRead(ctx, completed);
 }
 
 export const addQueueItem = aiMutation({
@@ -442,7 +466,8 @@ export const addQueueItem = aiMutation({
           "queue:run",
           "moving.suggestions.propose",
         );
-      return shapeQueueItem(
+      return await shapeQueueItemForRead(
+        ctx,
         await createQueueItem(ctx, actor, {
           ...args,
           householdId,
@@ -482,7 +507,8 @@ export const withdrawSuggestion = aiMutation({
         args.moveId,
         "queue:run",
       );
-      return shapeQueueItem(
+      return await shapeQueueItemForRead(
+        ctx,
         await reviewQueueSuggestion(ctx, actor, {
           ...args,
           householdId,

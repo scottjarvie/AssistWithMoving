@@ -1,5 +1,6 @@
 "use client";
 
+import { Component, type ReactNode } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
@@ -82,10 +83,20 @@ export function WorkspaceNav({
 
 function QueueNavCounts() {
   const { householdId, moveId } = useMoveWorkspace();
-  const counts = useQuery(
-    api.queue.counts,
-    householdId && moveId ? { householdId, moveId } : "skip",
-  );
+  return householdId && moveId ? (
+    <QueueBadgeBoundary key={`${householdId}:${moveId}`}>
+      <QueueBadgeQuery householdId={householdId} moveId={moveId} />
+    </QueueBadgeBoundary>
+  ) : null;
+}
+function QueueBadgeQuery({
+  householdId,
+  moveId,
+}: {
+  householdId: import("../../convex/_generated/dataModel").Id<"households">;
+  moveId: import("../../convex/_generated/dataModel").Id<"moves">;
+}) {
+  const counts = useQuery(api.queue.badges, { householdId, moveId });
   return counts ? (
     <span className="inline-flex gap-1 text-xs tabular-nums">
       <span
@@ -94,14 +105,27 @@ function QueueNavCounts() {
       >
         {counts.suggestions}
       </span>
-      {counts.needsInputOpen ? (
+      {counts.needsYou ? (
         <span
           className="rounded-full bg-primary px-1 text-primary-foreground"
-          aria-label={`${counts.needsInputOpen} need your input`}
+          aria-label={`${counts.needsYou} need your input`}
         >
-          {counts.needsInputOpen}
+          {counts.needsYou}
         </span>
       ) : null}
     </span>
   ) : null;
+}
+
+class QueueBadgeBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
 }

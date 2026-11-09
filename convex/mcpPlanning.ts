@@ -1,4 +1,4 @@
-import { queueIsWork, queueNeedsInput, effectiveQueueState } from "./lib/queue";
+import { queueIsWork, queueNeedsInput, effectiveQueueState, queueWorkFilter } from "./lib/queue";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 import { effectiveScopes } from "./lib/aiGrants";
 import { ConvexError, v } from "convex/values";
@@ -420,21 +420,21 @@ export const getMoveBrief = internalQuery({
             q.eq("moveId", move._id).eq("ownerUserId", policy.user._id).eq("state", "needsYou"),
           )
           .order("desc")
-          .take(10),
+          .filter(queueWorkFilter).take(10),
         ctx.db
           .query("queueItems")
           .withIndex("by_move_owner_state_updated", (q) =>
             q.eq("moveId", move._id).eq("ownerUserId", policy.user._id).eq("state", "working"),
           )
           .order("desc")
-          .take(10),
+          .filter(queueWorkFilter).take(10),
         ctx.db
           .query("queueItems")
           .withIndex("by_move_owner_state_updated", (q) =>
             q.eq("moveId", move._id).eq("ownerUserId", policy.user._id).eq("state", "waitingForAi"),
           )
           .order("desc")
-          .take(10),
+          .filter(queueWorkFilter).take(10),
       ]);
     const liveItems = items.filter((item) => item.deletedAt === undefined);
     const liveBoxes = boxes.filter((box) => box.archivedAt === undefined);
@@ -688,7 +688,7 @@ export const searchMoveRecords = internalQuery({
           q.eq("moveId", args.moveId).eq("ownerUserId", policy.user._id),
         )
         .order("desc")
-        .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+        .filter(queueWorkFilter).take(MAX_SEARCH_CANDIDATES_PER_KIND);
       for (const row of rows) {
         if (!queueIsWork(row)) continue;
         const haystack = [row.directive, row.summary, row.resultSummary, row.requiredAction]

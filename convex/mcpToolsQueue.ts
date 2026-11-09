@@ -1,3 +1,4 @@
+import { captureNeedsInput, captureReachFilter } from "./lib/queue";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 // OAuth MCP gateway tools for the capture queue — the agent loop INTO inventory.
 //
@@ -29,10 +30,7 @@ import {
   isMediaUploadPending,
   type IngestionQueueStatus,
 } from "./lib/ingestionQueue";
-import {
-  ingestionStatusToQueueState,
-  queueStateLabels,
-} from "./lib/queue";
+import { ingestionStatusToQueueState, queueStateLabels } from "./lib/queue";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
 import { canPerformHouseholdAction } from "./lib/roles";
 import {
@@ -96,7 +94,11 @@ function effectiveStatus(
   entry: Doc<"ingestionQueueEntries">,
   now: number,
 ): IngestionQueueStatus {
-  return ingestionClaimIsExpired(entry, now) ? "queued" : entry.status;
+  return !captureNeedsInput(entry) &&
+    (ingestionClaimIsExpired(entry, now) ||
+      (entry.status === "claimed" && entry.claimExpiresAt === undefined))
+    ? "queued"
+    : entry.status;
 }
 
 // Agent-friendly projection — the fields an agent needs to act, without raw
@@ -112,8 +114,21 @@ function shapeQueueEntry(entry: Doc<"ingestionQueueEntries">, now: number) {
     // Whose personal queue this belongs to — pass it as claim_queue.ownerUserId
     // to run a queue a move owner delegated to you (share a subscription).
     ownerUserId: queueEntryOwnerUserId(entry),
-    state,
-    stateLabel: queueStateLabels[state],
+    state:
+      state === "needsYou"
+        ? entry.status === "processed"
+          ? "done"
+          : "waitingForAi"
+        : state,
+    needsInput: captureNeedsInput(entry),
+    stateLabel:
+      queueStateLabels[
+        state === "needsYou"
+          ? entry.status === "processed"
+            ? "done"
+            : "waitingForAi"
+          : state
+      ],
     status: effectiveStatus(entry, now),
     legacyStatus: effectiveStatus(entry, now),
     instructions: entry.instructions ?? null,
@@ -149,7 +164,10 @@ export function runnableQueuedEntriesForCounts(
   entries: Doc<"ingestionQueueEntries">[],
   now: number,
 ) {
-  return entries.filter((entry) => effectiveStatus(entry, now) === "queued");
+  return entries.filter(
+    (entry) =>
+      !captureNeedsInput(entry) && effectiveStatus(entry, now) === "queued",
+  );
 }
 
 // ---- list_queue ------------------------------------------------------------
@@ -181,11 +199,17 @@ export const listQueue = internalQuery({
           .withIndex("by_move_status_order", (q) =>
             q.eq("moveId", args.moveId).eq("status", args.status!),
           )
+          .filter((q) =>
+            captureReachFilter(q, actor.userId, actor.delegatedOwnerIds),
+          )
           .take(QUEUE_LIMIT)
       : await ctx.db
           .query("ingestionQueueEntries")
           .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
           .order("desc")
+          .filter((q) =>
+            captureReachFilter(q, actor.userId, actor.delegatedOwnerIds),
+          )
           .take(QUEUE_LIMIT);
 
     // An agent only sees the queues it may run: its own + any delegated; a
@@ -215,13 +239,19 @@ export const listQueue = internalQuery({
         .withIndex("by_move_status_order", (q) =>
           q.eq("moveId", args.moveId).eq("status", "queued"),
         )
-        .take(QUEUE_LIMIT),
+        .filter((q) =>
+          captureReachFilter(q, actor.userId, actor.delegatedOwnerIds),
+        )
+        .collect(),
       ctx.db
         .query("ingestionQueueEntries")
         .withIndex("by_move_status_order", (q) =>
           q.eq("moveId", args.moveId).eq("status", "claimed"),
         )
-        .take(QUEUE_LIMIT),
+        .filter((q) =>
+          captureReachFilter(q, actor.userId, actor.delegatedOwnerIds),
+        )
+        .collect(),
     ]);
     const runnableQueued = runnableQueuedEntriesForCounts(
       [...rawQueued, ...rawClaimed],
@@ -243,7 +273,9 @@ export const listQueue = internalQuery({
     );
 
     return {
-      entries: visible.slice(0, limit).map((entry) => shapeQueueEntry(entry, now)),
+      entries: visible
+        .slice(0, limit)
+        .map((entry) => shapeQueueEntry(entry, now)),
       // Pass one of these ownerUserIds to claim_queue to run that person's queue.
       runnableOwners,
     };
@@ -287,7 +319,10 @@ export const claimQueue = aiMutation({
       );
     }
 
-    const batchSize = Math.min(Math.max(args.batchSize ?? 1, 1), MAX_CLAIM_BATCH);
+    const batchSize = Math.min(
+      Math.max(args.batchSize ?? 1, 1),
+      MAX_CLAIM_BATCH,
+    );
     const now = Date.now();
     const ownedByTarget = (entry: Doc<"ingestionQueueEntries">) =>
       queueEntryOwnerUserId(entry) === targetOwnerId;
@@ -301,9 +336,26 @@ export const claimQueue = aiMutation({
         .withIndex("by_move_status_order", (q) =>
           q.eq("moveId", args.moveId).eq("status", "queued"),
         )
+        .filter((q) =>
+          q.and(
+            q.neq(q.field("needsInput"), true),
+            q.or(
+              q.eq(q.field("ownerUserId"), targetOwnerId),
+              q.and(
+                q.eq(q.field("ownerUserId"), undefined),
+                q.eq(q.field("createdByUserId"), targetOwnerId),
+              ),
+            ),
+          ),
+        )
         .take(QUEUE_LIMIT)
     )
-      .filter((entry) => ownedByTarget(entry) && !isMediaUploadPending(entry))
+      .filter(
+        (entry) =>
+          ownedByTarget(entry) &&
+          !captureNeedsInput(entry) &&
+          !isMediaUploadPending(entry),
+      )
       .slice(0, batchSize);
 
     // Reclaim expired claims if the queued pool came up short.
@@ -314,11 +366,25 @@ export const claimQueue = aiMutation({
         .withIndex("by_move_status_order", (q) =>
           q.eq("moveId", args.moveId).eq("status", "claimed"),
         )
+        .filter((q) =>
+          q.and(
+            q.neq(q.field("needsInput"), true),
+            q.or(
+              q.eq(q.field("ownerUserId"), targetOwnerId),
+              q.and(
+                q.eq(q.field("ownerUserId"), undefined),
+                q.eq(q.field("createdByUserId"), targetOwnerId),
+              ),
+            ),
+          ),
+        )
         .take(QUEUE_LIMIT);
       const expired = claimed.filter(
         (entry) =>
           ownedByTarget(entry) &&
-          ingestionClaimIsExpired(entry, now) &&
+          !captureNeedsInput(entry) &&
+          (ingestionClaimIsExpired(entry, now) ||
+            entry.claimExpiresAt === undefined) &&
           !isMediaUploadPending(entry),
       );
       candidates = [...queued, ...expired].slice(0, batchSize);
@@ -362,7 +428,9 @@ export const claimQueue = aiMutation({
     );
     return {
       claimed: claimedEntries
-        .filter((entry): entry is Doc<"ingestionQueueEntries"> => Boolean(entry))
+        .filter((entry): entry is Doc<"ingestionQueueEntries"> =>
+          Boolean(entry),
+        )
         .map((entry) => shapeQueueEntry(entry, now)),
     };
   },
@@ -418,14 +486,18 @@ export const submitQueueResult = aiMutation({
       );
     }
 
+    if (captureNeedsInput(entry))
+      throw new ConvexError(
+        "Only the person can answer or clear Needs your input.",
+      );
     const now = Date.now();
     const question = args.needsInputQuestion?.trim();
     const nextStatus: IngestionQueueStatus = question
-      ? "needsInput"
+      ? entry.status
       : "processed";
 
     const from = effectiveStatus(entry, now);
-    if (!canTransitionIngestionStatus(from, nextStatus)) {
+    if (!question && !canTransitionIngestionStatus(from, nextStatus)) {
       throw new ConvexError(
         `Cannot move a ${from} queue entry to ${nextStatus}. Claim it first with claim_queue.`,
       );
@@ -463,7 +535,7 @@ export const submitQueueResult = aiMutation({
     // the created item (or the box/room/transport it targeted) automatically,
     // rather than relying on the agent to remember a separate attach step.
     const attachedPhotoCount =
-      nextStatus === "processed"
+      !question && nextStatus === "processed"
         ? await autoAttachEntryPhotos(
             ctx,
             entry,
@@ -475,8 +547,20 @@ export const submitQueueResult = aiMutation({
 
     await ctx.db.patch(args.entryId, {
       status: nextStatus,
-      agentSummary: args.agentSummary?.trim() || undefined,
-      agentQuestion: question || undefined,
+      agentSummary: args.agentSummary?.trim() || entry.agentSummary,
+      agentQuestion: question || entry.agentQuestion,
+      ...(question
+        ? {
+            needsInput: true,
+            needsInputAt: now,
+            needsInputBy: entry.claimedByAgentLabel ?? "Connected AI",
+            claimedByUserId: undefined,
+            claimedByApiKeyId: undefined,
+            claimedByAgentLabel: undefined,
+            claimedAt: undefined,
+            claimExpiresAt: undefined,
+          }
+        : {}),
       // Only overwrite the stored links when the caller actually provided them.
       // Omitting resultItemIds (e.g. on a needsInput question) must not wipe
       // links recorded by a prior submission.
@@ -486,7 +570,11 @@ export const submitQueueResult = aiMutation({
       ...(args.resultBoxIds !== undefined
         ? { resultBoxIds: args.resultBoxIds }
         : {}),
-      processedAt: nextStatus === "processed" ? now : undefined,
+      processedAt: question
+        ? entry.processedAt
+        : nextStatus === "processed"
+          ? now
+          : undefined,
       updatedAt: now,
     });
 
@@ -497,7 +585,7 @@ export const submitQueueResult = aiMutation({
       actorUserId: userId,
       category: "inventory",
       action:
-        nextStatus === "processed"
+        !question && nextStatus === "processed"
           ? "mcp.queue_processed"
           : "mcp.queue_needs_input",
       objectTable: "ingestionQueueEntries",
@@ -512,8 +600,10 @@ export const submitQueueResult = aiMutation({
     const state = ingestionStatusToQueueState(nextStatus, undefined, now);
     return {
       entryId: args.entryId,
-      state,
-      stateLabel: queueStateLabels[state],
+      state: state === "needsYou" ? "waitingForAi" : state,
+      needsInput: Boolean(question) || captureNeedsInput(entry),
+      stateLabel:
+        queueStateLabels[state === "needsYou" ? "waitingForAi" : state],
       status: nextStatus,
       legacyStatus: nextStatus,
       attachedPhotoCount,

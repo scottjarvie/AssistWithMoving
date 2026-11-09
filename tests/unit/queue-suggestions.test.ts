@@ -227,6 +227,7 @@ describe("AWL-0016 Queue authority and lifecycle", () => {
     expect(accepted.directive).toBe("Compare coverage first");
     expect(accepted.addedBy).toBe("ai_suggestion");
     expect(accepted.suggestionStatus).toBe("accepted");
+    expect(accepted.suggestionActedAt).toBeTypeOf("number");
     await f.t.mutation(internal.mcpQueueWork.claimQueueWork, {
       principal: f.principal,
       moveId: f.moveId,
@@ -251,6 +252,7 @@ describe("AWL-0016 Queue authority and lifecycle", () => {
     const dismissed = await f.person.mutation(api.queue.reviewSuggestion, base);
     expect(dismissed.dismissReason).toBe(base.reason);
     expect(dismissed.archivedAt).toBeTypeOf("number");
+    expect(dismissed.suggestionActedAt).toBeTypeOf("number");
     await expect(f.add("ai_suggestion", "repeat")).rejects.toThrow(
       /new reason/,
     );
@@ -261,6 +263,10 @@ describe("AWL-0016 Queue authority and lifecycle", () => {
       expectedVersion: dismissed.version,
     });
     expect(restored.suggestionStatus).toBe("open");
+    expect(restored.suggestionActedAt).toBe(dismissed.suggestionActedAt);
+    await expect(f.add("ai_suggestion", "repeat-after-reopen")).rejects.toThrow(
+      /new reason/,
+    );
     await expect(
       f.t.mutation(internal.mcpQueueWork.withdrawSuggestion, {
         principal: f.principal,
@@ -268,6 +274,53 @@ describe("AWL-0016 Queue authority and lifecycle", () => {
         queueItemId: idea.queueItemId,
         expectedVersion: restored.version,
         operationId: "withdraw",
+      }),
+    ).rejects.toThrow(/already acted/);
+  });
+  it("records a person reply permanently even on an older accepted suggestion", async () => {
+    const f = await fixture();
+    const idea = await f.add();
+    await f.t.run(async (ctx) => {
+      await ctx.db.patch(idea.queueItemId, {
+        suggestionStatus: "accepted",
+        needsInput: true,
+        requiredAction: "Which estimate?",
+        suggestionActedAt: undefined,
+      });
+    });
+    const replied = await f.person.mutation(api.queue.provideInput, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      queueItemId: idea.queueItemId,
+      response: "The second estimate",
+      idempotencyKey: "person-reply",
+    });
+    expect(replied.suggestionActedAt).toBeTypeOf("number");
+    const archived = await f.person.mutation(api.queue.reviewSuggestion, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      queueItemId: idea.queueItemId,
+      action: "archive",
+      operationId: "person-archive",
+      expectedVersion: replied.version,
+    });
+    const reopened = await f.person.mutation(api.queue.reviewSuggestion, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      queueItemId: idea.queueItemId,
+      action: "restore",
+      operationId: "person-reopen",
+      expectedVersion: archived.version,
+    });
+    expect(archived.suggestionActedAt).toBe(replied.suggestionActedAt);
+    expect(reopened.suggestionActedAt).toBe(replied.suggestionActedAt);
+    await expect(
+      f.t.mutation(internal.mcpQueueWork.withdrawSuggestion, {
+        principal: f.principal,
+        moveId: f.moveId,
+        queueItemId: idea.queueItemId,
+        operationId: "withdraw-after-reply",
+        expectedVersion: reopened.version,
       }),
     ).rejects.toThrow(/already acted/);
   });
@@ -298,6 +351,25 @@ describe("AWL-0016 Queue authority and lifecycle", () => {
       },
     );
     expect(withdrawn.suggestionStatus).toBe("withdrawn");
+    const reopened = await f.person.mutation(api.queue.reviewSuggestion, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      queueItemId: idea.queueItemId,
+      action: "restore",
+      operationId: "reopen-withdrawn",
+      expectedVersion: withdrawn.version,
+    });
+    expect(reopened.suggestionActedAt).toBeTypeOf("number");
+    // A previous successful withdraw opId cannot bypass a later person action.
+    await expect(
+      f.t.mutation(internal.mcpQueueWork.withdrawSuggestion, {
+        principal: f.principal,
+        moveId: f.moveId,
+        queueItemId: idea.queueItemId,
+        expectedVersion: idea.version,
+        operationId: "withdraw",
+      }),
+    ).rejects.toThrow(/already acted/);
   });
   it("raises and clears an input flag without state transitions, including legacy reads", async () => {
     const f = await fixture();
@@ -505,6 +577,57 @@ describe("AWL-0016 every AI door", () => {
         expect(decision.status).toBeGreaterThanOrEqual(400);
         expect(JSON.stringify(decision.body)).toContain("Only the person");
       }
+    const requested = await rest(
+      "POST",
+      `/api/v1/moves/${f.moveId}/queue`,
+      { directive: "Requested", addedBy: "ai_on_request" },
+      "requested-flag",
+    );
+    const requestItem = (
+      requested.body as { data: { queueItemId: string; version: number } }
+    ).data;
+    await rest(
+      "POST",
+      `/api/v1/moves/${f.moveId}/queue/${requestItem.queueItemId}/claim`,
+      { expectedVersion: requestItem.version, nextStep: "Compare" },
+      "request-claim",
+    );
+    const asked = await rest(
+      "POST",
+      `/api/v1/moves/${f.moveId}/queue/${requestItem.queueItemId}/needs-you`,
+      { expectedVersion: 2, requiredAction: "Which mover?" },
+      "request-question",
+    );
+    expect(asked.status).toBe(200);
+    for (const action of ["complete", "failure", "archive"]) {
+      const refusal = await rest(
+        "POST",
+        `/api/v1/moves/${f.moveId}/queue/${requestItem.queueItemId}/${action}`,
+        {
+          expectedVersion: 3,
+          resultSummary: "Clear",
+          code: "error",
+          message: "Retry",
+          retryable: true,
+          needsInput: false,
+          archived: action === "archive",
+        },
+        `forbidden-clear:${action}`,
+      );
+      expect(refusal.status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(refusal.body)).toContain(
+        "Only the person can clear Needs your input",
+      );
+    }
+    const archiveRefusal = await rest(
+      "POST",
+      `/api/v1/moves/${f.moveId}/queue/${requestItem.queueItemId}/archive`,
+      { expectedVersion: 3 },
+      "archive-without-clear-field",
+    );
+    expect(JSON.stringify(archiveRefusal.body)).toContain(
+      "Only the person can clear Needs your input",
+    );
     const { registerTools } =
       await import("../../mcp-server/assistwithmoving-mcp.mjs");
     const tools = new Map<
@@ -547,6 +670,16 @@ describe("AWL-0016 every AI door", () => {
         idempotencyKey: "adapter",
       });
       expect(JSON.stringify(response)).toMatch(/unaccepted/);
+      const cannotFinish = await tools.get("complete_queue_item")!({
+        moveId: f.moveId,
+        queueItemId: requestItem.queueItemId,
+        expectedVersion: 3,
+        resultSummary: "AI clears",
+        idempotencyKey: "adapter-flag",
+      });
+      expect(JSON.stringify(cannotFinish)).toContain(
+        "Only the person can clear Needs your input",
+      );
       const add = await tools.get("add_queue_item")!({
         moveId: f.moveId,
         directive: "Missing origin",
@@ -658,7 +791,7 @@ it("keeps suggestions private from another household manager and validates From 
   });
   const manager = f.t.withIdentity({
     subject: "SYNTHETIC-other-person",
-    sid: "synthetic-manager",
+    sid: "sess_synthetic_manager",
   });
   expect(
     (
@@ -709,17 +842,17 @@ it("keeps suggestions private from another household manager and validates From 
       createdByUserId: other,
     });
   });
-  await expect(
-    f.t.mutation(internal.mcpQueueWork.addQueueItem, {
-      principal: f.principal,
-      moveId: f.moveId,
-      directive: "Foreign reference",
-      addedBy: "ai_suggestion",
-      reason: "Not mine",
-      fromRecord: { type: "queue", id: source },
-      operationId: "foreign",
-    }),
-  ).rejects.toThrow(/same person/);
+  const mismatched = await f.t.mutation(internal.mcpQueueWork.addQueueItem, {
+    principal: f.principal,
+    moveId: f.moveId,
+    directive: "Foreign reference",
+    addedBy: "ai_suggestion",
+    reason: "Not mine",
+    fromRecord: { type: "queue", id: source },
+    operationId: "foreign",
+  });
+  expect(mismatched.fromRecord).toBeNull();
+  expect(mismatched.directive).toBe("Foreign reference");
   const own = await f.t.mutation(internal.mcpQueueWork.addQueueItem, {
     principal: f.principal,
     moveId: f.moveId,
@@ -733,4 +866,460 @@ it("keeps suggestions private from another household manager and validates From 
     operationId: "own",
   });
   expect(own.fromRecord?.label).toBe(idea.directive);
+});
+
+// Campaign lessons 1–11: these extend, rather than relax, the existing boundaries.
+describe("AWL-0016 audit lessons", () => {
+  it("only a person clears the flag; asking drops the lease, answering keeps state and permits a fresh claim", async () => {
+    const f = await fixture();
+    const item = await f.add("ai_on_request");
+    const claimed = await f.t.mutation(internal.mcpQueueWork.claimQueueWork, {
+      principal: f.principal,
+      moveId: f.moveId,
+      queueItemId: item.queueItemId,
+      expectedVersion: item.version,
+      operationId: "lesson-claim",
+      nextStep: "Compare",
+    });
+    const asked = await f.t.mutation(internal.mcpQueueWork.askQueueQuestion, {
+      principal: f.principal,
+      moveId: f.moveId,
+      queueItemId: item.queueItemId,
+      expectedVersion: claimed.queue.version,
+      operationId: "lesson-ask",
+      question: "Which mover?",
+    });
+    expect(asked.queue.state).toBe("working");
+    expect(asked.queue.needsInput).toBe(true);
+    expect(asked.queue.claim?.expiresAt ?? null).toBeNull();
+    for (const [ref, payload] of [
+      [internal.mcpQueueWork.completeQueueWork, { resultSummary: "Done" }],
+      [internal.mcpQueueWork.releaseQueueWork, { reason: "Clear" }],
+      [internal.mcpQueueWork.claimQueueWork, { nextStep: "Clear" }],
+    ] as const)
+      await expect(
+        f.t.mutation(ref, {
+          principal: f.principal,
+          moveId: f.moveId,
+          queueItemId: item.queueItemId,
+          expectedVersion: asked.queue.version,
+          operationId: "lesson-refuse",
+          ...payload,
+        } as never),
+      ).rejects.toThrow(/Only the person can clear Needs your input/);
+    const caller = { subject, claims: { azp: clientId } };
+    await expect(
+      f.t.mutation(internal.mcpToolsCanonicalQueue.reportQueueFailure, {
+        caller,
+        householdId: f.householdId,
+        moveId: f.moveId,
+        queueItemId: item.queueItemId,
+        expectedVersion: asked.queue.version,
+        idempotencyKey: "lesson-failure",
+        code: "error",
+        message: "Retry",
+        retryable: true,
+      }),
+    ).rejects.toThrow("Only the person can clear Needs your input");
+    const oauth = f.t.withIdentity({
+      subject,
+      client_id: clientId,
+      tokenType: "oauth",
+    });
+    await expect(
+      oauth.mutation(api.queue.provideInput, {
+        householdId: f.householdId,
+        moveId: f.moveId,
+        queueItemId: item.queueItemId,
+        response: "AI answer",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      f.t.run((ctx) =>
+        reviewQueueSuggestion(ctx, f.ai, {
+          householdId: f.householdId,
+          moveId: f.moveId,
+          queueItemId: item.queueItemId,
+          expectedVersion: asked.queue.version,
+          idempotencyKey: "hide-flag",
+          action: "archive",
+        }),
+      ),
+    ).rejects.toThrow("Only the person can clear Needs your input");
+    const answer = await f.person.mutation(api.queue.provideInput, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      queueItemId: item.queueItemId,
+      response: "Blue Van",
+      expectedVersion: asked.queue.version,
+      idempotencyKey: "human-answer",
+    });
+    expect(answer.state).toBe("working");
+    expect(answer.needsInput).toBe(false);
+    expect(
+      (
+        await f.t.query(internal.mcpQueueWork.listQueueWork, {
+          principal: f.principal,
+          moveId: f.moveId,
+        })
+      ).work.map((i) => i.queueItemId),
+    ).toContain(item.queueItemId);
+    const resumed = await f.t.mutation(internal.mcpQueueWork.claimQueueWork, {
+      principal: f.principal,
+      moveId: f.moveId,
+      queueItemId: item.queueItemId,
+      expectedVersion: answer.version,
+      operationId: "lesson-resume",
+      nextStep: "Resume",
+    });
+    expect(resumed.queue.state).toBe("working");
+    expect(resumed.queue.claim?.expiresAt).toBeTypeOf("number");
+    const done = await f.t.mutation(internal.mcpQueueWork.completeQueueWork, {
+      principal: f.principal,
+      moveId: f.moveId,
+      queueItemId: item.queueItemId,
+      expectedVersion: resumed.queue.version,
+      operationId: "answer-first",
+      resultSummary: "Comparison saved",
+    });
+    const afterAnswer = await f.t.mutation(
+      internal.mcpQueueWork.askQueueQuestion,
+      {
+        principal: f.principal,
+        moveId: f.moveId,
+        queueItemId: item.queueItemId,
+        expectedVersion: done.queue.version,
+        operationId: "question-after-answer",
+        question: "Which option should we choose?",
+      },
+    );
+    expect(afterAnswer.queue.state).toBe("done");
+    expect(
+      (
+        await f.person.query(api.queue.badges, {
+          householdId: f.householdId,
+          moveId: f.moveId,
+        })
+      ).needsYou,
+    ).toBe(1);
+    const cleared = await f.person.mutation(api.queue.provideInput, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      queueItemId: item.queueItemId,
+      response: "",
+      clearOnly: true,
+      expectedVersion: afterAnswer.queue.version,
+      idempotencyKey: "human-clear",
+    });
+    expect(cleared.state).toBe("done");
+    expect(cleared.needsInput).toBe(false);
+  });
+  it("counts flagged Answered items in both the pill and tab past 500 and does not fetch the Queue body for nav", async () => {
+    const f = await fixture();
+    const base = await f.add("ai_on_request");
+    await f.t.run(async (ctx) => {
+      const row = (await ctx.db.get(base.queueItemId))!;
+      const { _id, _creationTime, ...fields } = row;
+      void _id;
+      void _creationTime;
+      await ctx.db.patch(base.queueItemId, {
+        state: "done",
+        needsInput: true,
+        requiredAction: "Pick one",
+        terminalReason: "completed",
+        resultSummary: "Answered",
+      });
+      for (let i = 0; i < 525; i++)
+        await ctx.db.insert("queueItems", {
+          ...fields,
+          state: "done",
+          needsInput: true,
+          requiredAction: "Review",
+          directive: `Answered ${i}`,
+          terminalReason: "completed",
+          resultSummary: "Answer",
+        });
+      await ctx.db.insert("queueItems", {
+        ...fields,
+        state: "done",
+        needsInput: true,
+        archivedAt: Date.now(),
+      });
+    });
+    const badges = await f.person.query(api.queue.badges, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+    });
+    const counts = await f.person.query(api.queue.counts, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+    });
+    expect(badges.needsYou).toBe(526);
+    expect(counts.needsYou).toBe(526);
+    expect(counts.needsInputOpen).toBe(526);
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("convex/queue.ts", "utf8").split(
+      "export const badges =",
+    )[1];
+    expect(source).not.toContain(".collect()");
+    expect(source).not.toContain(".take(");
+  });
+  it("checks previous dismissals through its index after 600 unrelated rows; non-work does not consume a work limit", async () => {
+    const f = await fixture();
+    const early = await f.add("ai_on_request", "early-work");
+    const idea = await f.add();
+    await f.person.mutation(api.queue.reviewSuggestion, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      queueItemId: idea.queueItemId,
+      action: "dismiss",
+      expectedVersion: idea.version,
+      operationId: "dismiss",
+    });
+    await f.t.run(async (ctx) => {
+      const row = (await ctx.db.get(early.queueItemId))!;
+      const { _id, _creationTime, ...fields } = row;
+      void _id;
+      void _creationTime;
+      for (let i = 0; i < 610; i++)
+        await ctx.db.insert("queueItems", {
+          ...fields,
+          directive: `Other idea ${i}`,
+          addedBy: "ai_suggestion",
+          suggestionStatus: i % 2 ? "open" : "dismissed",
+          suggestionReason: "Other",
+          archivedAt: i % 2 ? undefined : Date.now(),
+          updatedAt: Date.now() + i,
+        });
+    });
+    await expect(f.add("ai_suggestion", "same-dismissed-idea")).rejects.toThrow(
+      /new reason/,
+    );
+    const work = await f.t.query(internal.mcpQueueWork.listQueueWork, {
+      principal: f.principal,
+      moveId: f.moveId,
+      limit: 1,
+    });
+    expect(work.work.map((i) => i.queueItemId)).toEqual([early.queueItemId]);
+    const brief = await f.t.query(internal.mcpPlanning.getMoveBrief, {
+      principal: f.principal,
+      moveId: f.moveId,
+    });
+    expect(brief.queue?.waitingForAi.map((i) => i.queueItemId)).toContain(
+      early.queueItemId,
+    );
+  });
+  it("failed work keeps state and flag; timeout recovery drains old flagged and archived leases without stalling", async () => {
+    const f = await fixture();
+    const item = await f.add("ai_on_request");
+    const claimed = await f.t.mutation(internal.mcpQueueWork.claimQueueWork, {
+      principal: f.principal,
+      moveId: f.moveId,
+      queueItemId: item.queueItemId,
+      expectedVersion: item.version,
+      operationId: "fail-claim",
+      nextStep: "Compare",
+    });
+    const failed = await f.t.run((ctx) =>
+      import("../../convex/lib/queueService").then((m) =>
+        m.reportQueueFailure(ctx, f.ai, {
+          householdId: f.householdId,
+          moveId: f.moveId,
+          queueItemId: item.queueItemId,
+          expectedVersion: claimed.queue.version,
+          code: "blocked",
+          message: "Need a decision",
+          retryable: false,
+          idempotencyKey: "fail-once",
+        }),
+      ),
+    );
+    expect(failed.state).toBe("working");
+    expect(failed.needsInput).toBe(true);
+    expect(failed.claimExpiresAt).toBeUndefined();
+    await f.t.run(async (ctx) => {
+      const row = (await ctx.db.get(item.queueItemId))!;
+      const { _id, _creationTime, ...fields } = row;
+      void _id;
+      void _creationTime;
+      for (let i = 0; i < 215; i++)
+        await ctx.db.insert("queueItems", {
+          ...fields,
+          archivedAt: i % 2 ? Date.now() : undefined,
+          claimExpiresAt: Date.now() - 1000,
+          claimedByUserId: f.userId,
+        });
+    });
+    for (let i = 0; i < 3; i++)
+      await f.t.mutation(internal.queue.maintainLeasesAndExpiry, {});
+    expect(
+      await f.t.run((ctx) =>
+        ctx.db
+          .query("queueItems")
+          .withIndex("by_state_claim_expiry", (q) =>
+            q
+              .eq("state", "working")
+              .gt("claimExpiresAt", undefined)
+              .lt("claimExpiresAt", Date.now()),
+          )
+          .collect(),
+      ),
+    ).toEqual([]);
+    expect(
+      (
+        await f.person.query(api.queue.get, {
+          householdId: f.householdId,
+          moveId: f.moveId,
+          queueItemId: item.queueItemId,
+        })
+      ).needsInput,
+    ).toBe(true);
+  });
+  it("broken From context never hides the item or breaks a replay, and withdraw has normal history and audit", async () => {
+    const f = await fixture();
+    const source = await f.add("ai_on_request", "source");
+    const args = {
+      principal: f.principal,
+      moveId: f.moveId,
+      directive: "Linked work",
+      addedBy: "ai_on_request" as const,
+      fromRecord: { type: "queue", id: source.queueItemId },
+      operationId: "linked",
+    };
+    const linked = await f.t.mutation(internal.mcpQueueWork.addQueueItem, args);
+    await f.t.run((ctx) => ctx.db.delete(source.queueItemId));
+    const reread = await f.person.query(api.queue.get, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      queueItemId: linked.queueItemId,
+    });
+    expect(reread.directive).toBe("Linked work");
+    expect(reread.fromRecord).toBeNull();
+    expect(
+      (await f.t.mutation(internal.mcpQueueWork.addQueueItem, args))
+        .queueItemId,
+    ).toBe(linked.queueItemId);
+    const idea = await f.add();
+    await f.t.mutation(internal.mcpQueueWork.withdrawSuggestion, {
+      principal: f.principal,
+      moveId: f.moveId,
+      queueItemId: idea.queueItemId,
+      expectedVersion: idea.version,
+      operationId: "withdraw-audit",
+    });
+    const [history, audit] = await f.t.run(
+      async (ctx) =>
+        [
+          await ctx.db
+            .query("queueActivities")
+            .withIndex("by_item_idempotency", (q) =>
+              q
+                .eq("queueItemId", idea.queueItemId)
+                .eq("idempotencyKey", "withdraw-audit"),
+            )
+            .unique(),
+          await ctx.db
+            .query("auditLogs")
+            .filter((q) =>
+              q.and(
+                q.eq(q.field("objectId"), idea.queueItemId),
+                q.eq(q.field("action"), "queue.suggestionReviewed"),
+              ),
+            )
+            .collect(),
+        ] as const,
+    );
+    expect(history?.actorType).toBe("agent");
+    expect(history?.message).toBe("withdraw");
+    expect(audit).toHaveLength(1);
+  });
+});
+
+it("AWL-0015 still gives old narrowed connections new powers unless explicitly removed", async () => {
+  const { accessFixture } = await import("../helpers/ai-access");
+  const f = await accessFixture("SYNTHETIC-lessons-grants");
+  const old = await f.legacyGrant({
+    clientId: "old-narrowed",
+    scopes: ["moving.context.read"],
+    scopeChoice: "chosen",
+  });
+  await f.connect("old-narrowed");
+  await f.finish();
+  const state = await f.connect("old-narrowed");
+  expect(state.scopes).toContain("moving.suggestions.propose");
+  expect(
+    state.scopes.filter((scope) => scope !== "moving.suggestions.propose"),
+  ).toEqual(["moving.context.read"]);
+  await f.reduce(
+    { scopes: ["moving.context.read"], opId: "explicitly-remove-proposals" },
+    "old-narrowed",
+  );
+  expect((await f.connect("new-ai")).scopes).not.toContain(
+    "moving.suggestions.propose",
+  );
+  expect((await f.t.run((ctx) => ctx.db.get(old)))?.scopes).toEqual([
+    "moving.context.read",
+  ]);
+});
+
+it("legacy capture questions keep state, clear leases, and cannot be cleared by an AI or a generic OAuth update", async () => {
+  const f = await fixture();
+  const entryId = await f.t.run((ctx) =>
+    ctx.db.insert("ingestionQueueEntries", {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      ownerUserId: f.userId,
+      createdByUserId: f.userId,
+      status: "claimed",
+      mediaPhotoIds: [],
+      sortOrder: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      claimedByUserId: f.userId,
+      claimExpiresAt: Date.now() + 60000,
+    }),
+  );
+  const caller = { subject, claims: { azp: clientId } };
+  const asked = await f.t.mutation(internal.mcpToolsQueue.submitQueueResult, {
+    caller,
+    householdId: f.householdId,
+    moveId: f.moveId,
+    entryId,
+    needsInputQuestion: "Which room?",
+  });
+  expect(asked.state).toBe("working");
+  const row = await f.t.run((ctx) => ctx.db.get(entryId));
+  expect(row?.status).toBe("claimed");
+  expect(row?.needsInput).toBe(true);
+  expect(row?.needsInputAt).toBeTypeOf("number");
+  expect(row?.needsInputBy).toBeTypeOf("string");
+  expect(row?.claimExpiresAt).toBeUndefined();
+  await expect(
+    f.t.mutation(internal.mcpToolsQueue.submitQueueResult, {
+      caller,
+      householdId: f.householdId,
+      moveId: f.moveId,
+      entryId,
+      agentSummary: "AI clears it",
+    }),
+  ).rejects.toThrow(/Only the person/);
+  await expect(
+    f.t
+      .withIdentity({ subject, client_id: clientId, tokenType: "oauth" })
+      .mutation(api.ingestionQueue.updateEntry, {
+        householdId: f.householdId,
+        moveId: f.moveId,
+        entryId,
+        instructions: "AI clears via revise",
+      }),
+  ).rejects.toThrow();
+  await f.person.mutation(api.ingestionQueue.updateEntry, {
+    householdId: f.householdId,
+    moveId: f.moveId,
+    entryId,
+    instructions: "Bedroom",
+  });
+  const answered = await f.t.run((ctx) => ctx.db.get(entryId));
+  expect(answered?.status).toBe("claimed");
+  expect(answered?.needsInput).toBe(false);
 });

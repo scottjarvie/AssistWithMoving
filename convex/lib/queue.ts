@@ -182,6 +182,8 @@ export function queueItemMatchesEffectiveState(
 }
 
 export type QueueStateInvariantInput = {
+  needsInput?: boolean;
+  waitingReason?: QueueWaitingReason;
   state: QueueState;
   requiredAction?: string;
   nextStep?: string;
@@ -199,7 +201,16 @@ export function queueStateInvariantError(
   if (input.state === "needsYou" && !input.requiredAction?.trim()) {
     return "Needs You requires the exact human decision or action.";
   }
+  if (input.needsInput && !input.requiredAction?.trim())
+    return "Needs your input requires the exact question.";
   if (input.state === "working") {
+    if (
+      input.waitingReason === "ready" &&
+      !input.claimExpiresAt &&
+      !input.claimedByUserId &&
+      !input.claimedByApiKeyId
+    )
+      return null;
     if (!input.nextStep?.trim())
       return "Working requires the current next step.";
     if (!input.claimExpiresAt) return "Working requires a bounded claim lease.";
@@ -317,4 +328,48 @@ export function queueIsWork(item: QueueVisibility) {
 }
 export function queueIsActionable(item: QueueVisibility) {
   return queueIsWork(item) && !queueNeedsInput(item);
+}
+
+/** Apply before pagination or reach accounting, not after a page has filled. */
+export function queueWorkFilter(
+  q: import("convex/server").FilterBuilder<
+    import("../_generated/dataModel").DataModel["queueItems"]
+  >,
+) {
+  return q.and(
+    q.eq(q.field("archivedAt"), undefined),
+    q.or(
+      q.neq(q.field("addedBy"), "ai_suggestion"),
+      q.eq(q.field("suggestionStatus"), "accepted"),
+    ),
+  );
+}
+export function captureNeedsInput(entry: {
+  needsInput?: boolean;
+  status: string;
+}) {
+  return (
+    entry.needsInput ??
+    (entry.status === "needsInput" || entry.status === "processed")
+  );
+}
+
+export function captureReachFilter(
+  q: import("convex/server").FilterBuilder<
+    import("../_generated/dataModel").DataModel["ingestionQueueEntries"]
+  >,
+  userId: import("../_generated/dataModel").Id<"users">,
+  delegates: import("../_generated/dataModel").Id<"users">[],
+) {
+  return q.or(
+    ...[userId, ...delegates].map((id) =>
+      q.or(
+        q.eq(q.field("ownerUserId"), id),
+        q.and(
+          q.eq(q.field("ownerUserId"), undefined),
+          q.eq(q.field("createdByUserId"), id),
+        ),
+      ),
+    ),
+  );
 }

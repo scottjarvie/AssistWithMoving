@@ -190,7 +190,14 @@ describe("Queue service integration", () => {
     expect(answered.needsInput).toBe(false);
     expect(answered.expiresAt).toBeDefined();
 
-    const finalClaim = answered; // Input does not release or restart the working item.
+    const finalClaim = await claimQueueItem(ctx, agent, {
+      householdId,
+      moveId,
+      queueItemId: created._id,
+      nextStep: "Resume after the person answered",
+      expectedVersion: answered.version,
+      idempotencyKey: "resume-after-input",
+    });
     expect(finalClaim.latestHumanResponse).toBe(
       "Page 3 is now attached to the move documents.",
     );
@@ -205,7 +212,9 @@ describe("Queue service integration", () => {
       queueItemId: created._id,
       resultSummary:
         "Blue Van is $420 less; North Star includes packing materials and two extra labor hours.",
-      resultRefs: [{ type: "item", id: resultItemId, label: "Mover comparison" }],
+      resultRefs: [
+        { type: "item", id: resultItemId, label: "Mover comparison" },
+      ],
       expectedVersion: finalClaim.version,
       idempotencyKey: "complete-1",
     });
@@ -221,6 +230,7 @@ describe("Queue service integration", () => {
       "claimed",
       "inputRequested",
       "inputProvided",
+      "claimed",
       "completed",
     ]);
     expect(db.tables.get("auditLogs")).toHaveLength(activities.length);
@@ -253,14 +263,18 @@ describe("Queue service integration", () => {
       moveId,
       directive: "Inventory the garage shelf.",
     });
-    await claimQueueItem(ctx, { ...owner, actorType: "agent" }, {
-      householdId,
-      moveId,
-      queueItemId: item._id,
-      nextStep: "Start the owner's inventory",
-      expectedVersion: 1,
-      idempotencyKey: "known-claim-key",
-    });
+    await claimQueueItem(
+      ctx,
+      { ...owner, actorType: "agent" },
+      {
+        householdId,
+        moveId,
+        queueItemId: item._id,
+        nextStep: "Start the owner's inventory",
+        expectedVersion: 1,
+        idempotencyKey: "known-claim-key",
+      },
+    );
     await expect(
       claimQueueItem(ctx, other, {
         householdId,
@@ -285,11 +299,15 @@ describe("Queue service integration", () => {
       isManager: false,
       delegatedOwnerIds: [],
     };
-    const item = await createQueueItem(ctx, { ...actor, actorType: "user" }, {
-      householdId,
-      moveId,
-      directive: "Review the storage estimate.",
-    });
+    const item = await createQueueItem(
+      ctx,
+      { ...actor, actorType: "user" },
+      {
+        householdId,
+        moveId,
+        directive: "Review the storage estimate.",
+      },
+    );
     const firstClaim = await claimQueueItem(ctx, actor, {
       householdId,
       moveId,
@@ -371,11 +389,15 @@ describe("Queue service integration", () => {
       isManager: false,
       delegatedOwnerIds: [],
     };
-    const item = await createQueueItem(ctx, { ...actor, actorType: "user" }, {
-      householdId,
-      moveId,
-      directive: "Check the mover certificate.",
-    });
+    const item = await createQueueItem(
+      ctx,
+      { ...actor, actorType: "user" },
+      {
+        householdId,
+        moveId,
+        directive: "Check the mover certificate.",
+      },
+    );
     const claimed = await claimQueueItem(ctx, actor, {
       householdId,
       moveId,
@@ -423,11 +445,15 @@ describe("Queue service integration", () => {
       isManager: false,
       delegatedOwnerIds: [],
     };
-    const item = await createQueueItem(ctx, { ...actor, actorType: "user" }, {
-      householdId,
-      moveId,
-      directive: "Summarize the packing exception.",
-    });
+    const item = await createQueueItem(
+      ctx,
+      { ...actor, actorType: "user" },
+      {
+        householdId,
+        moveId,
+        directive: "Summarize the packing exception.",
+      },
+    );
     const claimed = await claimQueueItem(ctx, actor, {
       householdId,
       moveId,
@@ -505,11 +531,15 @@ describe("Queue service integration", () => {
       isManager: false,
       delegatedOwnerIds: [],
     };
-    const item = await createQueueItem(ctx, { ...agent, actorType: "user" }, {
-      householdId,
-      moveId,
-      directive: "Release abandoned Queue work.",
-    });
+    const item = await createQueueItem(
+      ctx,
+      { ...agent, actorType: "user" },
+      {
+        householdId,
+        moveId,
+        directive: "Release abandoned Queue work.",
+      },
+    );
     const claimed = await claimQueueItem(ctx, agent, {
       householdId,
       moveId,
@@ -536,13 +566,17 @@ describe("Queue service integration", () => {
     expect(released.state).toBe("waitingForAi");
     expect(released.claimExpiresAt).toBeUndefined();
     await expect(
-      releaseExpiredQueueClaim(ctx, { ...maintenance, actorType: "agent" }, {
-        householdId,
-        moveId,
-        queueItemId: item._id,
-        reason: "Agent bypass attempt.",
-        expectedVersion: released.version,
-      }),
+      releaseExpiredQueueClaim(
+        ctx,
+        { ...maintenance, actorType: "agent" },
+        {
+          householdId,
+          moveId,
+          queueItemId: item._id,
+          reason: "Agent bypass attempt.",
+          expectedVersion: released.version,
+        },
+      ),
     ).rejects.toThrow(/only Queue maintenance/i);
   });
 });

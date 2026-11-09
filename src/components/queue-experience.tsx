@@ -120,7 +120,8 @@ const statePresentation: Record<
   },
   working: {
     label: "AI working",
-    shortDescription: "Your chosen AI has claimed the handoff.",
+    shortDescription:
+      "Work has started; a question can pause the AI without changing the state.",
     emptyTitle: "Nothing is being worked",
     emptyBody: "A handoff appears here only after an AI claims it.",
     icon: LoaderCircle,
@@ -287,6 +288,8 @@ function QueueItemCard({
             className={cn(
               "size-4",
               item.state === "working" &&
+                item.claimExpiresAt !== null &&
+                !item.needsInput &&
                 "animate-spin motion-reduce:animate-none",
             )}
             aria-hidden="true"
@@ -476,13 +479,20 @@ function QueueDetailSheet({
                 Current step
               </p>
               <p className="mt-2 leading-6">
-                {item.nextStep ?? "The claimed work is in progress."}
+                {item.nextStep ??
+                  (item.claimExpiresAt
+                    ? "The claimed work is in progress."
+                    : item.needsInput
+                      ? "Work is paused for your answer."
+                      : "Ready for your AI to resume.")}
               </p>
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>
                   {item.claimLabel
                     ? `Claimed by ${item.claimLabel}`
-                    : "Claim identity unavailable"}
+                    : item.needsInput
+                      ? "Waiting for your answer; no AI holds a claim."
+                      : "Ready for your AI to resume; no active claim."}
                 </span>
                 {item.claimExpiresAt ? (
                   <span>Lease until {formatWhen(item.claimExpiresAt)}</span>
@@ -499,7 +509,9 @@ function QueueDetailSheet({
                 Handoff status
               </p>
               <p className="mt-2 leading-6">
-                {waitingReasonLabel(item.waitingReason)}
+                {item.needsInput
+                  ? "Waiting for your answer; your AI cannot start."
+                  : waitingReasonLabel(item.waitingReason)}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
                 Nothing starts merely because this note was saved.

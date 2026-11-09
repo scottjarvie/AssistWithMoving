@@ -1,3 +1,5 @@
+import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
+import { captureNeedsInput } from "./lib/queue";
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -49,7 +51,12 @@ async function requireUserActor(
   moveId: Id<"moves">,
   action: "inventory:read" | "inventory:edit",
 ) {
-  const { actor } = await requireMovePermission(ctx, householdId, moveId, action);
+  const { actor } = await requireMovePermission(
+    ctx,
+    householdId,
+    moveId,
+    action,
+  );
   if (actor.type !== "user") {
     throw new Error(directConvexUserContextRequiredMessage);
   }
@@ -65,6 +72,7 @@ async function resolveQueueActor(
   moveId: Id<"moves">,
   action: "inventory:read" | "inventory:edit",
 ) {
+  if (action === "inventory:edit") await requirePersonConnectionManagement(ctx);
   const policy = await requireMovePermission(ctx, householdId, moveId, action);
   if (policy.actor.type !== "user") {
     throw new Error(directConvexUserContextRequiredMessage);
@@ -82,7 +90,10 @@ async function resolveQueueActor(
       : [];
   return {
     userId,
-    isManager: canPerformHouseholdAction(policy.role, "household:manage_members"),
+    isManager: canPerformHouseholdAction(
+      policy.role,
+      "household:manage_members",
+    ),
     delegatedOwnerIds,
   };
 }
@@ -354,7 +365,9 @@ export const closeQueueEntriesById = internalMutation({
         status: args.status,
         resolvedAt: now,
         processedAt:
-          args.status === "processed" ? (entry.processedAt ?? now) : entry.processedAt,
+          args.status === "processed"
+            ? (entry.processedAt ?? now)
+            : entry.processedAt,
         updatedAt: now,
       });
       closed += 1;
@@ -505,7 +518,10 @@ export const updateEntry = mutation({
     const entry = await requireEntry(ctx, args);
     requireCanActOnEntry(actor, entry);
     const now = Date.now();
-    if (!ingestionEntryIsEditable(effectiveStatus(entry, now))) {
+    if (
+      !captureNeedsInput(entry) &&
+      !ingestionEntryIsEditable(effectiveStatus(entry, now))
+    ) {
       throw new Error(
         "Only queued or needs-input entries can be edited. Requeue it first.",
       );
@@ -535,8 +551,17 @@ export const updateEntry = mutation({
         : {}),
       ...(args.sortOrder !== undefined ? { sortOrder: args.sortOrder } : {}),
       // A user edit answers an agent question, so needs-input returns to queued.
-      ...(entry.status === "needsInput"
-        ? { status: "queued" as const, agentQuestion: undefined }
+      ...(captureNeedsInput(entry)
+        ? {
+            needsInput: false,
+            needsInputAt: undefined,
+            needsInputBy: undefined,
+            status:
+              entry.status === "needsInput"
+                ? ("queued" as const)
+                : entry.status,
+            agentQuestion: undefined,
+          }
         : {}),
       updatedAt: now,
     });
@@ -574,7 +599,10 @@ export const appendMedia = mutation({
     );
     const entry = await requireEntry(ctx, args);
     const now = Date.now();
-    if (!ingestionEntryIsEditable(effectiveStatus(entry, now))) {
+    if (
+      !captureNeedsInput(entry) &&
+      !ingestionEntryIsEditable(effectiveStatus(entry, now))
+    ) {
       throw new Error(
         "Photos can only be added to queued or needs-input entries.",
       );
@@ -737,6 +765,12 @@ export const setEntryStatus = mutation({
     requireCanActOnEntry(actor, entry);
     const now = Date.now();
     await transitionEntry(ctx, entry, args.status, now);
+    await ctx.db.patch(entry._id, {
+      needsInput: false,
+      needsInputAt: undefined,
+      needsInputBy: undefined,
+      agentQuestion: undefined,
+    });
 
     await ctx.db.patch(args.entryId, {
       status: args.status,
@@ -791,8 +825,7 @@ export const listForMove = query({
     // Managers (owner/admin) keep the whole-move view they had before per-user
     // queues; regular members default to their own private queue. Either can be
     // overridden with an explicit ownerScope.
-    const ownerScope =
-      args.ownerScope ?? (actor.isManager ? "all" : "mine");
+    const ownerScope = args.ownerScope ?? (actor.isManager ? "all" : "mine");
 
     const raw = args.status
       ? await ctx.db
@@ -969,9 +1002,9 @@ export const submitResult = mutation({
 
     const question = args.needsInputQuestion?.trim();
     const nextStatus: IngestionQueueStatus = question
-      ? "needsInput"
+      ? entry.status
       : "processed";
-    await transitionEntry(ctx, entry, nextStatus, now);
+    if (!question) await transitionEntry(ctx, entry, nextStatus, now);
 
     if (args.resultItemIds) {
       for (const itemId of args.resultItemIds) {
@@ -1003,7 +1036,7 @@ export const submitResult = mutation({
     // Mirror the agent (MCP) path: a resolved capture's uploaded photos should
     // follow the inventory it produced. See convex/lib/queuePhotoAttach.ts.
     const attachedPhotoCount =
-      nextStatus === "processed"
+      !question && nextStatus === "processed"
         ? await autoAttachEntryPhotos(
             ctx,
             entry,
@@ -1015,13 +1048,31 @@ export const submitResult = mutation({
 
     await ctx.db.patch(args.entryId, {
       status: nextStatus,
-      agentSummary: args.agentSummary?.trim() || undefined,
-      agentQuestion: question || undefined,
+      agentSummary: args.agentSummary?.trim() || entry.agentSummary,
+      agentQuestion: question || entry.agentQuestion,
+      ...(question
+        ? {
+            needsInput: true,
+            needsInputAt: now,
+            needsInputBy: "Person",
+            claimedByUserId: undefined,
+            claimedByApiKeyId: undefined,
+            claimedByAgentLabel: undefined,
+            claimedAt: undefined,
+            claimExpiresAt: undefined,
+          }
+        : {}),
       ...(args.resultItemIds !== undefined
         ? { resultItemIds: args.resultItemIds }
         : {}),
-      ...(args.resultBoxIds !== undefined ? { resultBoxIds: args.resultBoxIds } : {}),
-      processedAt: nextStatus === "processed" ? now : undefined,
+      ...(args.resultBoxIds !== undefined
+        ? { resultBoxIds: args.resultBoxIds }
+        : {}),
+      processedAt: question
+        ? entry.processedAt
+        : nextStatus === "processed"
+          ? now
+          : undefined,
       updatedAt: now,
     });
 
@@ -1032,7 +1083,7 @@ export const submitResult = mutation({
       actorUserId: actor.userId,
       category: "inventory",
       action:
-        nextStatus === "processed"
+        !question && nextStatus === "processed"
           ? "ingestion.entry_processed"
           : "ingestion.entry_needs_input",
       objectTable: "ingestionQueueEntries",

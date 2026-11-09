@@ -21,10 +21,12 @@ Record-level inventory, photo, planning and Layout drafts stay on their records 
 - UI images use running React presentation components in a local Vite harness with synthetic data and no backend. They are not authenticated Local Live or end-to-end Sandbox proof.
 - The original Queue before images were captured before editing. A compositing artifact appeared in the original phone capture, so the comparison baselines were re-rendered from the unchanged fetched source. Original captures are retained locally in the ignored `.tmp/awl-0016` directory. The record-label baseline is also rendered from fetched source.
 - [01 Desktop](01-desktop-before-after.png), [02 Phone](02-phone-before-after.png), [03 Suggestions](03-suggestions-before-after.png), [04 Record proposal](04-record-before-after.png).
+- Audit lessons: [05 Count agreement](05-lessons-before-after.png), [06 Paused claim](06-lessons-before-after.png), [07 Phone flags](07-lessons-before-after.png). These use the pre-lesson components from the original PR head and current components with identical synthetic fixtures. The Answered item remains flagged, making the old pill mismatch visible.
+- [All twelve lessons and their implementation](LESSONS.md).
 
 ## Auditor focus
 
-Review the shared transaction guards, conditional suggestion power on the single add tool, carried-access scope projections, legacy capture conversion, owner privacy, and input flags across claim expiry and completion. Exact counts use complete owner-scoped reads; list results are bounded/paginated. Very large Queues may eventually need transactional counters for Convex read limits.
+Review the shared transaction guards, conditional suggestion power on the single add tool, carried-access scope projections, legacy capture conversion, owner privacy, and input flags across claim expiry and completion. Nav badges use dedicated indexed reads of matching flags and open suggestions and fail soft; they do not load whole Queue or review tables on every page. Full Queue-page counts remain owner-scoped and uncapped. Very large flagged/suggestion sets may eventually need transactional counters for Convex read limits.
 
 Historical capture rows did not retain a reliable creator-type field: unlike canonical directives, their precise person-versus-AI origin cannot be reconstructed without inventing evidence. They remain unchanged and carry no invented AI label. New AI captures preserve explicit origin and actor label.
 
@@ -34,4 +36,10 @@ No named external AI client, signed-in production flow, production migration, me
 
 The synthetic component harness is stopped after capture. Local runtime admission uses the MacBook run-slot directories; the slot is released at the end of each verification batch. Final command outcomes and source head are recorded in the PR description rather than inferred from the screenshots.
 
-Final checks: full offline suite 225 files / 1,552 tests passed; after the final privacy/replay/URL-state fixes, focused regression suite 8 files / 91 tests passed. Root and strict Convex TypeScript passed; five backend-configuration tests passed; all 159 offline bindings, 100 generated API tool decisions and the Project Philosophy reader verified. Lint passed with zero errors and one existing image-worker warning. No production or native client run.
+Initial build checks: full offline suite 225 files / 1,552 tests passed; after the final privacy/replay/URL-state fixes, focused regression suite 8 files / 91 tests passed. Root and strict Convex TypeScript passed; five backend-configuration tests passed; all 159 offline bindings, 100 generated API tool decisions and the Project Philosophy reader verified. Lint passed with zero errors and one existing image-worker warning. No production or native client run.
+
+Audit-lessons full-suite check: **226 files / 1,562 tests passed**. After the final
+reopen/replay and copy changes, **7 files / 153 focused tests passed**, alongside
+root/strict-backend TypeScript, lint (the existing image-worker warning only),
+the 100-tool policy check and generated Project Philosophy check. The 159-module
+offline binding check also passed. Existing AWL-0015 security tests are unchanged.

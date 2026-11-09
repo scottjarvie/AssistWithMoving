@@ -164,6 +164,7 @@ export function shapeQueueItem(item: Doc<"queueItems">, now = Date.now()) {
         : `/app/moves/${encodeURIComponent(item.moveId)}/${item.fromRecord.type === "item" ? "inventory" : item.fromRecord.type === "space" ? "spaces" : item.fromRecord.type === "queue" ? "queue" : "overview"}?record=${encodeURIComponent(item.fromRecord.id)}`
       : null,
     suggestionStatus: item.suggestionStatus ?? null,
+    suggestionActedAt: item.suggestionActedAt ?? null,
     suggestionReason: item.suggestionReason ?? null,
     suggestionOptions: item.suggestionOptions ?? [],
     suggestionEvidence: item.suggestionEvidence ?? null,
@@ -257,6 +258,11 @@ export function requireQueueItemAction(
   actor: QueueAccessActor,
   item: Doc<"queueItems">,
 ) {
+  if (
+    (actor.actorType === "agent" || actor.actorType === "apiKey") &&
+    queueNeedsInput(item)
+  )
+    throw new ConvexError("Only the person can clear Needs your input");
   if (!queueIsWork(item))
     throw new ConvexError(
       "An unaccepted or archived AI suggestion cannot be worked. Only the person can accept it.",
@@ -388,6 +394,9 @@ export async function createQueueItem(
     idempotencyKey?: string;
   },
 ) {
+  const requestedFromRecord = input.fromRecord
+    ? { type: input.fromRecord.type, id: input.fromRecord.id }
+    : null;
   const isAI = actor.actorType !== "user";
   if (
     input.options !== undefined &&
@@ -400,7 +409,7 @@ export async function createQueueItem(
     (typeof input.fromRecord.type !== "string" ||
       typeof input.fromRecord.id !== "string")
   )
-    throw new ConvexError("From record requires a type and id.");
+    input.fromRecord = undefined;
   if (
     isAI &&
     input.addedBy !== "ai_on_request" &&
@@ -440,23 +449,22 @@ export async function createQueueItem(
       ("ownerUserId" in record
         ? record.ownerUserId !== actor.userId
         : record.createdByUserId !== actor.userId)
-    )
-      throw new ConvexError(
-        "From record must belong to the same person and move.",
-      );
-    input.fromRecord = {
-      ...input.fromRecord,
-      label:
-        "directive" in record
-          ? String(record.directive)
-          : "name" in record
-            ? String(record.name)
-            : "title" in record
-              ? String(record.title)
-              : "label" in record
-                ? String(record.label)
-                : "Move record",
-    };
+    ) {
+      input.fromRecord = undefined;
+    } else
+      input.fromRecord = {
+        ...input.fromRecord,
+        label:
+          "directive" in record
+            ? String(record.directive)
+            : "name" in record
+              ? String(record.name)
+              : "title" in record
+                ? String(record.title)
+                : "label" in record
+                  ? String(record.label)
+                  : "Move record",
+      };
   }
   const ownerUserId = input.ownerUserId ?? actor.userId;
   if (actor.userId !== ownerUserId && !actor.isManager) {
@@ -479,7 +487,7 @@ export async function createQueueItem(
     normalizeQueueText(input.reason, "reason", 4000),
     input.options ?? [],
     input.evidence ?? null,
-    input.fromRecord ?? null,
+    requestedFromRecord,
   ]);
   if (idempotencyKey) {
     const existing = await ctx.db
@@ -505,18 +513,27 @@ export async function createQueueItem(
   if (input.addedBy === "ai_suggestion") {
     const earlier = await ctx.db
       .query("queueItems")
-      .withIndex("by_move_owner_updated", (q) =>
-        q.eq("moveId", input.moveId).eq("ownerUserId", actor.userId),
+      .withIndex("by_move_owner_directive_review_reason", (q) =>
+        q
+          .eq("moveId", input.moveId)
+          .eq("ownerUserId", actor.userId)
+          .eq("directive", directive)
+          .eq("suggestionStatus", "dismissed")
+          .eq("suggestionReason", input.reason?.trim()),
       )
-      .collect();
-    if (
-      earlier.some(
-        (row) =>
-          row.directive === directive &&
-          row.suggestionStatus === "dismissed" &&
-          row.suggestionReason === input.reason?.trim(),
+      .first();
+    const dismissedBefore = await ctx.db
+      .query("queueItems")
+      .withIndex("by_move_owner_directive_dismissed_reason", (q) =>
+        q
+          .eq("moveId", input.moveId)
+          .eq("ownerUserId", actor.userId)
+          .eq("directive", directive)
+          .eq("suggestionReason", input.reason?.trim())
+          .gt("suggestionDismissedAt", undefined),
       )
-    )
+      .first();
+    if (earlier || dismissedBefore)
       throw new ConvexError(
         "Raise a dismissed idea again only with a new reason.",
       );
@@ -655,7 +672,8 @@ export async function claimQueueItem(
       "This item needs the person’s input before work can start.",
     );
   const fromState = effectiveQueueState(item, now);
-  requireTransition(fromState, "working");
+  if (!(fromState === "working" && item.claimExpiresAt === undefined))
+    requireTransition(fromState, "working");
   if (queueClaimIsExpired(item, now)) {
     await recordQueueActivity(
       ctx,
@@ -787,7 +805,8 @@ export async function releaseExpiredQueueClaim(
   const reason = normalizeQueueText(input.reason, "reason", 1000);
   if (!reason) throw new ConvexError("A release reason is required.");
   await ctx.db.patch(item._id, {
-    state: "waitingForAi",
+    state:
+      queueNeedsInput(item) || !queueIsWork(item) ? item.state : "waitingForAi",
     waitingReason: "ready",
     nextStep: undefined,
     claimedByUserId: undefined,
@@ -801,7 +820,8 @@ export async function releaseExpiredQueueClaim(
   await recordQueueActivity(ctx, item, actor, {
     type: "released",
     fromState: "working",
-    toState: "waitingForAi",
+    toState:
+      queueNeedsInput(item) || !queueIsWork(item) ? item.state : "waitingForAi",
     message: reason,
     idempotencyKey: input.idempotencyKey,
   });
@@ -824,12 +844,7 @@ export async function requestQueueInput(
   requireQueueItemAction(actor, item);
   if (await findActivityReplay(ctx, item._id, input.idempotencyKey))
     return item;
-  if (
-    actor.actorType !== "user" &&
-    item.claimedByUserId !== actor.userId &&
-    item.claimedByApiKeyId !== actor.apiKeyId
-  )
-    throw new ConvexError("Only the working AI can raise this flag.");
+  if (item.claimExpiresAt !== undefined) requireActiveClaim(item, actor);
   assertExpectedQueueVersion(item.version, input.expectedVersion);
   const requiredAction = normalizeQueueText(
     input.requiredAction,
@@ -839,6 +854,12 @@ export async function requestQueueInput(
   assertQueueStateInvariant({ state: "needsYou", requiredAction });
   const now = Date.now();
   await ctx.db.patch(item._id, {
+    claimedByUserId: undefined,
+    claimedByApiKeyId: undefined,
+    claimedByLabel: undefined,
+    claimedAt: undefined,
+    claimExpiresAt: undefined,
+    waitingReason: "ready",
     needsInput: true,
     needsInputAt: now,
     needsInputBy: actor.label ?? actor.actorType,
@@ -894,6 +915,10 @@ export async function provideQueueInput(
     needsInputAt: undefined,
     needsInputBy: undefined,
     latestHumanResponse: input.clearOnly ? item.latestHumanResponse : response,
+    suggestionActedAt:
+      item.addedBy === "ai_suggestion"
+        ? (item.suggestionActedAt ?? now)
+        : item.suggestionActedAt,
     requiredAction: undefined,
     version: item.version + 1,
     updatedAt: now,
@@ -1069,7 +1094,8 @@ export async function reportQueueFailure(
     maxAttempts: item.maxAttempts,
     retryable: input.retryable,
   });
-  requireTransition(item.state, transition.state);
+  if (transition.state === "waitingForAi")
+    requireTransition(item.state, "waitingForAi");
   const now = Date.now();
   const nextAttemptAt =
     transition.state === "waitingForAi"
@@ -1081,15 +1107,15 @@ export async function reportQueueFailure(
       ? `Review this failed handoff and choose whether to revise or cancel it: ${message}`
       : undefined;
   await ctx.db.patch(item._id, {
-    state: "waitingForAi",
-    needsInput: transition.state === "needsYou",
+    state: transition.state === "needsYou" ? item.state : "waitingForAi",
+    needsInput: transition.state === "needsYou" ? true : item.needsInput,
     needsInputAt: transition.state === "needsYou" ? now : undefined,
     needsInputBy:
       transition.state === "needsYou"
         ? (actor.label ?? actor.actorType)
         : undefined,
     waitingReason:
-      transition.state === "waitingForAi" ? "retryScheduled" : undefined,
+      transition.state === "waitingForAi" ? "retryScheduled" : "ready",
     nextAttemptAt,
     requiredAction,
     nextStep: undefined,
@@ -1108,7 +1134,7 @@ export async function reportQueueFailure(
   await recordQueueActivity(ctx, item, actor, {
     type: transition.activity,
     fromState: "working",
-    toState: "waitingForAi",
+    toState: transition.state === "needsYou" ? item.state : "waitingForAi",
     message,
     failureCode: code,
     idempotencyKey: input.idempotencyKey,
@@ -1133,7 +1159,14 @@ export async function finishQueueItemWithoutWork(
   requireQueueItemVisible(actor, item);
   requireQueueItemAction(actor, item);
   if (
-    actor.actorType !== "user" ||
+    (actor.actorType !== "user" &&
+      !(
+        actor.actorType === "system" &&
+        input.terminalReason === "expired" &&
+        item.expiresAt !== undefined &&
+        item.expiresAt <= Date.now() &&
+        actor.userId === item.ownerUserId
+      )) ||
     (actor.userId !== item.ownerUserId && !actor.isManager)
   ) {
     throw new ConvexError(
@@ -1152,7 +1185,7 @@ export async function finishQueueItemWithoutWork(
     state: "done",
     terminalReason: input.terminalReason,
     resultSummary: reason,
-    requiredAction: undefined,
+
     nextStep: undefined,
     waitingReason: undefined,
     claimedByUserId: undefined,
@@ -1199,6 +1232,12 @@ export async function reviewQueueSuggestion(
   const item = await requireQueueItem(ctx, input);
   if (actor.userId !== item.ownerUserId)
     throw new ConvexError("Only this Queue's owner can decide.");
+  if (
+    actor.actorType !== "user" &&
+    queueNeedsInput(item) &&
+    ["archive", "dismiss", "withdraw"].includes(input.action)
+  )
+    throw new ConvexError("Only the person can clear Needs your input");
   const isWithdraw = input.action === "withdraw";
   if (actor.actorType !== "user" && !isWithdraw)
     throw new ConvexError(
@@ -1211,6 +1250,8 @@ export async function reviewQueueSuggestion(
         (actor.connectionId ?? String(actor.apiKeyId ?? "")))
   )
     throw new ConvexError("An AI can withdraw only its own suggestion.");
+  if (isWithdraw && item.suggestionActedAt !== undefined)
+    throw new ConvexError("The person has already acted on this suggestion.");
   if (await findActivityReplay(ctx, item._id, input.idempotencyKey))
     return item;
   assertExpectedQueueVersion(item.version, input.expectedVersion);
@@ -1227,6 +1268,9 @@ export async function reviewQueueSuggestion(
     if (item.archivedAt === undefined)
       throw new ConvexError("This item is not archived.");
     patch.archivedAt = undefined;
+    if (item.suggestionStatus === "dismissed")
+      patch.suggestionDismissedAt =
+        item.suggestionDismissedAt ?? item.suggestionActedAt ?? now;
     if (
       item.addedBy === "ai_suggestion" &&
       item.suggestionStatus !== "accepted"
@@ -1239,8 +1283,6 @@ export async function reviewQueueSuggestion(
       item.archivedAt !== undefined
     )
       throw new ConvexError("This suggestion is no longer open.");
-    if (isWithdraw && item.suggestionActedAt !== undefined)
-      throw new ConvexError("The person has already acted on this suggestion.");
     if (input.action === "accept") {
       const option =
         input.optionIndex === undefined
@@ -1267,10 +1309,14 @@ export async function reviewQueueSuggestion(
         suggestionStatus: isWithdraw ? "withdrawn" : "dismissed",
         archivedAt: now,
         dismissReason: input.reason,
+        suggestionDismissedAt: isWithdraw
+          ? item.suggestionDismissedAt
+          : (item.suggestionDismissedAt ?? now),
       });
     }
   }
-  if (!isWithdraw) patch.suggestionActedAt = now;
+  // First person action is permanent, including after archive/reopen cycles.
+  if (!isWithdraw) patch.suggestionActedAt = item.suggestionActedAt ?? now;
   await ctx.db.patch(item._id, patch);
   await recordQueueActivity(ctx, item, actor, {
     type: "suggestionReviewed",
@@ -1311,9 +1357,11 @@ export async function readQueueSuggestions(
   if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isFinite(limit))
     throw new ConvexError("Invalid suggestion cursor or limit.");
   return {
-    items: suggestions
-      .slice(offset, offset + limit)
-      .map((item) => shapeQueueItem(item)),
+    items: await Promise.all(
+      suggestions
+        .slice(offset, offset + limit)
+        .map(async (item) => await shapeQueueItemForRead(ctx, item)),
+    ),
     nextCursor:
       offset + limit < suggestions.length ? String(offset + limit) : null,
     count: rows.filter(
@@ -1323,4 +1371,34 @@ export async function readQueueSuggestions(
         item.archivedAt === undefined,
     ).length,
   };
+}
+
+export async function shapeQueueItemForRead(
+  ctx: QueueCtx,
+  item: Doc<"queueItems">,
+  now = Date.now(),
+) {
+  const shaped = shapeQueueItem(item, now);
+  if (!item.fromRecord) return shaped;
+  const tables = {
+    item: "items",
+    box: "boxes",
+    space: "moveSpaces",
+    planningRecord: "movePlanningRecords",
+    queue: "queueItems",
+  } as const;
+  const ref = item.fromRecord;
+  const table = tables[ref.type as keyof typeof tables];
+  const id = table && ctx.db.normalizeId(table, ref.id);
+  const record = id ? await ctx.db.get(id) : null;
+  if (
+    !record ||
+    record.moveId !== item.moveId ||
+    record.householdId !== item.householdId ||
+    ("ownerUserId" in record
+      ? record.ownerUserId !== item.ownerUserId
+      : record.createdByUserId !== item.ownerUserId)
+  )
+    return { ...shaped, fromRecord: null, fromRecordHref: null };
+  return shaped;
 }
