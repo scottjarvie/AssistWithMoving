@@ -84,7 +84,7 @@ export function AiConnectionManager() {
   useEffect(() => { if (needsInitialization) void initialize({}).catch(err => setError(err instanceof Error ? err.message : "Could not check earlier connections.")); }, [needsInitialization, initialize]);
   return <div className="space-y-6">
     <p className="text-base leading-7">{policy.settings}</p>
-    <p className="text-sm text-muted-foreground">Connect your AI to https://movingmanifest.com/mcp and sign in. New connections start with your most limited AI’s limits. Invitations stay on the website; your AI can create share links after checking for sensitive information.</p>
+    <p className="text-sm text-muted-foreground">Connect your AI to https://movingmanifest.com/mcp and sign in. New AI sign-ins start with your most limited AI’s limits. Invitations stay on the website; your AI can create share links after checking for sensitive information.</p>
     {error && <p role="alert">{error}</p>}
     {!data?.ready ? <p>Checking earlier connection limits… Access stays stopped until the check is complete.</p> : <>
       {!data.connections.length ? <p>No AI has connected yet. New connections get full access with no end date; any earlier limits are retained.</p> : data.connections.map(row => <ConnectionCard key={row.id} row={row} />)}

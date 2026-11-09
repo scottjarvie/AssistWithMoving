@@ -57,14 +57,26 @@ export const getForShareLink = internalQuery({
     label: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    let packet: Awaited<ReturnType<typeof previewPublicPacket>>;
     try {
-    const packet = await previewPublicPacket(ctx, args);
-    // Live packets can change after link creation. Secrets must never leave
-    // through an already published link; contact acknowledgement stays batched
-    // at publishing and does not prompt public recipients.
-    checkPublishedSecrets(packet);
+      packet = await previewPublicPacket(ctx, args);
+    } catch (error) {
+      return {
+        status: "unavailable" as const,
+        reason: error instanceof Error && error.message === "Documentation profile not found."
+          ? "This shared packet’s documentation profile is unavailable or archived. Ask the owner to restore it or unpublish this link."
+          : "This shared packet could not be loaded. Please try again later or ask the owner to check its move and profile.",
+        shareLink: publicShareLinkMetadata(args),
+      };
+    }
+    // Live packets can change after link creation. Only a failure of the actual
+    // check should be described as a publishing-check failure to recipients.
+    try {
+      checkPublishedSecrets(packet);
+    } catch {
+      return { status: "unavailable" as const, reason: "This shared packet is unavailable because its current content could not pass the publishing check. Ask the owner to remove private information or unpublish it.", shareLink: publicShareLinkMetadata(args) };
+    }
     return packet;
-    } catch { return { status: "unavailable" as const, reason: "This shared packet is unavailable because its current content could not pass the publishing check. Ask the owner to remove private information or unpublish it.", shareLink: publicShareLinkMetadata(args) }; }
   },
 });
 

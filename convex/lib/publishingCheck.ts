@@ -1,4 +1,4 @@
-const secretField = /(?:^|[_ -])(?:password|passwd|api[_ -]?key|access[_ -]?token|auth[_ -]?token|token|client[_ -]?secret|secret[_ -]?access[_ -]?key)$/i;
+const secretField = /(?:^|[_ -])(?:password|passwd|pwd|secret|api[_ -]?key|access[_ -]?token|auth[_ -]?token|token|client[_ -]?secret|secret[_ -]?access[_ -]?key)$/i;
 
 function readableSecretText(value: string) {
   // Inspect escaped JSON too, including nested serialization and Unicode escapes.
@@ -30,8 +30,10 @@ export function checkPublishedSecrets(content: unknown): ContactCounts {
   const secrets = [
     [/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i, "private key"],
     [/\b(?:mmk_|sk_|pk_|rk_live_|xox[abpr]-|access-(?:production|sandbox|development)-)[A-Za-z0-9_-]{6,}/i, "API key"],
+    [/\b(?:sk-(?:(?:ant-|proj-)[A-Za-z0-9_-]{6,}|[A-Za-z0-9_-]{20,})|gh[po]_[A-Za-z0-9_]{6,}|github_pat_[A-Za-z0-9_]{6,}|glpat-[A-Za-z0-9_-]{6,}|AIza[A-Za-z0-9_-]{6,})\b/, "provider token"],
+    [/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/, "AWS access key"],
     [/\bBearer\s+\S+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/i, "token"],
-    [/\b(?:[A-Za-z][A-Za-z0-9]*[_ -])*(?:password|passwd|api[_ -]?key|access[_ -]?token|auth[_ -]?token|token|client[_ -]?secret|secret[_ -]?access[_ -]?key)\s*(?:\\?["'])?\s*[:=]\s*(?:\\?["'])?[^\s"',}]{3,}/i, "password or secret"],
+    [/\b(?:[A-Za-z][A-Za-z0-9]*[_ -])*(?:password|passwd|pwd|secret|api[_ -]?key|access[_ -]?token|auth[_ -]?token|token|client[_ -]?secret|secret[_ -]?access[_ -]?key)\s*(?:\\?["'])?\s*[:=]\s*(?:\\?["'])?[^\s"',}]{3,}/i, "password or secret"],
     [/[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/i, "URL password"],
   ] as const;
   function visit(value: unknown, path: string) {
