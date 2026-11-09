@@ -1027,7 +1027,7 @@ export function createMovingServer(
       description:
         "Read your person's open suggestions, or archived decisions with dismissal reasons and withdrawals.",
       inputSchema: z
-        .object({ moveId: id, archived: z.boolean().optional() })
+        .object({ moveId: id, archived: z.boolean().optional(), cursor: z.string().optional(), limit: z.number().int().min(1).max(100).optional() })
         .strict(),
       annotations: { readOnlyHint: true },
     },
@@ -1083,7 +1083,7 @@ export function createMovingServer(
     {
       title: "List Queue work waiting for your AI",
       description:
-        "Return only the handoffs this person has actually accepted and left Waiting for your AI on one move, each with the version to claim it with. Needs you items are waiting on the person and are not listed.",
+        "Return only the handoffs this person has actually accepted and left Waiting for your AI on one move, each with the version to claim it with. Items flagged Needs your input are waiting on the person and are not listed.",
       inputSchema: z
         .object({
           moveId: id,
@@ -1177,9 +1177,9 @@ export function createMovingServer(
   registerGranted(
     "ask_queue_question",
     {
-      title: "Ask the smallest Needs you question",
+      title: "Raise the Needs your input flag",
       description:
-        "Move a claimed handoff to Needs you with one specific question. Prefer this over guessing or saving a result built on an assumption. Ask for the smallest thing that unblocks the work.",
+        "Raise the Needs your input flag with one specific question (state unchanged), releasing your claim. Prefer this over guessing or saving a result built on an assumption. Ask for the smallest thing that unblocks the work.",
       inputSchema: z
         .object({
           moveId: id,

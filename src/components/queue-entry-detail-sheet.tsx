@@ -168,7 +168,9 @@ export function QueueEntryDetailSheet({
   onOpenChange: (open: boolean) => void;
   busy: boolean;
   editable: boolean;
-  onChangeStatus: (status: "queued" | "resolved" | "discarded") => void | Promise<void>;
+  onChangeStatus: (
+    status: "queued" | "resolved" | "discarded",
+  ) => void | Promise<void>;
   onSaveInstructions: (text: string) => void | Promise<void>;
   onAddImages: () => void;
 }) {
@@ -271,7 +273,9 @@ export function QueueEntryDetailSheet({
 
           {entry.agentSummary ? (
             <div className="space-y-1.5">
-              <p className="text-sm font-medium text-foreground">Agent result</p>
+              <p className="text-sm font-medium text-foreground">
+                Agent result
+              </p>
               <p className="text-sm text-muted-foreground">
                 {entry.agentSummary}
                 {entry.resultItemIds?.length
@@ -279,12 +283,7 @@ export function QueueEntryDetailSheet({
                   : ""}
               </p>
               {entry.resultItemIds?.length ? (
-                <Button
-                  asChild
-                  size="sm"
-                  variant="link"
-                  className="h-auto p-0"
-                >
+                <Button asChild size="sm" variant="link" className="h-auto p-0">
                   <Link href="/app/items#inventory-records">
                     View{" "}
                     {entry.resultItemIds.length === 1
@@ -342,7 +341,7 @@ export function QueueEntryDetailSheet({
             </>
           ) : null}
 
-          {entry.status === "processed" ? (
+          {entry.status === "processed" || entry.needsInput ? (
             <>
               <Button
                 type="button"

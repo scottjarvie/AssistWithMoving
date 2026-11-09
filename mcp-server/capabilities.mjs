@@ -369,7 +369,7 @@ export const ASSISTWITHMOVING_API_CAPABILITIES = [
       "Canonical OAuth and API-key HTTP/stdio expose the same suggestion safety boundary through their own grants.",
       "Read only the caller's own or explicitly delegated move Queue.",
       "Claim with an expiring lease and optimistic version before doing work.",
-      "Return exact human blockers as Needs You and attach readable results to Done.",
+      "Raise the Needs your input flag with exact human blockers (state unchanged), release your claim, and attach readable results to Answered.",
       "Record bounded retry failures without silent loops or untraceable writes.",
     ],
   },

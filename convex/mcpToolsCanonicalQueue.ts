@@ -44,7 +44,7 @@ import {
 
 async function resolveQueueSubject(
   ctx: QueryCtx | MutationCtx,
-  caller: { subject: string | null },
+  caller: { subject: string | null; claims?: Record<string, unknown> },
   householdId: Id<"households">,
   moveId: Id<"moves">,
   action: "queue:read" | "queue:run",
@@ -56,6 +56,9 @@ async function resolveQueueSubject(
     moveId,
     action,
   );
+  const connectionId = action === "queue:read"
+    ? await requireQueueConnection(ctx, policy.actor.userId, caller, moveId, false)
+    : undefined;
   const participant = await ctx.db
     .query("moveParticipants")
     .withIndex("by_move_user", (q) =>
@@ -65,6 +68,7 @@ async function resolveQueueSubject(
   return {
     userId: policy.actor.userId,
     actorType: "agent",
+    connectionId,
     label: "Connected AI",
     isManager: queueManagerRecoveryAllowed({
       actorType: "agent",

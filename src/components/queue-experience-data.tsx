@@ -313,7 +313,9 @@ export function QueueExperience({
       toastSaved("Handoff archived");
       return true;
     } catch (error) {
-      toastError(describeMutationError(error, "Could not cancel the handoff."));
+      toastError(
+        describeMutationError(error, "Could not archive the handoff."),
+      );
       return false;
     }
   }

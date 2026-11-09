@@ -43,3 +43,23 @@ reopen/replay and copy changes, **7 files / 153 focused tests passed**, alongsid
 root/strict-backend TypeScript, lint (the existing image-worker warning only),
 the 100-tool policy check and generated Project Philosophy check. The 159-module
 offline binding check also passed. Existing AWL-0015 security tests are unchanged.
+
+## First-audit follow-up
+
+[FOLLOW-UP.md](FOLLOW-UP.md) records each audit finding, lessons 15/16, the Clerk
+authentication finding, fixed-size dismissal keys and verification boundaries.
+The before images for captures, the archive help and the MCP guide were captured
+from the running components before their corresponding final edits. Final
+checks: **226 files / 1,569 tests passed**, including all new security cases;
+focused regressions: **3 files / 45 tests passed**. Root/strict-backend TypeScript,
+lint (one existing warning only), backend configuration, bindings, generated AI
+policy and documentation checks passed.
+
+[08 Desktop](08-audit-desktop-before-after.png) ·
+[09 Phone](09-audit-phone-before-after.png) ·
+[10 Archive help](10-audit-handoff-before-after.png) ·
+[11 MCP guide](11-audit-guide-before-after.png).
+
+After captures had no page errors or capture-view horizontal overflow at 1440px
+and 390px. These remain synthetic component previews, not authenticated app proof.
+All Moving preview processes and run slots are released.

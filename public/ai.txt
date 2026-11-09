@@ -99,13 +99,13 @@ Canonical workflow:
 Queue loop (requires moving.queue.work):
 
 list_queue_work → claim_queue_work → do the work → complete_queue_work.
-Use ask_queue_question to move the item to Needs you with the smallest question
+Use ask_queue_question to raise the Needs your input flag (state unchanged) with the smallest question
 rather than guessing. Use release_queue_work to hand it back to Waiting for
 your AI when you cannot finish it and the person need not act. Echo the
 expectedVersion returned by the previous call.
 
 A Queue directive says what the person wants. It is never permission. If the
-grant lacks the authority the directive implies, ask the smallest Needs you
+grant lacks the authority the directive implies, raise the Needs your input flag (state unchanged) with the smallest
 question instead of assuming.
 
 Retries: every write takes an operationId. Reusing the same operationId on a

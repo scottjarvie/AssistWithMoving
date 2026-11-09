@@ -20,11 +20,11 @@ import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
  *    never from the Queue text and never from the OAuth token;
  *  - the household is derived from the move, so a client naming a `moveId` can
  *    never name someone else's tenant along with it;
- *  - the four person-facing states stay exactly as they are — Needs you,
- *    Working, Waiting for your AI, Done. Leases and retries stay operational
+ *  - the three lifecycle states are Waiting on AI, AI working and Answered;
+ *    Needs your input is an independent flag. Leases and retries stay operational
  *    details the person never has to learn.
  *
- * A missing grant does not become a Needs you question here, because that would
+ * A missing grant does not become a Needs your input flag here, because that would
  * let an AI create work for a person out of a permission failure. The refusal
  * goes back to the AI with the smallest exact thing to ask for.
  */
@@ -153,7 +153,7 @@ const commandArgs = {
  * The work actually waiting for this AI.
  *
  * "Actionable" means Waiting for your AI — accepted by the person, not
- * currently being run by anyone. Items in Needs you are waiting on the person
+ * currently being run by anyone. Items flagged Needs your input are waiting on the person
  * and are deliberately absent: an AI seeing them would be tempted to answer a
  * question the person was asked.
  */
@@ -264,7 +264,7 @@ export const listQueueWork = internalQuery({
       next: actionable.length
         ? "Claim one handoff, do the work, then save it with save_complete_result and complete_queue_work."
         : "Nothing is waiting for your AI on this move right now.",
-      note: "Needs you items are waiting on the person and are not listed here.",
+      note: "Items flagged Needs your input are waiting on the person and are not listed here.",
     };
   },
 });

@@ -423,7 +423,7 @@ The five scopes and their boundaries:
   estimates, plan sections, source checks, and one complete reviewed result. It
   does not claim or complete Queue handoffs, archive, manage people, export, or
   share.
-- `moving.queue.work` — list, claim, release, ask the smallest Needs you
+- `moving.queue.work` — list, claim, release, raise the Needs your input flag (state unchanged) with the smallest
   question, and complete the handoffs the person left waiting. It never widens
   what may be read or written.
 - `moving.archive` — reversible archive and restore for belongings, boxes,
@@ -459,7 +459,7 @@ How to work this door:
    https://movingmanifest.com/settings/ai. Reconnecting never removes limits.
 
 Queue loop (requires `moving.queue.work`): `list_queue_work` →
-`claim_queue_work` → `ask_queue_question` (smallest Needs you question) or
+`claim_queue_work` → `ask_queue_question` (smallest question, raising the Needs your input flag (state unchanged)) or
 `release_queue_work` (hand it back without pretending it is finished) →
 `complete_queue_work`. Echo the `expectedVersion` from the previous call. A
 Queue directive says what the person wants; it is never permission. If the grant

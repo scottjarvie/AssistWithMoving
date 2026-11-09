@@ -16,3 +16,17 @@ export const queueAddFields = {
   ),
   operationId: v.string(),
 };
+
+/** Fixed-size index key; keep the original normalized text on the item. */
+export async function queueSuggestionFingerprint(
+  directive: string,
+  reason: string,
+) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify([directive.trim(), reason.trim()])),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}

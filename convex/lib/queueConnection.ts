@@ -1,6 +1,6 @@
 import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
   accessState,
   connectionAccess,
@@ -10,9 +10,9 @@ import {
   readConnection,
 } from "./carriedAccess";
 import { oauthClientIdFromClaims } from "./mcpClientIdentity";
-/** The persisted legacy gateway's grant is rechecked in the writing transaction. */
+/** Recheck the persisted gateway's current grant before reads or writes. */
 export async function requireQueueConnection(
-  ctx: MutationCtx,
+  ctx: MutationCtx | QueryCtx,
   userId: Id<"users">,
   caller: { claims?: Record<string, unknown> },
   moveId: Id<"moves">,
@@ -33,7 +33,7 @@ export async function requireQueueConnection(
     (access.moveIds && !access.moveIds.includes(moveId))
   )
     throw new ConvexError(
-      "This connection cannot add Queue work on this move.",
+      "This connection cannot access Queue work on this move.",
     );
   if (suggest && !scopes.includes("moving.suggestions.propose"))
     throw new ConvexError(

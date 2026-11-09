@@ -71,7 +71,7 @@ async function resolveWebQueueActor(
   moveId: Id<"moves">,
   action: "queue:read" | "queue:write",
 ): Promise<QueueAccessActor> {
-  if (action === "queue:write") await requirePersonConnectionManagement(ctx);
+  await requirePersonConnectionManagement(ctx);
   const policy = await requireMovePermission(ctx, householdId, moveId, action);
   if (policy.actor.type !== "user") {
     throw new ConvexError("Queue web functions require a signed-in user.");
@@ -902,10 +902,25 @@ export const counts = query({
         q.eq("moveId", args.moveId).eq("ownerUserId", actor.userId),
       )
       .collect();
-    const captures = await ctx.db
-      .query("ingestionQueueEntries")
-      .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
-      .collect();
+    const captures = (
+      await Promise.all([
+        ctx.db
+          .query("ingestionQueueEntries")
+          .withIndex("by_move_owner_status", (q) =>
+            q.eq("moveId", args.moveId).eq("ownerUserId", actor.userId),
+          )
+          .collect(),
+        ctx.db
+          .query("ingestionQueueEntries")
+          .withIndex("by_move_creator_owner_status", (q) =>
+            q
+              .eq("moveId", args.moveId)
+              .eq("createdByUserId", actor.userId)
+              .eq("ownerUserId", undefined),
+          )
+          .collect(),
+      ])
+    ).flat();
     const work = rows.filter(queueIsWork);
     const now = Date.now();
     const totals = {

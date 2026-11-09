@@ -1,3 +1,5 @@
+import { oauthClientIdFromClaims } from "./lib/mcpClientIdentity";
+import { oauthIdentity } from "./lib/carriedAccess";
 import { captureNeedsInput, captureReachFilter } from "./lib/queue";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 // OAuth MCP gateway tools for the capture queue — the agent loop INTO inventory.
@@ -395,6 +397,9 @@ export const claimQueue = aiMutation({
       await ctx.db.patch(entry._id, {
         status: "claimed",
         claimedByUserId: userId,
+        claimedByConnectionId: oauthClientIdFromClaims(args.caller.claims)
+          ? oauthIdentity(oauthClientIdFromClaims(args.caller.claims)!)
+          : undefined,
         claimedByApiKeyId: undefined,
         claimedByAgentLabel: args.agentLabel?.trim() || undefined,
         claimedAt: now,
@@ -492,6 +497,29 @@ export const submitQueueResult = aiMutation({
       );
     const now = Date.now();
     const question = args.needsInputQuestion?.trim();
+    if (entry.status === "resolved" || entry.status === "discarded")
+      throw new ConvexError(
+        "Resolved or discarded captures cannot receive AI results or questions.",
+      );
+    const callerClientId = oauthClientIdFromClaims(args.caller.claims);
+    const callerConnection = callerClientId
+      ? oauthIdentity(callerClientId)
+      : undefined;
+    const hasClaim =
+      entry.claimedByUserId !== undefined ||
+      entry.claimedByApiKeyId !== undefined ||
+      entry.claimedByConnectionId !== undefined;
+    if (
+      hasClaim &&
+      (entry.claimedByApiKeyId ||
+        entry.claimedByUserId !== userId ||
+        (entry.claimedByConnectionId !== undefined
+          ? entry.claimedByConnectionId !== callerConnection
+          : callerClientId !== undefined))
+    )
+      throw new ConvexError(
+        "This capture is claimed by another AI. Do not replace its claim.",
+      );
     const nextStatus: IngestionQueueStatus = question
       ? entry.status
       : "processed";
@@ -556,6 +584,7 @@ export const submitQueueResult = aiMutation({
             needsInputBy: entry.claimedByAgentLabel ?? "Connected AI",
             claimedByUserId: undefined,
             claimedByApiKeyId: undefined,
+            claimedByConnectionId: undefined,
             claimedByAgentLabel: undefined,
             claimedAt: undefined,
             claimExpiresAt: undefined,

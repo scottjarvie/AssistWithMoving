@@ -51,6 +51,7 @@ async function requireUserActor(
   moveId: Id<"moves">,
   action: "inventory:read" | "inventory:edit",
 ) {
+  await requirePersonConnectionManagement(ctx);
   const { actor } = await requireMovePermission(
     ctx,
     householdId,
@@ -72,7 +73,7 @@ async function resolveQueueActor(
   moveId: Id<"moves">,
   action: "inventory:read" | "inventory:edit",
 ) {
-  if (action === "inventory:edit") await requirePersonConnectionManagement(ctx);
+  await requirePersonConnectionManagement(ctx);
   const policy = await requireMovePermission(ctx, householdId, moveId, action);
   if (policy.actor.type !== "user") {
     throw new Error(directConvexUserContextRequiredMessage);
@@ -764,7 +765,13 @@ export const setEntryStatus = mutation({
     const entry = await requireEntry(ctx, args);
     requireCanActOnEntry(actor, entry);
     const now = Date.now();
-    await transitionEntry(ctx, entry, args.status, now);
+    if (
+      !(
+        captureNeedsInput(entry) &&
+        (args.status === "resolved" || args.status === "discarded")
+      )
+    )
+      await transitionEntry(ctx, entry, args.status, now);
     await ctx.db.patch(entry._id, {
       needsInput: false,
       needsInputAt: undefined,
@@ -774,15 +781,12 @@ export const setEntryStatus = mutation({
 
     await ctx.db.patch(args.entryId, {
       status: args.status,
-      ...(args.status === "queued"
-        ? {
-            claimedByUserId: undefined,
-            claimedByApiKeyId: undefined,
-            claimedByAgentLabel: undefined,
-            claimedAt: undefined,
-            claimExpiresAt: undefined,
-          }
-        : {}),
+      claimedByUserId: undefined,
+      claimedByApiKeyId: undefined,
+      claimedByConnectionId: undefined,
+      claimedByAgentLabel: undefined,
+      claimedAt: undefined,
+      claimExpiresAt: undefined,
       ...(args.status === "resolved" ? { resolvedAt: now } : {}),
       updatedAt: now,
     });
@@ -942,6 +946,7 @@ export const claimNext = mutation({
         status: "claimed",
         claimedByUserId: actor.userId,
         claimedByApiKeyId: undefined,
+        claimedByConnectionId: undefined,
         claimedByAgentLabel: args.agentLabel?.trim() || undefined,
         claimedAt: now,
         claimExpiresAt: now + ingestionClaimDurationMs,
@@ -1057,6 +1062,7 @@ export const submitResult = mutation({
             needsInputBy: "Person",
             claimedByUserId: undefined,
             claimedByApiKeyId: undefined,
+            claimedByConnectionId: undefined,
             claimedByAgentLabel: undefined,
             claimedAt: undefined,
             claimExpiresAt: undefined,

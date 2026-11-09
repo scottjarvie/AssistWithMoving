@@ -73,12 +73,11 @@ a capability is missing). Three code surfaces serve four public doors: `/mcp`,
 1. **Canonical stateless OAuth** — `convex/httpRoutes/mcp.ts` +
    `convex/mcpPlanning.ts` + `convex/mcpQueueWork.ts`, served at
    `movingmanifest.com/mcp`. Its catalog is the exact
-   `STATELESS_MOVING_TOOL_NAMES` array in `convex/httpRoutes/mcp.ts` — nineteen
-   workflow-level tools covering a durable move brief, bounded
+   `STATELESS_MOVING_TOOL_NAMES` array in `convex/httpRoutes/mcp.ts` — workflow-level tools covering a durable move brief, bounded
    search/read/media, move context, inventory, planning records,
    complete-result saves, the full Queue loop (list, claim, release, ask the
-   smallest Needs you question, complete), and reversible archive. Each tool is
-   gated by one of the five product grant scopes in `convex/lib/aiGrants.ts`, so
+   smallest question, raising the Needs your input flag (state unchanged), complete), and reversible archive. Each tool is
+   gated by product grant scopes in `convex/lib/aiGrants.ts`, so
    a connection is only shown what the person approved. Never retype this count;
    `tests/unit/mcp-doc-tool-catalog.test.ts` derives it from source.
 2. **Legacy persisted OAuth** — `convex/mcp.ts` + `convex/mcpTools*.ts`, served

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import type { FunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { api, internal } from "../../convex/_generated/api";
@@ -68,6 +69,7 @@ async function fixture() {
   await t.mutation(internal.aiGrants.touchLegacyConnection, {
     subject,
     clientId,
+    clientName: "Synthetic AI",
   });
   const human: QueueAccessActor = {
     userId: ids.userId,
@@ -754,6 +756,23 @@ it("canonical MCP protocol refuses a claim and omitted addedBy through its actua
     nextStep: "Not accepted",
   });
   expect(JSON.stringify(rejected)).toMatch(/unaccepted/);
+  await f.add("ai_suggestion", "cursor-second");
+  const firstPage = (
+    await call("list_queue_suggestions", { moveId: f.moveId, limit: 1 })
+  ).result.structuredContent;
+  expect(firstPage.items).toHaveLength(1);
+  expect(firstPage.nextCursor).not.toBeNull();
+  const secondPage = (
+    await call("list_queue_suggestions", {
+      moveId: f.moveId,
+      limit: 1,
+      cursor: firstPage.nextCursor,
+    })
+  ).result.structuredContent;
+  expect(secondPage.items).toHaveLength(1);
+  expect(secondPage.items[0].queueItemId).not.toBe(
+    firstPage.items[0].queueItemId,
+  );
   const missing = await call("add_queue_item", {
     moveId: f.moveId,
     directive: "Unclassified",
@@ -831,6 +850,65 @@ it("keeps suggestions private from another household manager and validates From 
       idempotencyKey: "manager-cancel",
     }),
   ).rejects.toThrow(/private/);
+  const work = await f.add("ai_on_request", "manager-archive-work");
+  const archiveArgs = {
+    householdId: f.householdId,
+    moveId: f.moveId,
+    queueItemId: work.queueItemId,
+    action: "archive" as const,
+    expectedVersion: work.version,
+    operationId: "manager-archive",
+  };
+  const archived = await manager.mutation(
+    api.queue.reviewSuggestion,
+    archiveArgs,
+  );
+  expect(archived.archivedAt).toBeTypeOf("number");
+  expect(archived.state).toBe(work.state);
+  expect(
+    (await manager.mutation(api.queue.reviewSuggestion, archiveArgs)).version,
+  ).toBe(archived.version);
+  await expect(
+    manager.mutation(api.queue.reviewSuggestion, {
+      ...archiveArgs,
+      queueItemId: idea.queueItemId,
+      expectedVersion: idea.version,
+      operationId: "manager-open-suggestion",
+    }),
+  ).rejects.toThrow(/owner/);
+  const sharedSpace = await f.t.run((ctx) =>
+    ctx.db.insert("moveSpaces", {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      kind: "originRoom",
+      name: "Partner's room",
+      capacity: {},
+      aliases: [],
+      sortOrder: 1,
+      status: "active",
+      createdByUserId: other,
+      createdAt: 1,
+      updatedAt: 1,
+    }),
+  );
+  const shared = await f.t.mutation(internal.mcpQueueWork.addQueueItem, {
+    principal: f.principal,
+    moveId: f.moveId,
+    directive: "Shared room context",
+    addedBy: "ai_on_request",
+    fromRecord: { type: "space", id: sharedSpace },
+    operationId: "shared-space",
+  });
+  expect(shared.fromRecord?.id).toBe(sharedSpace);
+  expect(
+    (
+      await f.person.query(api.queue.get, {
+        householdId: f.householdId,
+        moveId: f.moveId,
+        queueItemId: shared.queueItemId,
+      })
+    ).fromRecord?.id,
+  ).toBe(sharedSpace);
   const source = await f.t.run(async (ctx) => {
     const row = (await ctx.db.get(idea.queueItemId))!;
     const { _id, _creationTime, ...fields } = row;
@@ -1276,6 +1354,7 @@ it("legacy capture questions keep state, clear leases, and cannot be cleared by 
       createdAt: 1,
       updatedAt: 1,
       claimedByUserId: f.userId,
+      claimedByConnectionId: `oauth:${clientId}`,
       claimExpiresAt: Date.now() + 60000,
     }),
   );
@@ -1322,4 +1401,680 @@ it("legacy capture questions keep state, clear leases, and cannot be cleared by 
   const answered = await f.t.run((ctx) => ctx.db.get(entryId));
   expect(answered?.status).toBe("claimed");
   expect(answered?.needsInput).toBe(false);
+});
+
+describe("AWL-0016 audit follow-up", () => {
+  it("rejects questions on another connection's claim and on closed captures, without changing their data", async () => {
+    const f = await fixture();
+    const caller = { subject, claims: { azp: clientId } };
+    const makeCapture = (
+      fields: Partial<
+        import("../../convex/_generated/dataModel").Doc<"ingestionQueueEntries">
+      > = {},
+    ) =>
+      f.t.run((ctx) =>
+        ctx.db.insert("ingestionQueueEntries", {
+          householdId: f.householdId,
+          moveId: f.moveId,
+          ownerUserId: f.userId,
+          createdByUserId: f.userId,
+          status: "queued",
+          mediaPhotoIds: [],
+          sortOrder: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          ...fields,
+        }),
+      );
+    const otherUserId = await f.t.run(async (ctx) => {
+      const row = (await ctx.db.get(f.userId))!;
+      const { _id, _creationTime, ...fields } = row;
+      void _id;
+      void _creationTime;
+      return ctx.db.insert("users", {
+        ...fields,
+        clerkUserId: "SYNTHETIC-other-claimer",
+      });
+    });
+    for (const fields of [
+      {
+        status: "claimed" as const,
+        claimedByUserId: otherUserId,
+        claimedByConnectionId: `oauth:${clientId}`,
+        claimExpiresAt: Date.now() + 60000,
+      },
+
+      {
+        status: "claimed" as const,
+        claimedByUserId: f.userId,
+        claimedByConnectionId: "oauth:other-ai",
+        claimExpiresAt: Date.now() + 60000,
+      },
+      {
+        status: "claimed" as const,
+        claimedByUserId: f.userId,
+        claimedByConnectionId: "oauth:other-ai",
+        claimExpiresAt: 1,
+      },
+      { status: "resolved" as const },
+      { status: "discarded" as const },
+    ]) {
+      const entryId = await makeCapture(fields);
+      const before = await f.t.run((ctx) => ctx.db.get(entryId));
+      await expect(
+        f.t.mutation(internal.mcpToolsQueue.submitQueueResult, {
+          caller,
+          householdId: f.householdId,
+          moveId: f.moveId,
+          entryId,
+          needsInputQuestion: "Which room?",
+        }),
+      ).rejects.toThrow(/another AI|Resolved or discarded/);
+      expect(await f.t.run((ctx) => ctx.db.get(entryId))).toEqual(before);
+    }
+    const entryId = await makeCapture();
+    const claimed = await f.t.mutation(internal.mcpToolsQueue.claimQueue, {
+      caller,
+      householdId: f.householdId,
+      moveId: f.moveId,
+      batchSize: 1,
+      agentLabel: "Named AI",
+    });
+    expect(JSON.stringify(claimed)).toContain(entryId);
+    const asked = await f.t.mutation(internal.mcpToolsQueue.submitQueueResult, {
+      caller,
+      householdId: f.householdId,
+      moveId: f.moveId,
+      entryId,
+      needsInputQuestion: "Which room?",
+    });
+    expect(asked.needsInput).toBe(true);
+    expect(
+      (await f.t.run((ctx) => ctx.db.get(entryId)))?.claimedByConnectionId,
+    ).toBeUndefined();
+    await f.person.mutation(api.ingestionQueue.setEntryStatus, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      entryId,
+      status: "resolved",
+    });
+    expect((await f.t.run((ctx) => ctx.db.get(entryId)))?.needsInput).toBe(
+      false,
+    );
+    const discardId = await makeCapture({
+      status: "claimed",
+      needsInput: true,
+      agentQuestion: "Which room?",
+    });
+    await f.person.mutation(api.ingestionQueue.setEntryStatus, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      entryId: discardId,
+      status: "discarded",
+    });
+    expect((await f.t.run((ctx) => ctx.db.get(discardId)))?.status).toBe(
+      "discarded",
+    );
+  });
+  it("includes flagged Answered work and personal captures in the move brief", async () => {
+    const f = await fixture();
+    const done = await f.add("ai_on_request");
+    const entryId = await f.t.run(async (ctx) => {
+      await ctx.db.patch(done.queueItemId, {
+        state: "done",
+        needsInput: true,
+        requiredAction: "Share this?",
+      });
+      return ctx.db.insert("ingestionQueueEntries", {
+        householdId: f.householdId,
+        moveId: f.moveId,
+        createdByUserId: f.userId,
+        status: "claimed",
+        needsInput: true,
+        agentQuestion: "Which room?",
+        mediaPhotoIds: [],
+        sortOrder: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+    });
+    const brief = await f.t.query(internal.mcpPlanning.getMoveBrief, {
+      principal: f.principal,
+      moveId: f.moveId,
+    });
+    expect(JSON.stringify(brief.queue?.needsInput)).toContain(done.queueItemId);
+    expect(JSON.stringify(brief.queue?.needsInput)).toContain(entryId);
+    expect(JSON.stringify(brief.queue?.needsInput)).toContain("Which room?");
+  });
+  it("uses a normalized fixed-size dismissal key even for maximum multibyte text", async () => {
+    const f = await fixture();
+    const { queueSuggestionFingerprint } =
+      await import("../../convex/lib/queueSuggestions");
+    const directive = "界".repeat(4000),
+      reason = "由".repeat(4000);
+    const fingerprint = await queueSuggestionFingerprint(directive, reason);
+    expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(
+      await queueSuggestionFingerprint(` ${directive} `, ` ${reason} `),
+    ).toBe(fingerprint);
+    expect(
+      await queueSuggestionFingerprint(directive, reason + "different"),
+    ).not.toBe(fingerprint);
+    const idea = await f.t.mutation(internal.mcpQueueWork.addQueueItem, {
+      principal: f.principal,
+      moveId: f.moveId,
+      directive,
+      reason,
+      addedBy: "ai_suggestion",
+      operationId: "long-idea",
+    });
+    expect(
+      (await f.t.run((ctx) => ctx.db.get(idea.queueItemId)))
+        ?.suggestionFingerprint,
+    ).toBe(fingerprint);
+    await f.person.mutation(api.queue.reviewSuggestion, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      queueItemId: idea.queueItemId,
+      expectedVersion: idea.version,
+      action: "dismiss",
+      operationId: "long-dismiss",
+    });
+    await expect(
+      f.t.mutation(internal.mcpQueueWork.addQueueItem, {
+        principal: f.principal,
+        moveId: f.moveId,
+        directive,
+        reason,
+        addedBy: "ai_suggestion",
+        operationId: "long-repeat",
+      }),
+    ).rejects.toThrow(/new reason/);
+  });
+});
+
+it("refuses disabled Propose suggestions on legacy, capture-tool and API-key doors while requests still work", async () => {
+  const f = await fixture();
+  const caller = { subject, claims: { azp: clientId } };
+  const named = await f.t.mutation(internal.mcpToolsWrite.captureToQueue, {
+    caller,
+    householdId: f.householdId,
+    moveId: f.moveId,
+    entries: [{ instructions: "A named work idea" }],
+    addedBy: "ai_suggestion",
+    reason: "A useful follow-up",
+    operationId: "named-capture",
+  });
+  expect(
+    (
+      await f.t.run((ctx) =>
+        ctx.db.get(
+          named
+            .entryIds[0] as import("../../convex/_generated/dataModel").Id<"queueItems">,
+        ),
+      )
+    )?.addedByLabel,
+  ).toBe("Synthetic AI");
+  const state = await f.t.query(internal.aiGrants.describeConnection, {
+    subject,
+    clientId,
+  });
+  await f.t.mutation(internal.aiGrants.reduceConnection, {
+    subject,
+    clientId,
+    expectedVersion: state.version!,
+    opId: "remove-propose-all-doors",
+    scopes: movingScopes.filter(
+      (scope) => scope !== "moving.suggestions.propose",
+    ),
+  });
+  const base = { caller, householdId: f.householdId, moveId: f.moveId };
+  await expect(
+    f.t.mutation(internal.mcpToolsCanonicalQueue.addQueueItem, {
+      ...base,
+      directive: "Own idea",
+      addedBy: "ai_suggestion",
+      reason: "My idea",
+      operationId: "legacy-no-propose",
+    }),
+  ).rejects.toThrow(/Propose suggestions/);
+  expect(
+    (
+      await f.t.mutation(internal.mcpToolsCanonicalQueue.addQueueItem, {
+        ...base,
+        directive: "Requested",
+        addedBy: "ai_on_request",
+        operationId: "legacy-request",
+      })
+    ).addedBy,
+  ).toBe("ai_on_request");
+  await expect(
+    f.t.mutation(internal.mcpToolsWrite.captureToQueue, {
+      ...base,
+      entries: [{ instructions: "Own idea" }],
+      addedBy: "ai_suggestion",
+      reason: "My idea",
+      operationId: "capture-no-propose",
+    }),
+  ).rejects.toThrow(/Propose suggestions/);
+  expect(
+    (
+      await f.t.mutation(internal.mcpToolsWrite.captureToQueue, {
+        ...base,
+        entries: [{ instructions: "Requested" }],
+        addedBy: "ai_on_request",
+        operationId: "capture-request",
+      })
+    ).entryIds,
+  ).toHaveLength(1);
+  const raw = "mmk_SYNTHETICAWL16_audit_no_propose";
+  const { apiKeyScopes } = await import("../../convex/lib/apiKeys");
+  await f.t.run(async (ctx) => {
+    await ctx.db.insert("apiKeys", {
+      householdId: f.householdId,
+      name: "No proposals",
+      prefix: apiKeyPrefix(raw),
+      tokenPreview: "synthetic",
+      secretHash: await hashApiKey(raw),
+      scopes: apiKeyScopes.filter((scope) => scope !== "queue/suggest"),
+      withheldScopes: ["queue/suggest"],
+      scopeChoice: "chosen",
+      status: "active",
+      createdByUserId: f.userId,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+  });
+  const rest = (addedBy: "ai_on_request" | "ai_suggestion") =>
+    f.t.mutation(internal.restApi.handle, {
+      method: "POST",
+      path: `moves/${f.moveId}/queue`,
+      query: {},
+      authorization: `Bearer ${raw}`,
+      idempotencyKey: `key-${addedBy}`,
+      body: { directive: "Key work", addedBy, reason: "Key idea" },
+    });
+  const refused = await rest("ai_suggestion");
+  expect(refused.status).toBeGreaterThanOrEqual(400);
+  expect(JSON.stringify(refused)).toMatch(/Propose suggestions|queue\/suggest/);
+  expect((await rest("ai_on_request")).status).toBeLessThan(300);
+});
+
+it("lesson 15: narrowed move reach applies before suggestion reads, history and counts for every lifecycle", async () => {
+  const f = await fixture();
+  const otherMove = await f.t.run(async (ctx) => {
+    const original = (await ctx.db.get(f.moveId))!;
+    const { _id, _creationTime, ...fields } = original;
+    void _id;
+    void _creationTime;
+    return ctx.db.insert("moves", {
+      ...fields,
+      title: "SYNTHETIC unreachable move",
+    });
+  });
+  const groups = [];
+  for (const moveId of [f.moveId, otherMove]) {
+    const rows = [];
+    for (const status of [
+      "open",
+      "dismissed",
+      "withdrawn",
+      "accepted",
+    ] as const) {
+      const idea = await f.t.mutation(internal.mcpQueueWork.addQueueItem, {
+        principal: f.principal,
+        moveId,
+        directive: `${moveId}:${status}`,
+        addedBy: "ai_suggestion",
+        reason: `Private reason ${moveId}:${status}`,
+        operationId: `reach-${moveId}-${status}`,
+      });
+      if (status === "withdrawn")
+        await f.t.mutation(internal.mcpQueueWork.withdrawSuggestion, {
+          principal: f.principal,
+          moveId,
+          queueItemId: idea.queueItemId,
+          expectedVersion: idea.version,
+          operationId: `withdraw-${moveId}`,
+        });
+      else if (status !== "open")
+        await f.person.mutation(api.queue.reviewSuggestion, {
+          householdId: f.householdId,
+          moveId,
+          queueItemId: idea.queueItemId,
+          expectedVersion: idea.version,
+          action: status === "accepted" ? "accept" : "dismiss",
+          operationId: `person-${moveId}-${status}`,
+          reason: `Private dismissal ${moveId}`,
+        });
+      rows.push({ id: idea.queueItemId, status });
+    }
+    groups.push({ moveId, rows });
+  }
+  const grant = await f.t.query(internal.aiGrants.describeConnection, {
+    subject,
+    clientId,
+  });
+  await f.t.mutation(internal.aiGrants.reduceConnection, {
+    subject,
+    clientId,
+    expectedVersion: grant.version!,
+    opId: "one-move-reach",
+    moveIds: [f.moveId],
+  });
+  const caller = { subject, claims: { azp: clientId } };
+  for (const archived of [false, true]) {
+    const expected = archived ? ["dismissed", "withdrawn"] : ["open"];
+    const canonical = await f.t.query(internal.mcpQueueWork.listSuggestions, {
+      principal: f.principal,
+      moveId: f.moveId,
+      archived,
+      limit: 1,
+    });
+    expect(canonical.count).toBe(1);
+    expect(expected).toContain(canonical.items[0].suggestionStatus);
+    if (archived) {
+      expect(canonical.nextCursor).not.toBeNull();
+      expect(
+        (
+          await f.t.query(internal.mcpQueueWork.listSuggestions, {
+            principal: f.principal,
+            moveId: f.moveId,
+            archived,
+            limit: 1,
+            cursor: canonical.nextCursor!,
+          })
+        ).items[0].queueItemId,
+      ).not.toBe(canonical.items[0].queueItemId);
+    }
+    await expect(
+      f.t.query(internal.mcpQueueWork.listSuggestions, {
+        principal: f.principal,
+        moveId: otherMove,
+        archived,
+        limit: 1,
+      }),
+    ).rejects.toThrow(/move|power/);
+    const legacy = await f.t.query(
+      internal.mcpToolsCanonicalQueue.listSuggestions,
+      {
+        caller,
+        householdId: f.householdId,
+        moveId: f.moveId,
+        archived,
+        limit: 1,
+      },
+    );
+    expect(legacy.count).toBe(1);
+    expect(expected).toContain(legacy.items[0].suggestionStatus);
+    await expect(
+      f.t.query(internal.mcpToolsCanonicalQueue.listSuggestions, {
+        caller,
+        householdId: f.householdId,
+        moveId: otherMove,
+        archived,
+        limit: 1,
+      }),
+    ).rejects.toThrow(/connection|move/);
+  }
+  for (const { id } of groups[0].rows) {
+    expect(
+      (
+        await f.t.query(internal.mcpToolsCanonicalQueue.getQueueItem, {
+          caller,
+          householdId: f.householdId,
+          moveId: f.moveId,
+          queueItemId: id,
+        })
+      ).item.queueItemId,
+    ).toBe(id);
+  }
+  for (const { id } of groups[1].rows) {
+    await expect(
+      f.t.query(internal.mcpToolsCanonicalQueue.getQueueItem, {
+        caller,
+        householdId: f.householdId,
+        moveId: otherMove,
+        queueItemId: id,
+      }),
+    ).rejects.toThrow(/connection|move/);
+    await expect(
+      f.t.query(internal.mcpToolsCanonicalQueue.getQueueItem, {
+        caller,
+        householdId: f.householdId,
+        moveId: f.moveId,
+        queueItemId: id,
+      }),
+    ).rejects.toThrow(/not found|move/i);
+  }
+  const accepted = groups[0].rows.find((row) => row.status === "accepted")!;
+  expect(
+    JSON.stringify(
+      await f.t.query(internal.mcpQueueWork.listQueueWork, {
+        principal: f.principal,
+        moveId: f.moveId,
+      }),
+    ),
+  ).toContain(accepted.id);
+  await expect(
+    f.t.query(internal.mcpQueueWork.listQueueWork, {
+      principal: f.principal,
+      moveId: otherMove,
+    }),
+  ).rejects.toThrow(/move|power/);
+  const hiddenOpen = groups[1].rows.find((row) => row.status === "open")!;
+  await expect(
+    f.t.mutation(internal.mcpQueueWork.withdrawSuggestion, {
+      principal: f.principal,
+      moveId: otherMove,
+      queueItemId: hiddenOpen.id,
+      expectedVersion: 1,
+      operationId: "denied-foreign-withdraw",
+    }),
+  ).rejects.toThrow(/move|power/);
+  await expect(
+    f.t.mutation(internal.mcpToolsCanonicalQueue.withdrawSuggestion, {
+      caller,
+      householdId: f.householdId,
+      moveId: otherMove,
+      queueItemId: hiddenOpen.id,
+      expectedVersion: 1,
+      idempotencyKey: "denied-legacy-withdraw",
+    }),
+  ).rejects.toThrow(/connection|move/);
+  expect(
+    (
+      await f.person.query(api.queue.suggestionView, {
+        householdId: f.householdId,
+        moveId: otherMove,
+      })
+    ).count,
+  ).toBe(1);
+  const raw = "mmk_SYNTHETICAWL16_one_move_reach";
+  const { apiKeyScopes } = await import("../../convex/lib/apiKeys");
+  await f.t.run(async (ctx) => {
+    await ctx.db.insert("apiKeys", {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      name: "One move only",
+      prefix: apiKeyPrefix(raw),
+      tokenPreview: "synthetic",
+      secretHash: await hashApiKey(raw),
+      scopes: [...apiKeyScopes],
+      scopeChoice: "full",
+      status: "active",
+      createdByUserId: f.userId,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+  });
+  const rest = (
+    moveId: typeof f.moveId,
+    suffix: string,
+    query: Record<string, string> = {},
+  ) =>
+    f.t.mutation(internal.restApi.handle, {
+      method: "GET",
+      path: `moves/${moveId}/queue${suffix}`,
+      query,
+      authorization: `Bearer ${raw}`,
+    });
+  for (const archived of ["false", "true"]) {
+    const allowed = await rest(f.moveId, "/suggestions", {
+      archived,
+      limit: "1",
+    });
+    expect(allowed.status).toBe(200);
+    expect(JSON.stringify(allowed)).not.toContain(otherMove);
+    const denied = await rest(otherMove, "/suggestions", {
+      archived,
+      limit: "1",
+    });
+    expect(denied.status).toBeGreaterThanOrEqual(400);
+    expect(JSON.stringify(denied)).not.toContain("Private reason");
+  }
+  for (const { id } of groups[0].rows)
+    expect((await rest(f.moveId, `/${id}`)).status).toBe(200);
+  for (const { id } of groups[1].rows)
+    expect((await rest(otherMove, `/${id}`)).status).toBeGreaterThanOrEqual(
+      400,
+    );
+});
+
+it("lesson 16: website Queue and capture operations require person-session proof, even for an active AI with full grants", async () => {
+  const f = await fixture();
+  const idea = await f.add();
+  const work = await f.add("ai_on_request", "person-work");
+  const entryId = await f.t.run((ctx) =>
+    ctx.db.insert("ingestionQueueEntries", {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      createdByUserId: f.userId,
+      ownerUserId: f.userId,
+      status: "queued",
+      mediaPhotoIds: [],
+      sortOrder: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    }),
+  );
+  const base = { householdId: f.householdId, moveId: f.moveId };
+  const { SETTINGS_REFUSAL } =
+    await import("../../convex/lib/connectionReduction");
+  const queries = [
+    [api.queue.listForMove, { paginationOpts: { cursor: null, numItems: 10 } }],
+    [
+      api.queue.listCaptureAdapter,
+      { paginationOpts: { cursor: null, numItems: 10 } },
+    ],
+    [
+      api.queue.listLegacyCaptureAdapter,
+      { ownerUserId: f.userId, paginationOpts: { cursor: null, numItems: 10 } },
+    ],
+    [api.queue.connectionStatus, {}],
+    [api.queue.get, { queueItemId: idea.queueItemId }],
+    [
+      api.queue.listActivity,
+      {
+        queueItemId: idea.queueItemId,
+        paginationOpts: { cursor: null, numItems: 10 },
+      },
+    ],
+    [api.queue.suggestionView, {}],
+    [api.queue.counts, {}],
+    [api.queue.archived, {}],
+    [
+      api.queue.suggestionPage,
+      { paginationOpts: { cursor: null, numItems: 10 } },
+    ],
+    [api.queue.badges, {}],
+    [api.ingestionQueue.listForMove, {}],
+  ] as const;
+  const mutations = [
+    [api.queue.createDirective, { directive: "AI bypass" }],
+    [
+      api.queue.provideInput,
+      { queueItemId: work.queueItemId, response: "AI bypass" },
+    ],
+    [api.queue.cancel, { queueItemId: work.queueItemId, reason: "AI bypass" }],
+    ...(["accept", "dismiss", "restore", "archive"] as const).map(
+      (action) =>
+        [
+          api.queue.reviewSuggestion,
+          {
+            queueItemId: idea.queueItemId,
+            action,
+            expectedVersion: idea.version,
+            operationId: `ai-bypass-${action}`,
+          },
+        ] as const,
+    ),
+    [api.ingestionQueue.createEntry, { instructions: "AI bypass" }],
+    [api.ingestionQueue.updateEntry, { entryId, instructions: "AI bypass" }],
+    [api.ingestionQueue.appendMedia, { entryId, mediaPhotoIds: [] }],
+    [api.ingestionQueue.setMediaUploadState, { entryId, state: "complete" }],
+    [api.ingestionQueue.setEntryStatus, { entryId, status: "discarded" }],
+    [api.ingestionQueue.claimNext, {}],
+    [
+      api.ingestionQueue.submitResult,
+      { entryId, needsInputQuestion: "AI bypass" },
+    ],
+  ] as const;
+  for (const identity of [
+    { subject },
+    { subject, client_id: clientId, tokenType: "oauth" },
+    {
+      subject,
+      sid: "sess_not_a_person",
+      client_id: clientId,
+      tokenType: "oauth",
+    },
+    {
+      subject,
+      azp: "https://synthetic-ai.example.test/client.json",
+      tokenType: "oauth",
+    },
+  ]) {
+    const ai = f.t.withIdentity(identity);
+    for (const [ref, args] of queries)
+      await expect(
+        ai.query(
+          ref as FunctionReference<
+            "query",
+            "public",
+            Record<string, unknown>,
+            unknown
+          >,
+          { ...base, ...args },
+        ),
+      ).rejects.toThrow(SETTINGS_REFUSAL);
+    for (const [ref, args] of mutations)
+      await expect(
+        ai.mutation(
+          ref as FunctionReference<
+            "mutation",
+            "public",
+            Record<string, unknown>,
+            unknown
+          >,
+          { ...base, ...args },
+        ),
+      ).rejects.toThrow(SETTINGS_REFUSAL);
+  }
+  expect((await f.person.query(api.queue.suggestionView, base)).count).toBe(1);
+  expect((await f.person.query(api.queue.badges, base)).suggestions).toBe(1);
+  expect(
+    await f.person.query(api.ingestionQueue.listForMove, base),
+  ).toHaveLength(1);
+  expect(
+    (
+      await f.person.mutation(api.queue.reviewSuggestion, {
+        ...base,
+        queueItemId: idea.queueItemId,
+        expectedVersion: idea.version,
+        action: "accept",
+        operationId: "real-person-accept",
+      })
+    ).suggestionStatus,
+  ).toBe("accepted");
 });

@@ -3,6 +3,7 @@ import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { recordAuditEvent } from "./audit";
+import { queueSuggestionFingerprint } from "./queueSuggestions";
 import {
   assertExpectedQueueVersion,
   assertQueueStateInvariant,
@@ -446,9 +447,8 @@ export async function createQueueItem(
       !record ||
       record.moveId !== input.moveId ||
       record.householdId !== input.householdId ||
-      ("ownerUserId" in record
-        ? record.ownerUserId !== actor.userId
-        : record.createdByUserId !== actor.userId)
+      (table === "queueItems" &&
+        (!("ownerUserId" in record) || record.ownerUserId !== actor.userId))
     ) {
       input.fromRecord = undefined;
     } else
@@ -510,26 +510,28 @@ export async function createQueueItem(
       return existing;
     }
   }
-  if (input.addedBy === "ai_suggestion") {
+  const suggestionFingerprint =
+    input.addedBy === "ai_suggestion"
+      ? await queueSuggestionFingerprint(directive, input.reason ?? "")
+      : undefined;
+  if (suggestionFingerprint) {
     const earlier = await ctx.db
       .query("queueItems")
-      .withIndex("by_move_owner_directive_review_reason", (q) =>
+      .withIndex("by_move_owner_fingerprint_review", (q) =>
         q
           .eq("moveId", input.moveId)
           .eq("ownerUserId", actor.userId)
-          .eq("directive", directive)
-          .eq("suggestionStatus", "dismissed")
-          .eq("suggestionReason", input.reason?.trim()),
+          .eq("suggestionFingerprint", suggestionFingerprint)
+          .eq("suggestionStatus", "dismissed"),
       )
       .first();
     const dismissedBefore = await ctx.db
       .query("queueItems")
-      .withIndex("by_move_owner_directive_dismissed_reason", (q) =>
+      .withIndex("by_move_owner_fingerprint_dismissed", (q) =>
         q
           .eq("moveId", input.moveId)
           .eq("ownerUserId", actor.userId)
-          .eq("directive", directive)
-          .eq("suggestionReason", input.reason?.trim())
+          .eq("suggestionFingerprint", suggestionFingerprint)
           .gt("suggestionDismissedAt", undefined),
       )
       .first();
@@ -565,6 +567,7 @@ export async function createQueueItem(
       actor.connectionId ??
       (actor.apiKeyId ? String(actor.apiKeyId) : undefined),
     suggestionStatus: input.addedBy === "ai_suggestion" ? "open" : undefined,
+    suggestionFingerprint,
     suggestionReason: normalizeQueueText(input.reason, "reason", 4000),
     suggestionOptions: input.options,
     suggestionEvidence: normalizeQueueText(input.evidence, "evidence", 8000),
@@ -1230,7 +1233,12 @@ export async function reviewQueueSuggestion(
       "A nonempty operationId is required for suggestion decisions.",
     );
   const item = await requireQueueItem(ctx, input);
-  if (actor.userId !== item.ownerUserId)
+  const managerArchivingWork =
+    actor.actorType === "user" &&
+    actor.isManager &&
+    input.action === "archive" &&
+    (item.addedBy !== "ai_suggestion" || item.suggestionStatus === "accepted");
+  if (actor.userId !== item.ownerUserId && !managerArchivingWork)
     throw new ConvexError("Only this Queue's owner can decide.");
   if (
     actor.actorType !== "user" &&
@@ -1395,9 +1403,8 @@ export async function shapeQueueItemForRead(
     !record ||
     record.moveId !== item.moveId ||
     record.householdId !== item.householdId ||
-    ("ownerUserId" in record
-      ? record.ownerUserId !== item.ownerUserId
-      : record.createdByUserId !== item.ownerUserId)
+    (table === "queueItems" &&
+      (!("ownerUserId" in record) || record.ownerUserId !== item.ownerUserId))
   )
     return { ...shaped, fromRecord: null, fromRecordHref: null };
   return shaped;

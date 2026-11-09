@@ -694,8 +694,8 @@ function QueueDetailSheet({
                 Archive
               </Button>
               <p className="mt-2 text-xs text-muted-foreground">
-                Canceling records a Done outcome; it does not delete the
-                history.
+                Archiving hides this handoff from the active Queue; it keeps its
+                state and history.
               </p>
             </section>
           ) : null}

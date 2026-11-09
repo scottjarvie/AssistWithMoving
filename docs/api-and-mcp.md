@@ -1886,10 +1886,10 @@ connection never sees a capability nobody approved.
 | `add_queue_item` | `moving.queue.work` | Add requested work or an AI work idea with explicit addedBy and operationId. |
 | `list_queue_suggestions` | `moving.queue.work` | Read private ideas, reasons and decisions. |
 | `withdraw_queue_suggestion` | `moving.queue.work` | Withdraw your own unacted-on idea. |
-| `list_queue_work` | `moving.queue.work` | Return only the handoffs the person left **Waiting for your AI** on one move, each with the version to claim it with. Needs you items wait on the person and are not listed. |
+| `list_queue_work` | `moving.queue.work` | Return only the handoffs the person left **Waiting for your AI** on one move, each with the version to claim it with. Items flagged Needs your input wait on the person and are not listed. |
 | `claim_queue_work` | `moving.queue.work` | Take one waiting handoff under a 15-minute lease so no other AI picks it up. Echo the `expectedVersion` from `list_queue_work`. |
 | `release_queue_work` | `moving.queue.work` | Hand a claimed handoff back to Waiting for your AI with a durable reason, without pretending it is finished. |
-| `ask_queue_question` | `moving.queue.work` | Move a claimed handoff to **Needs you** with one specific smallest question, instead of guessing. |
+| `ask_queue_question` | `moving.queue.work` | Raise the **Needs your input** flag with one specific smallest question (state unchanged), releasing the claim instead of guessing. |
 | `complete_queue_work` | `moving.queue.work` | Mark a claimed handoff **Done** with its result summary and references. |
 | `archive_move_records` | `moving.archive` | Reversibly archive or restore belongings, boxes, rooms, or planning records, with a per-record result. Never permanently deletes. |
 
@@ -1904,10 +1904,11 @@ finished work, prefer `save_complete_result`; use granular saves for later
 corrections.
 
 **Canonical OAuth can work the Queue.** With `moving.queue.work` the loop is
-list → claim → (ask the smallest Needs you question, or release) → complete, and
+list → claim → (ask the smallest question, raising the Needs your input flag (state unchanged), or release) → complete, and
 `save_complete_result` with `completeQueueItem` does the save and the completion
-under one approval (`convex/mcpQueueWork.ts`). The four person-facing states are
-unchanged: **Needs you / Working / Waiting for your AI / Done**.
+under one approval (`convex/mcpQueueWork.ts`). The three lifecycle states are
+**Waiting on AI / AI working / Answered**. **Needs your input** is a flag; raising
+or clearing it leaves the state unchanged.
 
 When a grant stops at `moving.work.write`, a save that names
 `relatedQueueItemId` or asks to complete a handoff still links the result and an

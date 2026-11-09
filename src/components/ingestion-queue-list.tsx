@@ -22,12 +22,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,7 +50,12 @@ type QueueFilter = "todo" | "working" | "review" | "done" | "all";
 // The top-level Queue page filters by lifecycle bucket; each filter doubles as
 // a live stat. queued -> To do, claimed -> Working, processed/needsInput ->
 // Review, resolved/discarded -> Done.
-function queueFilterForStatus(status: string): Exclude<QueueFilter, "all"> {
+function queueFilterForStatus(
+  status: string,
+  needsInput?: boolean,
+): Exclude<QueueFilter, "all"> {
+  if (status !== "resolved" && status !== "discarded" && needsInput)
+    return "review";
   if (status === "queued") return "todo";
   if (status === "claimed") return "working";
   if (status === "processed" || status === "needsInput") return "review";
@@ -135,7 +135,11 @@ function QueueMediaThumbnails({
   );
   const failedJobs = jobs.filter((job) => job.status === "error");
 
-  if (visibleIds.length === 0 && pendingJobs.length === 0 && failedJobs.length === 0) {
+  if (
+    visibleIds.length === 0 &&
+    pendingJobs.length === 0 &&
+    failedJobs.length === 0
+  ) {
     return null;
   }
 
@@ -159,7 +163,11 @@ function QueueMediaThumbnails({
           // B2/edge delivery URLs are short-lived and provider-controlled,
           // so Next image optimization is intentionally bypassed.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="Capture media" className="size-full object-cover" />
+          <img
+            src={url}
+            alt="Capture media"
+            className="size-full object-cover"
+          />
         ) : (
           <div className="flex size-full items-center justify-center text-muted-foreground">
             <ImageOff className={iconClass} aria-hidden="true" />
@@ -218,7 +226,9 @@ function QueueMediaThumbnails({
       className="flex flex-wrap items-start gap-2 md:flex-col"
       aria-label="Capture media"
     >
-      {first ? imageTile(first, "size-14 md:size-56", "size-4 md:size-6") : null}
+      {first
+        ? imageTile(first, "size-14 md:size-56", "size-4 md:size-6")
+        : null}
       {restTiles.length > 0 ? (
         <div className="flex flex-wrap gap-2">{restTiles}</div>
       ) : null}
@@ -259,7 +269,9 @@ const queueTaskTabs: Array<{
   },
 ];
 
-function queueTaskForStatus(status: string): QueueTask {
+function queueTaskForStatus(status: string, needsInput?: boolean): QueueTask {
+  if (status !== "resolved" && status !== "discarded" && needsInput)
+    return "needsAction";
   if (status === "needsInput" || status === "processed") {
     return "needsAction";
   }
@@ -318,9 +330,9 @@ export function IngestionQueueList({
   const [message, setMessage] = useState<string | null>(null);
   // One hidden file input per entry, lazily keyed so the F3 "Add images" button
   // can open the native picker for the entry it belongs to.
-  const addImagesInputRefs = useRef<
-    Map<string, HTMLInputElement | null>
-  >(new Map());
+  const addImagesInputRefs = useRef<Map<string, HTMLInputElement | null>>(
+    new Map(),
+  );
   const [activeTask, setActiveTask] = useState<QueueTask>("needsAction");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("todo");
   // The entry whose detail modal is open (MOVE-356). detailIndex is the 1-based
@@ -338,7 +350,7 @@ export function IngestionQueueList({
   );
   const taskCounts = sorted.reduce<Record<QueueTask, number>>(
     (counts, entry) => {
-      counts[queueTaskForStatus(entry.status)] += 1;
+      counts[queueTaskForStatus(entry.status, entry.needsInput)] += 1;
       return counts;
     },
     { needsAction: 0, working: 0, archive: 0 },
@@ -348,7 +360,13 @@ export function IngestionQueueList({
   // asking a question (waiting for the user's review).
   const statusCounts = sorted.reduce<Record<string, number>>(
     (counts, entry) => {
-      counts[entry.status] = (counts[entry.status] ?? 0) + 1;
+      const status =
+        entry.needsInput &&
+        entry.status !== "resolved" &&
+        entry.status !== "discarded"
+          ? "needsInput"
+          : entry.status;
+      counts[status] = (counts[status] ?? 0) + 1;
       return counts;
     },
     {},
@@ -461,9 +479,7 @@ export function IngestionQueueList({
     enqueue({ entryId: entry._id, householdId, moveId }, accepted);
   }
 
-  async function dismissPendingUpload(
-    entryId: Id<"ingestionQueueEntries">,
-  ) {
+  async function dismissPendingUpload(entryId: Id<"ingestionQueueEntries">) {
     if (!householdId || !moveId) return;
     setBusyEntryId(entryId);
     setMessage(null);
@@ -482,10 +498,7 @@ export function IngestionQueueList({
     }
   }
 
-  function openDetail(
-    entryId: Id<"ingestionQueueEntries">,
-    position: number,
-  ) {
+  function openDetail(entryId: Id<"ingestionQueueEntries">, position: number) {
     setDetailEntryId(entryId);
     setDetailIndex(position);
   }
@@ -507,7 +520,9 @@ export function IngestionQueueList({
       <ul className="space-y-3" aria-label={ariaLabel}>
         {visibleEntries.map((entry, index) => {
           const editable =
-            entry.status === "queued" || entry.status === "needsInput";
+            entry.status === "queued" ||
+            entry.status === "needsInput" ||
+            entry.needsInput === true;
           const busy = busyEntryId === entry._id;
 
           // Combine the server rollup (mediaUploadState, which survives reload)
@@ -582,11 +597,7 @@ export function IngestionQueueList({
                     </Badge>
                   ) : null}
                   {uploading ? (
-                    <Badge
-                      variant="secondary"
-                      role="status"
-                      aria-live="polite"
-                    >
+                    <Badge variant="secondary" role="status" aria-live="polite">
                       <Loader2
                         className="size-3 animate-spin"
                         aria-hidden="true"
@@ -761,7 +772,7 @@ export function IngestionQueueList({
                             variant="outline"
                             disabled={busy}
                             aria-label={
-                              entry.status === "needsInput"
+                              entry.needsInput || entry.status === "needsInput"
                                 ? "Answer & requeue"
                                 : "Edit directions"
                             }
@@ -775,7 +786,7 @@ export function IngestionQueueList({
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {entry.status === "needsInput"
+                        {entry.needsInput || entry.status === "needsInput"
                           ? "Answer & requeue"
                           : "Edit directions"}
                       </TooltipContent>
@@ -792,9 +803,7 @@ export function IngestionQueueList({
                             disabled={busy}
                             aria-label="Add images"
                             onClick={() =>
-                              addImagesInputRefs.current
-                                .get(entry._id)
-                                ?.click()
+                              addImagesInputRefs.current.get(entry._id)?.click()
                             }
                           >
                             <ImagePlus aria-hidden="true" />
@@ -804,7 +813,7 @@ export function IngestionQueueList({
                       <TooltipContent>Add images</TooltipContent>
                     </Tooltip>
                   ) : null}
-                  {entry.status === "processed" ? (
+                  {entry.status === "processed" || entry.needsInput ? (
                     <>
                       <Button
                         type="button"
@@ -852,7 +861,8 @@ export function IngestionQueueList({
                     </Button>
                   ) : null}
                   {entry.status === "queued" ||
-                  entry.status === "needsInput" ? (
+                  entry.status === "needsInput" ||
+                  entry.needsInput ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span>
@@ -907,7 +917,7 @@ export function IngestionQueueList({
 
   function renderEntries(task: QueueTask) {
     const visibleEntries = sorted.filter(
-      (entry) => queueTaskForStatus(entry.status) === task,
+      (entry) => queueTaskForStatus(entry.status, entry.needsInput) === task,
     );
     const emptyMessage =
       task === "needsAction"
@@ -940,7 +950,9 @@ export function IngestionQueueList({
     queueFilter === "all"
       ? sorted
       : sorted.filter(
-          (entry) => queueFilterForStatus(entry.status) === queueFilter,
+          (entry) =>
+            queueFilterForStatus(entry.status, entry.needsInput) ===
+            queueFilter,
         );
   const activeQueueFilter =
     queueFilters.find((filter) => filter.value === queueFilter) ??
@@ -950,7 +962,9 @@ export function IngestionQueueList({
     ? (sorted.find((entry) => entry._id === detailEntryId) ?? null)
     : null;
   const detailEditable =
-    detailEntry?.status === "queued" || detailEntry?.status === "needsInput";
+    detailEntry?.status === "queued" ||
+    detailEntry?.status === "needsInput" ||
+    detailEntry?.needsInput === true;
 
   return (
     <Card id="ingestion-queue" size="sm">
@@ -1063,55 +1077,55 @@ export function IngestionQueueList({
               )}
             </div>
           ) : (
-          <Tabs
-            value={activeTask}
-            onValueChange={(value) => setActiveTask(value as QueueTask)}
-            className="gap-3"
-          >
-            <div className="overflow-x-auto pb-1">
-              <TabsList className="min-w-max" aria-label="Agent queue views">
-                {queueTaskTabs.map((task) => (
-                  <TabsTrigger
-                    key={task.value}
-                    value={task.value}
-                    className="gap-2"
-                    aria-label={`${task.label}: ${formatQueueTaskCount(taskCounts[task.value])}`}
-                  >
-                    {task.label}
-                    <Badge
-                      variant={
-                        activeTask === task.value ? "secondary" : "outline"
-                      }
-                      className="h-5 min-w-5 px-1"
+            <Tabs
+              value={activeTask}
+              onValueChange={(value) => setActiveTask(value as QueueTask)}
+              className="gap-3"
+            >
+              <div className="overflow-x-auto pb-1">
+                <TabsList className="min-w-max" aria-label="Agent queue views">
+                  {queueTaskTabs.map((task) => (
+                    <TabsTrigger
+                      key={task.value}
+                      value={task.value}
+                      className="gap-2"
+                      aria-label={`${task.label}: ${formatQueueTaskCount(taskCounts[task.value])}`}
                     >
-                      {taskCounts[task.value]}
-                    </Badge>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {activeQueueTask.description}
-            </p>
+                      {task.label}
+                      <Badge
+                        variant={
+                          activeTask === task.value ? "secondary" : "outline"
+                        }
+                        className="h-5 min-w-5 px-1"
+                      >
+                        {taskCounts[task.value]}
+                      </Badge>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {activeQueueTask.description}
+              </p>
 
-            <TabsContent value="needsAction">
-              {renderEntries("needsAction")}
-            </TabsContent>
-            <TabsContent value="working">
-              {renderEntries("working")}
-            </TabsContent>
-            <TabsContent value="archive">
-              {renderEntries("archive")}
-            </TabsContent>
-          </Tabs>
+              <TabsContent value="needsAction">
+                {renderEntries("needsAction")}
+              </TabsContent>
+              <TabsContent value="working">
+                {renderEntries("working")}
+              </TabsContent>
+              <TabsContent value="archive">
+                {renderEntries("archive")}
+              </TabsContent>
+            </Tabs>
           )
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm leading-6 text-muted-foreground">
             The queue is empty. Capture photos and notes on your phone as you
             walk through your home; then run your AI agent (Claude Code, Codex,
-            Cowork) against the Assist With Moving MCP server or REST API to turn
-            captures into inventory. Every agent proposal comes back here and to
-            AI Review for your approval.
+            Cowork) against the Assist With Moving MCP server or REST API to
+            turn captures into inventory. Every agent proposal comes back here
+            and to AI Review for your approval.
           </div>
         )}
         {message ? (

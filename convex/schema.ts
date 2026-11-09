@@ -1950,6 +1950,7 @@ export default defineSchema({
   // Capture-now, process-later work orders for the user's own AI agent.
   // Evidence lives in itemPhotos (image/audio/video); entries reference it.
   ingestionQueueEntries: defineTable({
+    claimedByConnectionId: v.optional(v.string()),
     needsInput: v.optional(v.boolean()),
     needsInputAt: v.optional(v.number()),
     needsInputBy: v.optional(v.string()),
@@ -2055,6 +2056,7 @@ export default defineSchema({
     addedByConnection: v.optional(v.string()),
     suggestionStatus: v.optional(v.union(v.literal("open"), v.literal("accepted"), v.literal("dismissed"), v.literal("withdrawn"))),
     suggestionReason: v.optional(v.string()),
+    suggestionFingerprint: v.optional(v.string()),
     suggestionOptions: v.optional(v.array(v.string())),
     suggestionEvidence: v.optional(v.string()),
     // Permanent first person accept, dismiss, edit or reply; restore never clears it.
@@ -2107,8 +2109,8 @@ export default defineSchema({
   })
     .index("by_move_owner_input", ["moveId", "ownerUserId", "needsInput"])
     .index("by_move_owner_review", ["moveId", "ownerUserId", "suggestionStatus"])
-    .index("by_move_owner_directive_dismissed_reason", ["moveId", "ownerUserId", "directive", "suggestionReason", "suggestionDismissedAt"])
-    .index("by_move_owner_directive_review_reason", ["moveId", "ownerUserId", "directive", "suggestionStatus", "suggestionReason"])
+    .index("by_move_owner_fingerprint_dismissed", ["moveId", "ownerUserId", "suggestionFingerprint", "suggestionDismissedAt"])
+    .index("by_move_owner_fingerprint_review", ["moveId", "ownerUserId", "suggestionFingerprint", "suggestionStatus"])
     .index("by_move_state_updated", ["moveId", "state", "updatedAt"])
     .index("by_move_owner_state_updated", [
       "moveId",
