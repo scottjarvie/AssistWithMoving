@@ -1,10 +1,10 @@
 name: AssistWithMoving CI
 
+# Lean CI (docs/planning/lean-ci.md): pull requests only. Main moves by merging
+# a PR that already passed these checks, so a push to main does not rerun them.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
   # Manual runs at an exact branch head (gh workflow run required-ci.yml --ref <branch>),
   # including draft PR branches that the pull_request trigger skips.
   workflow_dispatch:

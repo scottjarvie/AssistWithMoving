@@ -20,12 +20,13 @@ function requiredJobSource(source: string) {
 }
 
 describe("required CI workflow contract", () => {
-  it("runs the credential-free Phase 1 gate for pull requests and main", () => {
+  it("runs the credential-free Phase 1 gate for pull requests only", () => {
     const source = workflowSource();
     const requiredJob = requiredJobSource(source);
 
     expect(source).toContain("pull_request:");
-    expect(source).toMatch(/push:\s*\n\s+branches:\s*\[main\]/);
+    // Main only moves by merging a PR that already passed; no rerun on push.
+    expect(source).not.toMatch(/^  push:/m);
     expect(source).toContain("contents: read");
     expect(source).toContain(
       "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
