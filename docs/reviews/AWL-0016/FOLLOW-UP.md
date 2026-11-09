@@ -51,18 +51,22 @@ or key and current grant, rather than a website session.
 
 The synthetic website JWT fixture contains exactly `aud`, `exp`, `fva`, `iat`,
 `iss`, `nbf`, `sid`, `sts`, `sub` and `v`; its audience is `convex`, with no `azp`,
-`client_id`, `scope` or `scp`. This claim-name evidence was supplied from Plants,
-not observed on Moving. Signed JWT tests prove the local verifier accepts this
+`client_id`, `scope` or `scp`. This shape was initially supplied from Plants and has now also been
+confirmed against Moving’s own development-issued native session token. Signed JWT tests prove the local verifier accepts this
 shape in both modes, and `convex-test` executes the public query/mutation handlers to verify reads
 and person choices with its mapped identity. The negative matrix adds OAuth markers
 to the otherwise valid website identity, so `sid` cannot bypass the refusal.
 
-Moving's own Sandbox frontend was started through the existing verified launcher:
-test Clerk instance, loopback backend destination, no production configuration or
-sign-in. Its browser had no existing session. A development-only sign-in is still
-needed to inspect Moving's own real token. No real token was decoded, printed or saved,
-and no Clerk configuration was changed. This remains an explicit runtime-proof
-gap rather than a claim of successful native authentication.
+Moving's own development Clerk instance was checked before release, using its
+existing test credential and configured test identity. A temporary native
+session was created through the Clerk session API; its default token was read
+without a custom JWT template, then the session was revoked. The real token's
+claim names were exactly `aud`, `exp`, `fva`, `iat`, `iss`, `nbf`, `sid`, `sts`,
+`sub`, `v`. Its audience was `convex`; `azp` and OAuth markers were absent, and
+its header type was not `at+jwt`. The fixture matches. Only names and validation
+booleans were retained, with no JWT, session ID, identity or claim values.
+This is real development-issued token evidence, not a production sign-in or
+an authenticated browser-flow receipt. No Clerk configuration changed.
 
 ## Index-key choice and compatibility
 
@@ -79,8 +83,8 @@ identified OAuth client until reclaimed. No old claim or data is rewritten.
 
 ## Verification and UI proof
 
-Final offline suite: **226 files / 1,572 tests passed**. Focused audit regressions:
-**4 files / 109 tests passed**. Root TypeScript, strict Convex backend TypeScript,
+Final offline suite: **226 files / 1,575 tests passed**. Focused audit regressions:
+**1 file / 28 tests passed**. Root TypeScript, strict Convex backend TypeScript,
 five backend configuration tests, 159 offline bindings, the 100-tool generated
 AI policy check and generated Project Philosophy check passed. Lint passed with
 zero errors and the one existing image-worker warning. Existing AWL-0015 grant algorithms and security

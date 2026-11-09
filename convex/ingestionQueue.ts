@@ -551,14 +551,15 @@ export const updateEntry = mutation({
         ? { mediaPhotoIds: args.mediaPhotoIds }
         : {}),
       ...(args.sortOrder !== undefined ? { sortOrder: args.sortOrder } : {}),
-      // A user edit answers an agent question, so needs-input returns to queued.
+      // Answering an unclaimed question returns the capture to queued.
       ...(captureNeedsInput(entry)
         ? {
             needsInput: false,
             needsInputAt: undefined,
             needsInputBy: undefined,
             status:
-              entry.status === "needsInput"
+              entry.status === "needsInput" ||
+              (entry.status === "claimed" && entry.claimExpiresAt === undefined)
                 ? ("queued" as const)
                 : entry.status,
             agentQuestion: undefined,
@@ -1006,6 +1007,13 @@ export const submitResult = mutation({
     const now = Date.now();
 
     const question = args.needsInputQuestion?.trim();
+    if (
+      question &&
+      (entry.status === "resolved" || entry.status === "discarded")
+    )
+      throw new ConvexError(
+        "Resolved or discarded captures cannot receive AI results or questions.",
+      );
     const nextStatus: IngestionQueueStatus = question
       ? entry.status
       : "processed";

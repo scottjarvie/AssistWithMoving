@@ -19,11 +19,11 @@ deployment, production sign-in or data mutation is authorized by this update.
 | 12 — person action survives reopen | The permanent first-person-action timestamp is set by accept/edit, dismiss or reply and preserved by archive/reopen. Withdraw checks it before replay; tests cover dismiss → reopen → refused withdraw and an older accepted suggestion receiving a reply.    |
 | 15 — narrowed read reach | Moving narrows by move. New suggestion lists, reasons, counts and accepted-work reads are exercised across all four suggestion lifecycles with a connection limited to one move. Legacy reads recheck that connection before reading/paginating. |
 | 16 — website person session | All public Queue and capture reads/writes require the existing session-bound person proof. Direct AI-token identities are refused even with full tool grants or a session-shaped sid; actual website person identities still read and decide. See FOLLOW-UP.md for the auth configuration and runtime proof boundary. |
-| 17 — native website claims | Missing `azp` is accepted; present foreign `azp` and OAuth markers are refused. The local JWT verifier no longer requires `azp`. Native website fixtures use the exact ten claim names supplied from Plants. Moving’s own real Sandbox-token inspection still needs a development website session; see FOLLOW-UP.md. |
+| 17 — native website claims | Missing `azp` is accepted; present foreign `azp` and OAuth markers are refused. The local JWT verifier no longer requires `azp`. Native website fixtures use the exact ten claim names supplied from Plants. Moving’s own real development-issued native session JWT now confirms the same ten names, convex audience, absent azp/OAuth markers and non-access-JWT header. The temporary session was revoked; see FOLLOW-UP.md. |
 
 No row migration is introduced. Optional capture-flag fields and indexes extend
 the existing read-time compatibility layer. The latest full offline suite passed
-(226 files / 1,572 tests), with focused audit checks (4 files / 109 tests)
+(226 files / 1,575 tests), with focused audit checks (1 file / 28 tests)
 including lessons 15–17. Root and strict backend TypeScript, five
 backend-configuration tests, lint (one existing warning), the 159-module binding
 check, the 100-tool AI policy check and generated Project Philosophy check passed.

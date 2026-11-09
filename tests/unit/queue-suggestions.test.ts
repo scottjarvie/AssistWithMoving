@@ -1406,7 +1406,7 @@ it("legacy capture questions keep state, clear leases, and cannot be cleared by 
     instructions: "Bedroom",
   });
   const answered = await f.t.run((ctx) => ctx.db.get(entryId));
-  expect(answered?.status).toBe("claimed");
+  expect(answered?.status).toBe("queued");
   expect(answered?.needsInput).toBe(false);
 });
 
@@ -2150,4 +2150,125 @@ it("lesson 17: exact native website claims without azp read and decide, but fore
       })
     ).suggestionStatus,
   ).toBe("accepted");
+});
+
+it("requeues a person's answered flagged capture when claimed has no lease", async () => {
+  const f = await fixture();
+  const entryId = await f.t.run((ctx) =>
+    ctx.db.insert("ingestionQueueEntries", {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      ownerUserId: f.userId,
+      createdByUserId: f.userId,
+      status: "claimed",
+      needsInput: true,
+      agentQuestion: "Which room?",
+      mediaPhotoIds: [],
+      sortOrder: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    }),
+  );
+  await f.person.mutation(api.ingestionQueue.updateEntry, {
+    householdId: f.householdId,
+    moveId: f.moveId,
+    entryId,
+    instructions: "Bedroom",
+  });
+  expect(await f.t.run((ctx) => ctx.db.get(entryId))).toMatchObject({
+    status: "queued",
+    needsInput: false,
+  });
+  const claimed = await f.t.mutation(internal.mcpToolsQueue.claimQueue, {
+    caller: { subject, claims: { azp: clientId } },
+    householdId: f.householdId,
+    moveId: f.moveId,
+    batchSize: 1,
+    agentLabel: "Named AI",
+  });
+  expect(JSON.stringify(claimed)).toContain(entryId);
+});
+
+it("website submitResult refuses a question on resolved and discarded captures", async () => {
+  const f = await fixture();
+  for (const status of ["resolved", "discarded"] as const) {
+    const entryId = await f.t.run((ctx) =>
+      ctx.db.insert("ingestionQueueEntries", {
+        householdId: f.householdId,
+        moveId: f.moveId,
+        ownerUserId: f.userId,
+        createdByUserId: f.userId,
+        status,
+        mediaPhotoIds: [],
+        sortOrder: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    );
+    const before = await f.t.run((ctx) => ctx.db.get(entryId));
+    await expect(
+      f.person.mutation(api.ingestionQueue.submitResult, {
+        householdId: f.householdId,
+        moveId: f.moveId,
+        entryId,
+        needsInputQuestion: "Which room?",
+      }),
+    ).rejects.toThrow(/Resolved or discarded/);
+    expect(await f.t.run((ctx) => ctx.db.get(entryId))).toEqual(before);
+  }
+});
+
+it("queue.counts excludes the partner's modern and legacy captures", async () => {
+  const f = await fixture();
+  await f.t.run(async (ctx) => {
+    const { _id, _creationTime, ...fields } = (await ctx.db.get(f.userId))!;
+    void _id;
+    void _creationTime;
+    const partner = await ctx.db.insert("users", {
+      ...fields,
+      clerkUserId: "SYNTHETIC-partner-captures",
+    });
+    const common = {
+      householdId: f.householdId,
+      moveId: f.moveId,
+      status: "queued" as const,
+      mediaPhotoIds: [],
+      sortOrder: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    await ctx.db.insert("ingestionQueueEntries", {
+      ...common,
+      ownerUserId: f.userId,
+      createdByUserId: f.userId,
+    });
+    // The partner owns this one even though the querying person created it.
+    await ctx.db.insert("ingestionQueueEntries", {
+      ...common,
+      ownerUserId: partner,
+      createdByUserId: f.userId,
+      needsInput: true,
+      agentQuestion: "Private partner question",
+    });
+    await ctx.db.insert("ingestionQueueEntries", {
+      ...common,
+      createdByUserId: partner,
+      needsInput: true,
+      agentQuestion: "Private legacy partner question",
+    });
+  });
+  expect(
+    await f.person.query(api.queue.counts, {
+      householdId: f.householdId,
+      moveId: f.moveId,
+    }),
+  ).toMatchObject({
+    waitingForAi: 1,
+    working: 0,
+    done: 0,
+    everything: 1,
+    needsYou: 0,
+    needsInputOpen: 0,
+    suggestions: 0,
+  });
 });
