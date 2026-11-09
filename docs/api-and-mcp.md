@@ -2244,17 +2244,19 @@ private-record visibility and agent-access switches still apply to every call.
 Each OAuth client and API key has its own revisioned policy in
 `aiAccessConnections`. Existing client IDs keep that policy exactly on sign-in;
 restricting one connection does not revoke, supersede or change another.
-`aiAccessOwners` holds the floor across every restricted, unreleased connection
-and key: union of withheld powers, any revoke/pause, earliest chosen date and
-intersected move limits. New connections inherit that floor regardless of name,
+`aiAccessOwners` holds the floor across every restricted, unreleased OAuth connection: union of withheld powers, any revoke/pause, earliest chosen date and
+intersected move limits. New OAuth connections inherit that floor regardless of name,
 host, CIMD or registration method. No identity matching decides inheritance.
 
-Every restriction updates its source ID/revision entry atomically with the
+Every OAuth restriction updates its source ID/revision entry atomically with the
 connection policy and private receipt. Person Restore/Resume/widening releases
 inherited entries and that connection's entry only at the revisions overridden.
 Later source restrictions count again. Inherited connections display “Started
 with the limits of your most limited AI” with Restore; revoked connections offer
-Forget. Forget removes their floor contribution without reviving the token.
+Forget. Forget removes only that connection's own floor entries, never inherited
+source entries, without reviving the token. API keys are deliberate script credentials:
+the person picks their limits. Keys never feed the OAuth floor, and OAuth restrictions
+never shape a fresh or rotated key; rotation preserves only its predecessor's policy.
 Restore of an ordinary revoked connection preserves chosen powers, pause and
 end date, including a past date. Inherited Restore releases inherited limits
 while retaining choices made on that connection itself. No runtime history scan
@@ -2266,17 +2268,22 @@ On an owner's first access, `ensureAccess` creates and checkpoints the durable
 record. Its sole legacy traversal reads **every** grant through `by_owner_created`
 and every key through `by_created_by`, in complete indexed pages. Pages are
 checkpoints, never an authorization cap. Revoked, paused, expired, narrowed,
-unbound and unnamed rows all contribute. A scheduled continuation finishes the
+unbound and unnamed connections are all checked. Retired, replaced and rotated
+history rows never count as connections or restrictions. Keys are bootstrapped
+for their own policy only, never as OAuth floor entries. A scheduled continuation finishes the
 remaining pages. Until both streams finish, all domain access stays stopped;
 inspection remains available. A failed continuation can be retried on the next
 access without losing the restrictions already read.
 
-Only untouched active version-1 automatic OAuth defaults lift. An explicit
+Unmarked main-era OAuth end dates were forced defaults and lift. Exact legacy
+90-day API-key default dates lift; other chosen key dates stay on that key.
+Legacy end dates already past at bootstrap never enter the OAuth floor.
+Only untouched active version-1 automatic OAuth scope defaults lift. An explicit
 system automatic marker, or the original immutable connected-by-signing-in
-receipt for the exact old 30-day default, proves provenance. Unmarked rows
-chosen in Settings, AI reductions and ambiguous provenance retain their old
-limits. Bootstrap records restricted sources and its before/after system
-receipts without changing legacy scopes, dates or revisions. After completion,
+receipt for the exact old 30-day default, proves provenance. Settings choices, AI reductions and ambiguous scope provenance retain their old
+powers. Bootstrap records restricted sources and its before/after system
+receipts without rewriting legacy OAuth scopes, dates or revisions. Key status, pause
+and effective date are mirrored to the key row so revocation/expiry frees plan slots. After completion,
 all mutations write the durable authority; no connection or tool call imports
 legacy records again. No separate migration or production data script is used.
 
@@ -2338,7 +2345,16 @@ tools. Both API-key registries refuse household invitation tools locally, includ
 dry-run, and the backend blocks that write route. Share-link creation scans the
 actual public packet: obvious keys/tokens/passwords are refused; email addresses,
 phones and street addresses require removal or acknowledgeContactDetails with counts exactly matching the whole batch.
-Both person and AI may revoke links; creation/revocation retain AI attribution
+Edits, additions, moves, duplicates and restores that change an existing outgoing
+packet run the same complete check in the committing transaction. REST isolates
+these writes in a child mutation so returning an error cannot commit a refused edit.
+The full resulting batch is scanned, with current publish power rechecked. A refused
+restore offers restorePrivately:true, which revokes affected links in that transaction.
+Unscannable bodies refuse; the live public page shows an unavailable state if its
+current secret recheck fails. Secrets include escaped JSON, snake_case-prefixed
+keys, multiline values, credential URLs, common token formats and Luhn-valid cards.
+Both person and AI may revoke links with any active grant; no publish power is
+required to reduce exposure. Creation, updates and revocation retain AI attribution
 and audit history. Scrub shared content before publishing.
 
 Deploy the Convex schema, indexes and functions before the website. No production

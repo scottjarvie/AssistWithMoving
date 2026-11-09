@@ -5,7 +5,7 @@ import * as history from "../../convex/lib/connectionHistory";
 import { accessFixture } from "../helpers/ai-access";
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
-describe("API-key shared authority and rotation", () => {
+describe("API-key own authority and rotation", () => {
   it.each(["revoked", "paused", "expired"])("cannot rotate a %s connection into wider access", async state => {
     const f = await accessFixture();
     const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Key" });
@@ -13,7 +13,7 @@ describe("API-key shared authority and rotation", () => {
     await f.person.mutation(api.connectionSettings.change, { connectionId: row.id, expectedVersion: row.version, opId: "stop", action: state === "expired" ? "limits" : state === "revoked" ? "revoke" : "pause", ...(state === "expired" ? { expiresAt: Date.now() + 1000 } : {}) });
     if (state === "expired") vi.setSystemTime(Date.now() + 1001);
     const before = await f.root();
-    await expect(f.person.mutation(api.apiKeys.rotate, { householdId: f.householdId, apiKeyId: key.apiKeyId, expectedVersion: before!.revision })).rejects.toThrow(new RegExp(`${state}.*Restore.*website`));
+    await expect(f.person.mutation(api.apiKeys.rotate, { householdId: f.householdId, apiKeyId: key.apiKeyId, expectedVersion: (await f.person.query(api.connectionSettings.list, {})).connections[0].version })).rejects.toThrow(new RegExp(`${state}.*Restore.*website`));
     expect(await f.root()).toEqual(before);
   });
   it("preserves selected powers and date, retires the old secret, and never stores the new raw secret", async () => {
@@ -53,7 +53,7 @@ describe("API-key shared authority and rotation", () => {
     const inspected = await f.request(key.rawKey, "GET", "me"); expect(inspected.status).toBe(200);
     expect(inspected.body).toMatchObject({ data: { household: null, apiKey: { status: action === "pause" ? "paused" : "revoked", scopes: [], settings: "https://movingmanifest.com/settings/ai" } } });
     expect((await f.request(key.rawKey, "GET", "moves")).status).toBe(403);
-    const widen = await f.request(key.rawKey, "POST", "me/access", { expectedVersion: (await f.root())!.revision, opId: "restore", action: "restore" });
+    const widen = await f.request(key.rawKey, "POST", "me/access", { expectedVersion: (await f.person.query(api.connectionSettings.list, {})).connections[0].version, opId: "restore", action: "restore" });
     expect(JSON.stringify(widen.body)).toContain("only reduce");
   });
   it("every API-key door blocks household invitations even with the full catalog", async () => {
@@ -104,7 +104,7 @@ it("REST cannot retain a partial legacy bootstrap when its system receipt fails"
   expect(await f.root()).toBeNull();
   vi.restoreAllMocks();
   await f.request(key.rawKey, "GET", "me"); await f.finish();
-  expect((await f.root())!.withheldScopes).toContain("inventory/write");
+  expect((await f.root())!.withheldScopes).toContain("moving.work.write");
 });
 
 it("preserves move-only participation without exposing the household, and checks its agent switch", async () => {

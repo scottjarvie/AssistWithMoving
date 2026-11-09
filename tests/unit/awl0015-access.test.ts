@@ -128,13 +128,13 @@ describe("AWL-0015 durable owner authority", () => {
     await expect(f.reduce({ opId: "mmk_secret", action: "pause" })).rejects.toThrow(/non-secret opId/);
     expect((await f.connection())!.label).toBe("[redacted]");
   });
-  it("projects OAuth restrictions onto API keys and key restrictions back onto OAuth", async () => {
+  it("keeps OAuth and deliberate API-key restrictions separate", async () => {
     const f = await accessFixture(); await f.connect(); await f.reduce({ opId: "read", scopes: ["moving.context.read"] });
     const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "New key" });
-    expect(key.scopes).not.toContain("inventory/write");
+    expect(key.scopes).toContain("inventory/write");
     const row = (await f.person.query(api.connectionSettings.list, {})).connections.find(row => row.kind === "key")!;
     expect((await f.request(key.rawKey, "POST", "me/access", { opId: "stop-key", expectedVersion: row.version, action: "revoke" })).status).toBe(200);
-    expect(await f.connect("yet-another")).toMatchObject({ status: "revoked" });
+    expect(await f.connect("yet-another")).toMatchObject({ status: "active", scopes: ["moving.context.read"] });
   });
   it("full API keys have all current powers and no default end date", async () => {
     const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Full" });

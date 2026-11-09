@@ -1,3 +1,4 @@
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 // OAuth MCP gateway tools (orient + capture + organize + set up). Each resolves
 // the user from the gateway-injected caller.subject via the identity bridge
 // (NEVER ctx.auth) and mirrors the canonical mutation's core logic. Args are
@@ -7,7 +8,7 @@
 import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalQuery } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import { assertCaptureStructuredRefs } from "./ingestionQueue";
@@ -47,6 +48,7 @@ const READ_LIMIT = 200;
 
 // ---- get_move_overview -----------------------------------------------------
 export const getMoveOverviewArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -100,6 +102,7 @@ export const getMoveOverview = internalQuery({
 
 // ---- search_inventory ------------------------------------------------------
 export const searchInventoryArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -153,6 +156,7 @@ export const searchInventory = internalQuery({
 
 // ---- get_item --------------------------------------------------------------
 export const getItemArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -239,13 +243,14 @@ const itemDraftValidator = v.object({
   needsReview: v.optional(v.boolean()),
 });
 export const upsertItemsArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
   items: v.array(itemDraftValidator),
   dryRun: v.optional(v.boolean()),
 };
-export const upsertItems = internalMutation({
+export const upsertItems = aiMutation({
   args: upsertItemsArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -377,12 +382,13 @@ const spaceDraftValidator = v.object({
 // point at the real tool. (See MOVE-318.)
 const transportLikeSpaceKinds = new Set(["transportResource", "transportZone"]);
 export const upsertSpacesArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
   spaces: v.array(spaceDraftValidator),
 };
-export const upsertSpaces = internalMutation({
+export const upsertSpaces = aiMutation({
   args: upsertSpacesArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -516,12 +522,13 @@ const queueDraftValidator = v.object({
   presentTransportId: v.optional(v.id("transportResources")),
 });
 export const captureToQueueArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
   entries: v.array(queueDraftValidator),
 };
-export const captureToQueue = internalMutation({
+export const captureToQueue = aiMutation({
   args: captureToQueueArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -603,6 +610,7 @@ export const captureToQueue = internalMutation({
 
 // ---- setup_move ------------------------------------------------------------
 export const setupMoveArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   title: v.string(),
@@ -617,7 +625,7 @@ export const setupMoveArgs = {
   pcsDependentStatus: v.optional(pcsDependentStatusValidator),
   pcsShipmentType: v.optional(pcsShipmentTypeValidator),
 };
-export const setupMove = internalMutation({
+export const setupMove = aiMutation({
   args: setupMoveArgs,
   handler: async (ctx, args) => {
     const policy = await requireHouseholdForSubject(
@@ -706,12 +714,13 @@ const boxDraftValidator = v.object({
   ),
 });
 export const packBoxesArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
   boxes: v.array(boxDraftValidator),
 };
-export const packBoxes = internalMutation({
+export const packBoxes = aiMutation({
   args: packBoxesArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(

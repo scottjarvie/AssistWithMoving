@@ -31,28 +31,29 @@ describe("one-time complete indexed legacy bootstrap", () => {
     }
     expect(accesses).toBeGreaterThan(2);
     const root = (await f.root())!;
-    expect(root.entries).toHaveLength(308); expect(root.revoked).toBe(true); expect(root.pausedAt).toBe(Date.now() - 20); expect(root.endsAt).toBe(Date.now() - 1);
+    expect(root.entries).toHaveLength(205); expect(root.revoked).toBe(true); expect(root.pausedAt).toBeUndefined(); expect(root.endsAt).toBeUndefined();
     expect(await f.connect("new")).toMatchObject({ status: "revoked", scopes: [] });
     const unchanged = await f.root(); await f.finish(); expect(await f.root()).toEqual(unchanged);
   });
-  it.each(["revoked", "paused", "expired", "narrowed"])("imports legacy API key %s on OAuth's first access", async state => {
+  it.each(["revoked", "paused", "expired", "narrowed"])("retains legacy API key %s independently of OAuth on first access", async state => {
     const f = await accessFixture();
     const key = await f.legacyKey({ ...(state === "revoked" ? { status: "revoked" } : state === "paused" ? { pausedAt: Date.now() - 1 } : state === "expired" ? { expiresAt: Date.now() - 1 } : { scopes: ["moves/read"] }) });
     await f.connect(); await f.finish();
     const description = await f.connect();
-    expect(description.status).toBe(state === "narrowed" ? "active" : state);
-    if (state === "narrowed") expect(description.scopes).not.toContain("moving.work.write");
-    expect((await f.root())!.entries[0].sourceGrantId).toBe(String(key.apiKeyId));
+    expect(description).toMatchObject({ status: "active", scopes: [...movingScopes] });
+    expect((await f.root())!.entries).toEqual([]);
+    const own = await f.request(key.rawKey, "GET", "me");
+    expect(own.body).toMatchObject({ data: { apiKey: { status: state === "narrowed" ? "active" : state } } });
   });
   it.each(["revoked", "paused", "expired", "narrowed"])("imports legacy OAuth %s on API-key first access", async state => {
     const f = await accessFixture();
-    await f.legacyGrant({ ...(state === "revoked" ? { status: "revoked" } : state === "paused" ? { pausedAt: Date.now() - 1 } : state === "expired" ? { expiresAt: Date.now() - 1 } : { scopes: ["moving.context.read"] }) });
+    await f.legacyGrant({ ...(state === "revoked" ? { status: "revoked" } : state === "paused" ? { pausedAt: Date.now() - 1 } : state === "expired" ? { expiryChoice: "chosen", expiresAt: Date.now() - 1 } : { scopes: ["moving.context.read"] }) });
     const key = await f.legacyKey();
     const initializing = await f.request(key.rawKey, "GET", "me"); expect(JSON.stringify(initializing.body)).toContain("initializing");
     await f.finish();
     const result = await f.request(key.rawKey, "GET", "me"); expect(result.status).toBe(200);
     expect(result.body).toMatchObject({ data: { apiKey: { status: "active" } } });
-    expect((await f.root())!.entries.length).toBeGreaterThan(0);
+    expect((await f.root())!.entries.length).toBe(state === "expired" ? 0 : 1);
   });
   it("lifts only demonstrably automatic defaults, with no rewrite of stored scopes or dates", async () => {
     const f = await accessFixture(); const approvedAt = Date.now() - 31 * 86400000;
@@ -69,9 +70,9 @@ describe("one-time complete indexed legacy bootstrap", () => {
     const id = await f.legacyGrant({ scopes: movingScopes.filter(scope => scope !== "moving.archive"), approvedAt, expiresAt: approvedAt + 30 * 86400000,
       ...(provenance === "owner-marker" ? { ownerDecisionAt: approvedAt } : provenance === "ai-marker" ? { narrowedBy: "ai" } : provenance === "automatic-chosen" ? { scopeChoice: "chosen", expiryChoice: "automatic" } : provenance === "chosen" ? { scopeChoice: "chosen", expiryChoice: "chosen" } : provenance === "revoked" ? { status: "revoked" } : {}) });
     if (provenance !== "no-receipt") await f.t.run(ctx => ctx.db.insert("aiGrantActivities", { grantId: id, ownerUserId: f.userId, householdId: f.householdId, type: "approved", outcome: "recorded", message: provenance === "settings-receipt" ? "You approved this connection in Settings." : "Your AI connected by signing in.", createdAt: approvedAt }));
-    await f.connect(); await f.finish(); expect((await f.root())!.endsAt).toBe(approvedAt + 30 * 86400000);
+    await f.connect(); await f.finish(); expect((await f.root())!.endsAt).toBeUndefined();
     expect((await f.root())!.withheldScopes).toContain("moving.archive");
-    expect(await f.connect()).toMatchObject({ status: provenance === "revoked" ? "revoked" : "expired", scopes: [] });
+    expect(await f.connect()).toMatchObject({ status: provenance === "revoked" ? "revoked" : "active", scopes: provenance === "revoked" ? [] : movingScopes.filter(scope => scope !== "moving.archive") });
   });
   it("keeps a paused legacy predecessor through revoke and exact person restore", async () => {
     const f = await accessFixture(); const pausedAt = Date.now() - 20;

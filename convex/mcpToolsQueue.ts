@@ -1,3 +1,4 @@
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 // OAuth MCP gateway tools for the capture queue — the agent loop INTO inventory.
 //
 // The capture queue (ingestionQueueEntries) bundles photos + the user's
@@ -17,7 +18,7 @@ import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import type { Doc } from "./_generated/dataModel";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalQuery } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { autoAttachEntryPhotos } from "./lib/queuePhotoAttach";
 import {
@@ -153,6 +154,7 @@ export function runnableQueuedEntriesForCounts(
 
 // ---- list_queue ------------------------------------------------------------
 export const listQueueArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -250,6 +252,7 @@ export const listQueue = internalQuery({
 
 // ---- claim_queue -----------------------------------------------------------
 export const claimQueueArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -259,7 +262,7 @@ export const claimQueueArgs = {
   // another user's queue requires a move-owner delegation (share a subscription).
   ownerUserId: v.optional(v.id("users")),
 };
-export const claimQueue = internalMutation({
+export const claimQueue = aiMutation({
   args: claimQueueArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(
@@ -367,6 +370,7 @@ export const claimQueue = internalMutation({
 
 // ---- submit_queue_result ---------------------------------------------------
 export const submitQueueResultArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -377,7 +381,7 @@ export const submitQueueResultArgs = {
   resultBoxIds: v.optional(v.array(v.id("boxes"))),
   needsInputQuestion: v.optional(v.string()),
 };
-export const submitQueueResult = internalMutation({
+export const submitQueueResult = aiMutation({
   args: submitQueueResultArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(

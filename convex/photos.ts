@@ -1,3 +1,5 @@
+import { mcpCallerValidator } from "convex-mcp-gateway";
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 import { ConvexError, v } from "convex/values";
 import {
   DeleteObjectCommand,
@@ -14,7 +16,6 @@ import {
   type ActionCtx,
   action,
   internalAction,
-  internalMutation,
   internalQuery,
   mutation,
   type MutationCtx,
@@ -127,6 +128,8 @@ const photoDisplayVariantValidator = v.union(
   v.literal("original"),
 );
 const apiPhotoActorValidator = v.object({
+  oauthCaller: v.optional(mcpCallerValidator),
+  ...publicationArgs,
   apiKeyId: v.string(),
   createdByUserId: v.id("users"),
 });
@@ -494,6 +497,9 @@ export const evidenceSummary = query({
 // and pass createdByUserId). When omitted, the internal upload functions run the
 // usual ctx.auth permission check.
 type ApiPhotoActor = {
+  oauthCaller?: { subject: string; claims?: Record<string, unknown> };
+  acknowledgeContactDetails?: { emails: number; phones: number; addresses: number };
+  restorePrivately?: boolean;
   apiKeyId: string;
   createdByUserId: Doc<"users">["_id"];
 };
@@ -1375,8 +1381,9 @@ export const planExpiredUploadSessionCleanup = internalQuery({
   },
 });
 
-export const finishExpiredUploadSessionCleanup = internalMutation({
+export const finishExpiredUploadSessionCleanup = aiMutation({
   args: {
+    ...publicationArgs,
     now: v.number(),
     deleteObjects: v.boolean(),
     plannedSessionCount: v.number(),
@@ -1432,8 +1439,9 @@ export const finishExpiredUploadSessionCleanup = internalMutation({
   },
 });
 
-export const createUploadSession = internalMutation({
+export const createUploadSession = aiMutation({
   args: {
+    ...publicationArgs,
     householdId: v.id("households"),
     moveId: v.id("moves"),
     itemId: v.optional(v.id("items")),
@@ -1608,8 +1616,9 @@ export const getPhotoForDeliveryForApiActor = internalQuery({
   },
 });
 
-export const recordOriginalAccess = internalMutation({
+export const recordOriginalAccess = aiMutation({
   args: {
+    ...publicationArgs,
     householdId: v.id("households"),
     moveId: v.id("moves"),
     photoId: v.id("itemPhotos"),
@@ -1651,8 +1660,9 @@ export const recordOriginalAccess = internalMutation({
   },
 });
 
-export const markUploadSessionFailed = internalMutation({
+export const markUploadSessionFailed = aiMutation({
   args: {
+    ...publicationArgs,
     householdId: v.id("households"),
     moveId: v.id("moves"),
     uploadSessionId: uploadSessionIdValidator,
@@ -1681,8 +1691,9 @@ export const markUploadSessionFailed = internalMutation({
   },
 });
 
-export const completeUploadSession = internalMutation({
+export const completeUploadSession = aiMutation({
   args: {
+    ...publicationArgs,
     householdId: v.id("households"),
     moveId: v.id("moves"),
     uploadSessionId: uploadSessionIdValidator,
@@ -1826,8 +1837,9 @@ export const completeUploadSession = internalMutation({
   },
 });
 
-export const markGeneratedDerivativesReady = internalMutation({
+export const markGeneratedDerivativesReady = aiMutation({
   args: {
+    ...publicationArgs,
     householdId: v.id("households"),
     moveId: v.id("moves"),
     photoId: v.id("itemPhotos"),
@@ -1865,8 +1877,9 @@ export const markGeneratedDerivativesReady = internalMutation({
   },
 });
 
-export const markGeneratedDerivativesFailed = internalMutation({
+export const markGeneratedDerivativesFailed = aiMutation({
   args: {
+    ...publicationArgs,
     householdId: v.id("households"),
     moveId: v.id("moves"),
     photoId: v.id("itemPhotos"),

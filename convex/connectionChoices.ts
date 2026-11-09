@@ -5,17 +5,6 @@ import { requireCurrentUser } from "./lib/auth";
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
 import { resolveMoveAccess } from "./lib/moveAccess";
 
-export const listSourceHistory = query({
-  args: { cursor: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    await requirePersonConnectionManagement(ctx);
-    const user = await requireCurrentUser(ctx);
-    return ctx.db.query("aiGrantSourceHistory")
-      .withIndex("by_owner_archived", q => q.eq("ownerUserId", user._id))
-      .order("desc").paginate({ numItems: 25, cursor: args.cursor ?? null });
-  },
-});
-
 export const listReceipts = query({
   args: { cursor: v.optional(v.string()) },
   handler: async (ctx, args) => {

@@ -51,6 +51,13 @@ describe("PublicShareViewer", () => {
     shareData.createPublicComment.mockResolvedValue({});
   });
 
+  it("shows a clear unavailable state after a live publishing check refuses", async () => {
+    shareData.view = { status: "unavailable", reason: "This shared packet is unavailable because its current content could not pass the publishing check.", shareLink: { label: "Packing packet", role: "guest" } };
+    render(<PublicShareViewer token="synthetic-unavailable" />);
+    expect(await screen.findByText("Shared packet unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Share link verified")).not.toBeInTheDocument();
+  });
+
   it("renders shared documentation packet records as mobile cards and desktop tables", async () => {
     shareData.view = documentationPacketView();
 

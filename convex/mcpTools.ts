@@ -80,7 +80,7 @@ export const getAgentContext = internalQuery({
 
     return {
       connectionVersion: connection?.version ?? null,
-      connectionPolicy: "New connections default to full entitled current/future access and no end date. reduce_connection can reduce only this calling connection; only the person in https://movingmanifest.com/settings/ai can widen or restore access.",
+      connectionPolicy: "New OAuth connections start with full entitled current/future access and no end date unless restricted, unreleased OAuth AIs set a narrower floor. Keys keep their own person-chosen limits. reduce_connection can reduce only this calling connection; only the person in https://movingmanifest.com/settings/ai can widen or restore access.",
       clerkUserId: user.clerkUserId,
       households,
       moveOnlyMoves: moveOnlyParticipations,

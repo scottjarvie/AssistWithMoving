@@ -176,7 +176,7 @@ describe("canonical Queue behavior contract", () => {
       "utf8",
     );
     expect(oauthFunctions).toContain("internalQuery({");
-    expect(oauthFunctions).toContain("internalMutation({");
+    expect(oauthFunctions).toContain("aiMutation({");
     expect(oauthFunctions).not.toMatch(/export const \w+ = (query|mutation)\(\{/);
 
     const gatewayRegistry = readFileSync("convex/mcp.ts", "utf8");

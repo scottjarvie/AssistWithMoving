@@ -298,16 +298,16 @@ const BLOCK_REFUSALS: Record<
     reason:
       "This account already has the maximum number of AI connections, so a new one was not created. Revoke one you no longer use at " +
       GRANT_MANAGER_URL +
-      ", only the person can restore access on the website.",
+      ".",
   },
   noHousehold: {
     refusalCode: "NO_WORKSPACE",
     reason:
-      "This account has no household or move yet, so there is nothing to connect an AI to. Create a household in Assist With Moving, or ask the move owner to add you, only the person can restore access on the website.",
+      "This account has no household or move yet, so there is nothing to connect an AI to. Create a household in Assist With Moving, or ask the move owner to add you.",
   },
   revoked: {
     refusalCode: "GRANT_REVOKED",
-    reason: `This connection was revoked in Assist With Moving. Ask the person to approve it again at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
+    reason: `This connection was revoked in Assist With Moving. Only the person can restore it at ${GRANT_MANAGER_URL}.`,
   },
   initializing: { refusalCode: "ACCESS_INITIALIZING", reason: "Earlier connection limits are still being checked. Call describe_connection again shortly. No access was widened." },
   superseded: { refusalCode: "CONNECTION_SUPERSEDED", reason: `This registration was superseded. Only the person can restore it at ${GRANT_MANAGER_URL}.` },
@@ -401,7 +401,7 @@ export function decideLegacyGatewayAccess(input: {
     return {
       allowed: false,
       refusalCode: "MEDIA_WRITE_NOT_ENABLED",
-      reason: `Uploading or attaching photos is a raised permission a sign-in does not include. Enable it for this connection at ${GRANT_MANAGER_URL}, only the person can restore access on the website.`,
+      reason: `Missing power moving.work.write for photos. Only the person can restore it at ${GRANT_MANAGER_URL}.`,
     };
   }
 

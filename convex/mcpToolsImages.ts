@@ -1,3 +1,4 @@
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 // OAuth MCP gateway IMAGE tools — multi-image in both directions.
 //   get_images: pull many photos at once (short-lived display URLs).
 //   add_images: upload many base64 photos at once and attach each
@@ -13,7 +14,7 @@ import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import { internal } from "./_generated/api";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalQuery } from "./_generated/server";
 import {
   type EvidenceSkipReason,
   INLINE_IMAGE_LIMIT,
@@ -51,6 +52,7 @@ const imageFilterValidator = v.object({
 // Bridge-auth + collect the in-scope photo ids for a filter. Actions can't touch
 // ctx.db, so the action calls this query first.
 export const mcpResolvePhotosArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -156,6 +158,7 @@ export const mcpResolvePhotos = internalQuery({
 
 // ---- get_images ------------------------------------------------------------
 export const getImagesArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -434,6 +437,7 @@ const imageInputValidator = v.object({
   ),
 });
 export const addImagesArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -442,6 +446,7 @@ export const addImagesArgs = {
 
 // Permission gate for the upload action (actions can't read ctx.db).
 export const mcpAssertMoveEditableArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -492,7 +497,7 @@ export const addImages = internalAction({
     // can't run its ctx.auth permission check. We already authorized via the
     // subject bridge above, so pass the resolved user as the API actor to the
     // internal-only *ForActor entry points (these skip the ctx.auth check).
-    const apiActor = { apiKeyId: "mcp-oauth", createdByUserId: userId };
+    const apiActor = { apiKeyId: "mcp-oauth", createdByUserId: userId, oauthCaller: args.caller, acknowledgeContactDetails: args.acknowledgeContactDetails, restorePrivately: args.restorePrivately };
 
     const results: Array<{ photoId: string | null; ok: boolean; error?: string }> =
       [];
@@ -588,13 +593,14 @@ const photoTargetValidator = v.object({
   room: v.optional(v.string()),
 });
 export const attachPhotosArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
   photoIds: v.array(v.id("itemPhotos")),
   attachTo: photoTargetValidator,
 };
-export const attachPhotos = internalMutation({
+export const attachPhotos = aiMutation({
   args: attachPhotosArgs,
   handler: async (ctx, args) => {
     await requireMoveForSubject(

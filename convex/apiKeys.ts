@@ -53,7 +53,7 @@ export const create = mutation({ args: { householdId: v.id("households"), moveId
   const apiKeyId = await ctx.db.insert("apiKeys", { householdId: args.householdId, moveId: args.moveId, name, prefix: apiKeyPrefix(rawKey), tokenPreview: apiKeyPreview(rawKey), secretHash: await hashApiKey(rawKey), scopes, scopeChoice: args.scopeChoice ?? (args.scopes === undefined ? "full" : "chosen"), status: "active", version: 1, expiresAt: args.expiresAt, createdByUserId: actor.userId, createdAt: now, updatedAt: now });
   const key = (await ctx.db.get(apiKeyId))!;
   const { access, connection } = await connectKey(ctx, key);
-  if (connection) await connectionChange(ctx, { ownerUserId: actor.userId, accessOwnerId: access._id, connectionId: String(connection._id), actor: "person", before: null, after: snapshot(access, connection), message: "You created an API-key connection. Earlier unresolved limits still apply.", opId: `create:${apiKeyId}` });
+  if (connection) await connectionChange(ctx, { ownerUserId: actor.userId, accessOwnerId: access._id, connectionId: String(connection._id), actor: "person", before: null, after: snapshot(access, connection), message: "You created an API-key credential with your chosen limits. OAuth AI restrictions do not apply to this key.", opId: `create:${apiKeyId}` });
   return { apiKeyId, rawKey, tokenPreview: apiKeyPreview(rawKey), scopes: keyScopes(access), initializing: !access.bootstrapped };
 } });
 export const revoke = mutation({ args: { householdId: v.id("households"), apiKeyId: v.id("apiKeys"), expectedVersion: v.number() }, handler: async (ctx, args) => {
@@ -84,6 +84,7 @@ export async function rotateApiKeyForUser(ctx: MutationCtx, args: { householdId:
   const apiKeyId = await ctx.db.insert("apiKeys", { householdId: key.householdId, moveId: access.moveIds?.length === 1 ? access.moveIds[0] : undefined, accessOwnerId: access._id, name: `${key.name} rotated`, prefix: apiKeyPrefix(rawKey), tokenPreview: apiKeyPreview(rawKey), secretHash: await hashApiKey(rawKey), scopes: keyScopes(access), scopeChoice: "chosen", status: "active", version: 1, expiresAt: access.endsAt, rotatedFromApiKeyId: key._id, createdByUserId: actorUserId, createdAt: now, updatedAt: now });
   await ctx.db.patch(key._id, { credentialRetiredAt: now, status: "revoked", revokedAt: now, updatedAt: now });
   await ctx.db.patch(connection._id, { isCurrent: false, supersededAt: now });
+  await ctx.db.patch(access._id, { connectionCount: Math.max(0, access.connectionCount - 1) });
   const replacement = (await ctx.db.get(apiKeyId))!;
   const linked = await connectKey(ctx, replacement, true);
   if (linked.connection) await connectionChange(ctx, { ownerUserId: actorUserId, accessOwnerId: access._id, connectionId: String(linked.connection._id), actor: "person", before: snapshot(access, connection), after: snapshot(linked.access, linked.connection), message: "You rotated the secret. The retired key stays stopped; the replacement keeps the same limits.", opId: `rotate:${apiKeyId}` });

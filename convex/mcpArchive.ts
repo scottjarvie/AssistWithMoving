@@ -1,3 +1,4 @@
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 /**
  * Reversible archive and restore for a connected AI.
  *
@@ -13,7 +14,6 @@
 import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
-import { internalMutation } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import {
   mcpError,
@@ -30,8 +30,9 @@ export const archivableKind = v.union(
   v.literal("planningRecord"),
 );
 
-export const archiveMoveRecords = internalMutation({
+export const archiveMoveRecords = aiMutation({
   args: {
+    ...publicationArgs,
     principal: mcpPrincipalValidator,
     moveId: v.id("moves"),
     operationId: v.string(),

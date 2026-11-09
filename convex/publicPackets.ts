@@ -57,12 +57,14 @@ export const getForShareLink = internalQuery({
     label: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    try {
     const packet = await previewPublicPacket(ctx, args);
     // Live packets can change after link creation. Secrets must never leave
     // through an already published link; contact acknowledgement stays batched
     // at publishing and does not prompt public recipients.
     checkPublishedSecrets(packet);
     return packet;
+    } catch { return { status: "unavailable" as const, reason: "This shared packet is unavailable because its current content could not pass the publishing check. Ask the owner to remove private information or unpublish it.", shareLink: publicShareLinkMetadata(args) }; }
   },
 });
 

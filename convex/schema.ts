@@ -840,16 +840,9 @@ const aiGrantFields = {
         doesNotImply: v.string(),
       }),
     ),
-    // No end date by default. Old unmarked dates remain enforced unless proven automatic.
+    // No end date by default. Unmarked main-era OAuth dates were forced defaults and are lifted lazily.
     expiresAt: v.optional(v.number()),
     approvedAt: v.number(),
-    // Exact prior revisions superseded by explicit person-approved reconnect.
-    reconnectsClientHistory: v.optional(v.array(v.object({
-      grantId: v.id("aiGrants"),
-      version: v.number(),
-    }))),
-    // Written only by explicit owner recovery; canonical verified OAuth key.
-    recoveredClientKey: v.optional(v.string()),
     // Explicit owner limit decisions only; usage must never reorder consent.
     ownerDecisionAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),
@@ -1182,6 +1175,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_rotated_from", ["rotatedFromApiKeyId"])
     .index("by_prefix", ["prefix"])
     .index("by_household_status", ["householdId", "status"])
     .index("by_move_status", ["moveId", "status"])
@@ -1594,7 +1588,7 @@ export default defineSchema({
     ownerUserId: v.id("users"), accessOwnerId: v.id("aiAccessOwners"),
     verifiedClientId: v.string(), kind: v.union(v.literal("oauth"), v.literal("key")),
     grantId: v.optional(v.id("aiGrants")), apiKeyId: v.optional(v.id("apiKeys")),
-    policy: v.optional(connectionPolicy), ownBaseline: v.optional(connectionPolicy), pendingFloor: v.optional(v.boolean()), inherited: v.optional(v.boolean()), inheritedSources: v.optional(v.array(v.object({ sourceGrantId: v.string(), sourceRevision: v.number() }))), forgottenAt: v.optional(v.number()),
+    policy: v.optional(connectionPolicy), ownBaseline: v.optional(connectionPolicy), ownSources: v.optional(v.array(v.object({ sourceGrantId: v.string(), sourceRevision: v.number() }))), pendingFloor: v.optional(v.boolean()), inherited: v.optional(v.boolean()), inheritedSources: v.optional(v.array(v.object({ sourceGrantId: v.string(), sourceRevision: v.number() }))), forgottenAt: v.optional(v.number()),
     label: v.string(), isCurrent: v.boolean(), generation: v.number(), createdAt: v.number(),
     supersededAt: v.optional(v.number()), lastUsedAt: v.optional(v.number()), lastToolName: v.optional(v.string()),
   }).index("by_owner_client", ["ownerUserId", "verifiedClientId"])
@@ -1617,16 +1611,7 @@ export default defineSchema({
     .index("by_owner_created", ["ownerUserId"])
     .index("by_owner_updated", ["ownerUserId", "updatedAt"])
     .index("by_owner_client_status", ["ownerUserId", "clientId", "status"])
-    .index("by_owner_recovered_client", ["ownerUserId", "recoveredClientKey"])
     .index("by_household_updated", ["householdId", "updatedAt"]),
-
-  // Immutable source snapshots are private to their owner, never household audit.
-  aiGrantSourceHistory: defineTable({
-    ownerUserId: v.id("users"),
-    grantId: v.id("aiGrants"),
-    archivedAt: v.number(),
-    source: v.object({ ...aiGrantFields, _id: v.id("aiGrants"), _creationTime: v.number() }),
-  }).index("by_owner_archived", ["ownerUserId", "archivedAt"]),
 
   // Append-only, owner-readable history for one grant: approvals, uses,
   // refusals, and revocation. Revoking future access must never erase the

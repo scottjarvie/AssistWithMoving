@@ -8,7 +8,7 @@ import type { MutationCtx } from "../../convex/_generated/server";
 import { accessFixture } from "../helpers/ai-access";
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
-it("inherits the union/any/earliest floor from independently restricted connections and keys", async () => {
+it("inherits the union/any/earliest floor from independently restricted OAuth connections", async () => {
   const f = await accessFixture(); await f.connect("read"); await f.connect("paused"); await f.connect("dated");
   await f.reduce({ opId: "read", scopes: ["moving.context.read"] }, "read");
   await f.reduce({ opId: "pause", action: "pause" }, "paused");
@@ -123,7 +123,7 @@ it("does not expose secrets added after a share link was published", async () =>
   expect((await f.request(key.rawKey, "POST", `moves/${f.moveId}/share-links`, { documentationProfileId: profileId })).status).toBe(201);
   const link = (await f.t.run(ctx => ctx.db.query("shareLinks").collect()))[0];
   await f.t.run(ctx => ctx.db.patch(profileId, { disclaimer: "Bearer new_secret_after_publish" }));
-  await expect(f.t.query(internal.publicPackets.getForShareLink, { shareLinkId: link._id, householdId: f.householdId, moveId: f.moveId, documentationProfileId: profileId, scope: "profile", role: "guest", allowedActions: ["view"], expiresAt: link.expiresAt })).rejects.toThrow(/Publishing refused:.*token.*disclaimer/);
+  expect(await f.t.query(internal.publicPackets.getForShareLink, { shareLinkId: link._id, householdId: f.householdId, moveId: f.moveId, documentationProfileId: profileId, scope: "profile", role: "guest", allowedActions: ["view"], expiresAt: link.expiresAt })).toMatchObject({ status: "unavailable", reason: expect.stringContaining("unavailable") });
 });
 
 it.each(['{"password":"secret_value"}', '"api_key": "secret_value"', '{"token":"secret_value"}', String.raw`{\"password\":\"secret_value\"}`])("detects JSON-quoted secrets: %s", text => {

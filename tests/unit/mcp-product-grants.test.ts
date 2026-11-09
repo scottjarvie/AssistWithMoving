@@ -233,6 +233,7 @@ async function seedWorkspace(grant?: GrantOptions) {
         consentBoundaryVersion: GRANT_BOUNDARY_VERSION,
         consentSnapshot: buildConsentSnapshot(grant.scopes ?? [...movingScopes]),
         expiresAt: grant.expiresAt,
+        expiryChoice: grant.expiresAt === undefined ? "none" : "chosen",
         approvedAt: now,
         useCount: 0,
         version: 1,

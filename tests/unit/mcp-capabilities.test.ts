@@ -853,7 +853,7 @@ describe("Bring Your AI documentation truth", () => {
       expect(text, `${path} must state Partial`).toMatch(/\bPartial\b/);
       expect(text, `${path} must explain the grant`).toMatch(/\bgrant\b/i);
       expect(text, `${path} must disclose access at connection`).toMatch(
-        /connecting (?:creates a full-access grant|grants full access)/i,
+        /(?:connecting (?:creates a full-access grant|grants full access)|new (?:OAuth )?AI connections start with full access)/i,
       );
       expect(text, `${path} must disclose no automatic end date`).toMatch(
         /no\s+end\s+date\s+by\s+default/i,

@@ -120,6 +120,7 @@ import type * as lib_restApi from "../lib/restApi.js";
 import type * as lib_restUploadBody from "../lib/restUploadBody.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as lib_shareLinks from "../lib/shareLinks.js";
+import type * as lib_sharedPublishing from "../lib/sharedPublishing.js";
 import type * as lib_subManifest from "../lib/subManifest.js";
 import type * as lib_textIntakeParser from "../lib/textIntakeParser.js";
 import type * as lib_transportPresets from "../lib/transportPresets.js";
@@ -284,6 +285,7 @@ declare const fullApi: ApiFromModules<{
   "lib/restUploadBody": typeof lib_restUploadBody;
   "lib/roles": typeof lib_roles;
   "lib/shareLinks": typeof lib_shareLinks;
+  "lib/sharedPublishing": typeof lib_sharedPublishing;
   "lib/subManifest": typeof lib_subManifest;
   "lib/textIntakeParser": typeof lib_textIntakeParser;
   "lib/transportPresets": typeof lib_transportPresets;

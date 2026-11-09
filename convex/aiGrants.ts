@@ -11,7 +11,7 @@ import { LEGACY_GATEWAY_TOOL_SCOPES, UNIDENTIFIED_LEGACY_CLIENT } from "./lib/mc
 import { reductionArgs, SETTINGS_REFUSAL, type Reduction } from "./lib/connectionReduction";
 import { connectionAccess, ensureAccess, readAccess, readConnection, connectOAuth, oauthIdentity, oauthScopes, accessState, narrowConnection, changeByPerson, requireSubject, snapshot, SETTINGS_URL, type Access, type Connection } from "./lib/carriedAccess";
 import { safeConnectionText } from "./lib/connectionHistory";
-export { listSourceHistory, listReceipts, listHouseholdChoices, listRecoveryHouseholds, listMoveChoices } from "./connectionChoices";
+export { listReceipts, listHouseholdChoices, listRecoveryHouseholds, listMoveChoices } from "./connectionChoices";
 
 type Ctx = QueryCtx | MutationCtx;
 export async function projectedGrant(ctx: Ctx, connection: Connection, knownAccess?: Access | null): Promise<Doc<"aiGrants"> | null> {

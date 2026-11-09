@@ -1,9 +1,10 @@
+import { withSharedPublishing } from "./lib/sharedPublishing";
 import { readAccess, readConnection, connectionAccess, accessState, keyScopes } from "./lib/carriedAccess";
 import { previewPublicPacket } from "./publicPackets";
 import { checkPublishing } from "./lib/publishingCheck";
 import apiToolAccess from "../shared/api-tool-access.json";
 import { apiKeyScopes } from "./lib/apiKeys";
-import { anyApi, type FunctionReference } from "convex/server";
+import { anyApi, makeFunctionReference, type FunctionReference } from "convex/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -250,6 +251,8 @@ const internalFunctions = anyApi as unknown as {
         ops: unknown[];
         apiKeyId: Id<"apiKeys">;
         agentLabel?: string;
+        acknowledgeContactDetails?: unknown;
+        restorePrivately?: boolean;
       },
       unknown
     >;
@@ -330,9 +333,7 @@ export const handle = internalMutation({
         if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(name => !["opId", "expectedVersion", "scopes", "moveIds", "expiresAt", "action"].includes(name)) || typeof body.expectedVersion !== "number" || (body.scopes !== undefined && (!Array.isArray(body.scopes) || body.scopes.some((s: unknown) => typeof s !== "string"))) || (body.moveIds !== undefined && (!Array.isArray(body.moveIds) || body.moveIds.some((s: unknown) => typeof s !== "string"))) || (body.expiresAt !== undefined && body.expiresAt !== null && typeof body.expiresAt !== "number") || (body.action !== undefined && typeof body.action !== "string")) throw new Error(SETTINGS_REFUSAL);
         return withRestRateLimitHeaders(restOk({ data: await ctx.runMutation(internalFunctions.apiKeys.reduceCallingKey, { ...body, apiKeyId: auth.apiKeyId }) }), rateLimit);
       }
-      const response = await withIdempotency(ctx, args, auth, async () =>
-        routeRequest(ctx, args, segments, auth)
-      );
+      const response = await ctx.runMutation(makeFunctionReference<"mutation", { request: RestRequestInput; auth: Awaited<ReturnType<typeof authenticateApiKey>> }, RestResponse>("restApi:commitRequest"), { request: args, auth });
       return withRestRateLimitHeaders(response, rateLimit);
     } catch (error) {
       return restError({
@@ -341,6 +342,15 @@ export const handle = internalMutation({
         message: error instanceof Error ? error.message : "Request failed.",
       });
     }
+  },
+});
+
+/** Isolated child transaction: the outer HTTP error response cannot commit a refused publication. */
+export const commitRequest = internalMutation({
+  args: { request: v.any(), auth: v.any() },
+  handler: async (ctx, { request, auth }): Promise<RestResponse> => {
+    const args = request as RestRequestInput;
+    return withSharedPublishing(ctx, { ownerUserId: auth.createdByUserId, verifiedClientId: `key:${auth.apiKeyId}` }, bodyObject(args.body), checked => withIdempotency(checked, args, auth, () => routeRequest(checked, args, parseRestPath(args.path), auth)));
   },
 });
 
@@ -1261,6 +1271,8 @@ async function routePlanOps(
       ops,
       apiKeyId: auth.apiKeyId,
       agentLabel,
+      acknowledgeContactDetails: body.acknowledgeContactDetails,
+      restorePrivately: body.restorePrivately as boolean | undefined,
     });
     return restOk({ data: result }, 201);
   } catch (error) {

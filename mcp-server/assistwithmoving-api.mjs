@@ -1,3 +1,6 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+const publicationInput = new AsyncLocalStorage();
+export function withPublicationInput(input, work) { return publicationInput.run({ acknowledgeContactDetails: input?.acknowledgeContactDetails, restorePrivately: input?.restorePrivately }, work); }
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 
@@ -70,6 +73,7 @@ export async function assistWithMovingRequest(
   config,
   { method = "GET", path, query, body, idempotencyKey }
 ) {
+  if (method !== "GET" && publicationInput.getStore()) body = { ...body, ...removeUndefined(publicationInput.getStore()) };
   const url = new URL(`${config.baseUrl}/${path.replace(/^\/+/g, "")}`);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== null && value !== "") {

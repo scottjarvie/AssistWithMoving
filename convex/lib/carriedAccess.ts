@@ -18,24 +18,9 @@ type Limits = Pick<Access, "withheldScopes" | "revoked" | "revokedAt" | "pausedA
 const bootstrapRef = makeFunctionReference<"mutation", { ownerUserId: Id<"users"> }>("aiGrants:continueBootstrap");
 export const SETTINGS_URL = "https://movingmanifest.com/settings/ai";
 
-// API keys expose coarser operations than canonical MCP. Cross-door projection
-// is deliberately conservative; a narrower API category never opens an OAuth
-// power, and a removed OAuth power never leaks through an API alias.
-const peers: Record<string, readonly string[]> = {
-  "moving.context.read": ["moves/read", "inventory/read", "plans/read", "exports/read", "members/manage"],
-  "moving.evidence.read": ["inventory/read"],
-  "moving.work.write": ["moves/write", "inventory/write", "plans/write", "photos/write", "exports/create"],
-  "moving.queue.work": ["queue/read", "queue/write"],
-  "moving.archive": ["moves/write", "inventory/write", "plans/write"],
-};
-export function expandRemoved(scopes: readonly string[]) {
-  const result = new Set(scopes);
-  for (const scope of scopes) {
-    if (peers[scope]) for (const peer of peers[scope]) result.add(peer);
-    else for (const [power, keys] of Object.entries(peers)) if (keys.includes(scope)) result.add(power);
-  }
-  return [...result].sort();
-}
+// API-key credentials and OAuth AIs have separate policies and never feed
+// one another's floor. Only explicit removed powers are withheld on each door.
+export function expandRemoved(scopes: readonly string[]) { return [...new Set(scopes)].sort(); }
 export function oauthScopes(access: Pick<Access, "withheldScopes">) { return movingScopes.filter(scope => !access.withheldScopes.includes(scope)); }
 export function keyScopes(access: Pick<Access, "withheldScopes">): ApiKeyScope[] { return apiKeyScopes.filter(scope => !access.withheldScopes.includes(scope)); }
 function policy(access: Access) {
@@ -43,14 +28,14 @@ function policy(access: Access) {
 }
 export function connectionAccess(root: Access, connection: Connection): Access {
   let own = connection.policy ?? { ...policy(root), revoked: root.revoked || !connection.isCurrent || connection.generation !== root.currentGeneration };
-  if (connection.pendingFloor) own = { ...own, ...meet(own, { ...sourceEntry("bootstrap", 0, root.bootstrapFloor ?? root), ...root.bootstrapFloor }) };
+  if (connection.kind === "oauth" && connection.pendingFloor) own = { ...own, ...meet(own, { ...sourceEntry("bootstrap", 0, root.bootstrapFloor ?? root), ...root.bootstrapFloor }) };
   return { ...root, ...own, pausedAt: own.pausedAt, endsAt: own.endsAt, moveIds: own.moveIds, revokedAt: own.revokedAt };
 }
 async function finalizeConnection(ctx: MutationCtx, root: Access, connection: Connection) {
   if (!connection.policy || (connection.pendingFloor && root.bootstrapped)) {
     const own = connectionAccess(root, connection);
     await ctx.db.patch(connection._id, { policy: policy(own), pendingFloor: !root.bootstrapped, inherited: connection.inherited || (connection.pendingFloor && isRestricted(own)), inheritedSources: (connection.pendingFloor ? root.bootstrapSources : connection.inheritedSources) ?? root.entries.map(({sourceGrantId,sourceRevision}) => ({sourceGrantId,sourceRevision})) });
-    if (root.bootstrapped && isRestricted(own)) {
+    if (connection.kind === "oauth" && root.bootstrapped && isRestricted(own)) {
       const source = String(connection.grantId ?? connection.apiKeyId ?? connection._id);
       await writeFloor(ctx, root, [...root.entries.filter(row => row.sourceGrantId !== source), sourceEntry(source, own.revision, own)]);
     }
@@ -83,6 +68,9 @@ export function oauthIdentity(clientId: string) {
   if (!clientId.trim() || clientId === "legacy:unidentified-client") throw new ConvexError("A verified OAuth client id is required.");
   return `oauth:${oauthClientHistoryKey(clientId)}`;
 }
+function retiredGrant(grant: Doc<"aiGrants">) {
+  return grant.status === "revoked" && /^(?:Replaced|Superseded) by (?:a |the )?(?:newer|replacement) grant\.?$/i.test(grant.revokedReason ?? "");
+}
 function legacyIdentity(grant: Doc<"aiGrants">) {
   try { return grant.clientId && grant.clientId !== "legacy:unidentified-client" ? oauthIdentity(grant.clientId) : `legacy:${grant._id}`; }
   catch { return `legacy:${grant._id}`; }
@@ -107,7 +95,7 @@ function addEntry(access: Access, entry: Entry): Access {
 }
 async function legacyGrantLimits(ctx: MutationCtx, grant: Doc<"aiGrants">): Promise<Limits> {
   let scopes = effectiveScopes(grant);
-  let endsAt = effectiveExpiry(grant);
+  let endsAt = grant.expiryChoice === "chosen" ? effectiveExpiry(grant) : undefined;
   const unchanged = grant.version === 1 && grant.status === "active" && grant.pausedAt === undefined && grant.ownerDecisionAt === undefined && grant.narrowedBy === undefined && grant.scopeChoice !== "chosen" && !grant.withheldScopes?.length && grant.moveScope === "allMoves";
   const oldDefault = grant.scopeChoice === undefined && grant.scopes.length === 4 && ["moving.context.read", "moving.evidence.read", "moving.work.write", "moving.queue.work"].every(scope => grant.scopes.includes(scope as typeof movingScopes[number])) && grant.expiresAt === grant.approvedAt + 30 * 86400000;
   if (unchanged && (grant.expiryChoice === "automatic" || oldDefault)) {
@@ -120,24 +108,34 @@ async function legacyGrantLimits(ctx: MutationCtx, grant: Doc<"aiGrants">): Prom
 }
 function legacyKeyLimits(key: Doc<"apiKeys">): Limits {
   const scopes = effectiveApiKeyScopes(key);
-  return { withheldScopes: expandRemoved(apiKeyScopes.filter(scope => !scopes.includes(scope))), revoked: key.status === "revoked", revokedAt: key.revokedAt, pausedAt: key.pausedAt, endsAt: key.expiresAt, moveIds: key.moveId ? [key.moveId] : undefined };
+  return { withheldScopes: expandRemoved(apiKeyScopes.filter(scope => !scopes.includes(scope))), revoked: key.status === "revoked", revokedAt: key.revokedAt, pausedAt: key.pausedAt, endsAt: key.scopeChoice === undefined && key.version === undefined && key.narrowedBy === undefined && key.expiresAt === key.createdAt + 90 * 86400000 ? undefined : key.expiresAt, moveIds: key.moveId ? [key.moveId] : undefined };
 }
 async function seedConnection(ctx: MutationCtx, access: Access, input: {
   verifiedClientId: string; kind: "oauth" | "key"; label: string;
   grantId?: Id<"aiGrants">; apiKeyId?: Id<"apiKeys">; lastUsedAt?: number; lastToolName?: string;
+  isCurrent?: boolean;
   policy?: Connection["policy"]; ownBaseline?: Connection["policy"]; pendingFloor?: boolean; inherited?: boolean; inheritedSources?: Connection["inheritedSources"];
 }) {
   const existing = await readConnection(ctx, access.ownerUserId, input.verifiedClientId);
   if (existing) {
+    if (input.isCurrent === false) {
+      const prior = existing.grantId && await ctx.db.get(existing.grantId);
+      if (!prior || prior._creationTime >= access._creationTime || retiredGrant(prior)) await ctx.db.patch(existing._id, { isCurrent: false });
+      return false;
+    }
+    if (!existing.isCurrent && input.grantId && (await ctx.db.get(input.grantId))!._creationTime < access._creationTime) {
+      await ctx.db.patch(existing._id, { ...input, label: safeConnectionText(input.label), isCurrent: true, inherited: false, pendingFloor: false, ownBaseline: input.policy, ownSources: [{ sourceGrantId: String(input.grantId), sourceRevision: input.policy!.revision }], inheritedSources: [{ sourceGrantId: String(input.grantId), sourceRevision: input.policy!.revision }] });
+      return true;
+    }
     if (input.policy && input.grantId && (await ctx.db.get(input.grantId))!._creationTime < access._creationTime) {
       const base = existing.pendingFloor ? existing.ownBaseline ?? input.policy : existing.policy ?? input.policy;
       const combined = { ...base, ...meet(base, sourceEntry(String(input.grantId), input.policy.revision, input.policy)), revision: Math.max(base.revision, input.policy.revision) };
-      await ctx.db.patch(existing._id, { policy: combined, ownBaseline: combined, pendingFloor: false, inherited: false, inheritedSources: [...(existing.pendingFloor ? [] : existing.inheritedSources ?? []), { sourceGrantId: String(input.grantId), sourceRevision: input.policy.revision }] });
+      await ctx.db.patch(existing._id, { policy: combined, ownBaseline: combined, ownSources: [...(existing.ownSources ?? []), { sourceGrantId: String(input.grantId), sourceRevision: input.policy.revision }], pendingFloor: false, inherited: false, inheritedSources: [...(existing.pendingFloor ? [] : existing.inheritedSources ?? []), { sourceGrantId: String(input.grantId), sourceRevision: input.policy.revision }] });
     }
     return false;
   }
-  await ctx.db.insert("aiAccessConnections", { ...input, inheritedSources: input.inheritedSources ?? (input.policy ? [{ sourceGrantId: String(input.grantId ?? input.apiKeyId), sourceRevision: input.policy.revision }] : []), ownerUserId: access.ownerUserId, accessOwnerId: access._id, label: safeConnectionText(input.label), isCurrent: true, generation: access.currentGeneration, createdAt: Date.now() });
-  return true;
+  await ctx.db.insert("aiAccessConnections", { ...input, ownSources: input.policy ? [{ sourceGrantId: String(input.grantId ?? input.apiKeyId), sourceRevision: input.policy.revision }] : [], inheritedSources: input.inheritedSources ?? (input.policy ? [{ sourceGrantId: String(input.grantId ?? input.apiKeyId), sourceRevision: input.policy.revision }] : []), ownerUserId: access.ownerUserId, accessOwnerId: access._id, label: safeConnectionText(input.label), isCurrent: input.isCurrent ?? true, generation: access.currentGeneration, createdAt: Date.now() });
+  return input.isCurrent !== false;
 }
 
 /** The sole legacy traversal. It is paginated, checkpointed and never capped.
@@ -161,10 +159,14 @@ export async function ensureAccess(ctx: MutationCtx, ownerUserId: Id<"users">): 
     const page = await ctx.db.query("aiGrants").withIndex("by_owner_created", q => q.eq("ownerUserId", ownerUserId)).paginate({ numItems: 100, cursor: access.grantCursor });
     for (const grant of page.page) {
       const limits = await legacyGrantLimits(ctx, grant);
-      if (isRestricted(limits)) next = addEntry(next, sourceEntry(String(grant._id), grant.version, limits));
+      const retired = retiredGrant(grant);
+      const floorLimits = { ...limits, endsAt: limits.endsAt !== undefined && limits.endsAt <= Date.now() ? undefined : limits.endsAt };
+      if (!retired && isRestricted(floorLimits)) next = addEntry(next, sourceEntry(String(grant._id), grant.version, floorLimits));
       {
-        const created = await seedConnection(ctx, next, { verifiedClientId: legacyIdentity(grant), kind: "oauth", label: grant.observedClientName ?? grant.label, grantId: grant._id, policy: { ...policy(next), ...limits, revision: grant.version }, lastUsedAt: grant.lastUsedAt, lastToolName: grant.lastToolName });
+        const previous = retired ? await readConnection(ctx, ownerUserId, legacyIdentity(grant)) : null;
+        const created = await seedConnection(ctx, next, { verifiedClientId: legacyIdentity(grant), kind: "oauth", isCurrent: !retired, label: grant.observedClientName ?? grant.label, grantId: grant._id, policy: { ...policy(next), ...limits, revision: grant.version }, lastUsedAt: grant.lastUsedAt, lastToolName: grant.lastToolName });
         if (created) next = { ...next, connectionCount: next.connectionCount + 1 };
+        else if (previous?.isCurrent && !(await readConnection(ctx, ownerUserId, legacyIdentity(grant)))?.isCurrent) next = { ...next, connectionCount: Math.max(0, next.connectionCount - 1) };
       }
       await ctx.db.patch(grant._id, { accessOwnerId: access._id });
     }
@@ -173,8 +175,20 @@ export async function ensureAccess(ctx: MutationCtx, ownerUserId: Id<"users">): 
   else if (!access.keysDone) {
     const page = await ctx.db.query("apiKeys").withIndex("by_created_by", q => q.eq("createdByUserId", ownerUserId)).paginate({ numItems: 100, cursor: access.keyCursor });
     for (const key of page.page) {
+      const successor = await ctx.db.query("apiKeys").withIndex("by_rotated_from", q => q.eq("rotatedFromApiKeyId", key._id)).first();
+      if (key.credentialRetiredAt !== undefined || successor) {
+        const retiredAt = key.credentialRetiredAt ?? successor!.createdAt;
+        await ctx.db.patch(key._id, { accessOwnerId: access._id, credentialRetiredAt: retiredAt, status: "revoked", revokedAt: key.revokedAt ?? retiredAt });
+        const retiredConnection = await readConnection(ctx, ownerUserId, `key:${key._id}`);
+        if (retiredConnection?.isCurrent) {
+          await ctx.db.patch(retiredConnection._id, { isCurrent: false, supersededAt: retiredAt });
+          next = { ...next, connectionCount: Math.max(0, next.connectionCount - 1) };
+        }
+        continue;
+      }
       const limits = legacyKeyLimits(key);
-      if (isRestricted(limits)) next = addEntry(next, sourceEntry(String(key._id), key.version ?? 1, limits));
+      await ctx.db.patch(key._id, { expiresAt: limits.endsAt });
+      // Keys are deliberately scoped credentials, not floor sources.
       const created = await seedConnection(ctx, next, { verifiedClientId: `key:${key._id}`, kind: "key", label: key.name, apiKeyId: key._id, policy: { ...policy(next), ...limits, revision: key.version ?? 1 }, lastUsedAt: key.lastUsedAt, lastToolName: key.lastUsedAction });
       if (created) next = { ...next, connectionCount: next.connectionCount + 1 };
       await ctx.db.patch(key._id, { accessOwnerId: access._id });
@@ -215,24 +229,22 @@ export async function connectOAuth(ctx: MutationCtx, user: Doc<"users">, clientI
 }
 export async function connectKey(ctx: MutationCtx, key: Doc<"apiKeys">, inheritOnly = false) {
   let access = await ensureAccess(ctx, key.createdByUserId);
+  key = (await ctx.db.get(key._id))!; // Bootstrap may have retired this exact credential.
   let connection = await readConnection(ctx, key.createdByUserId, `key:${key._id}`);
   if (!connection) {
-    const legacy = key._creationTime < access._creationTime;
-    let initial = legacy ? { ...access, withheldScopes: [], revoked: false, revokedAt: undefined, pausedAt: undefined, endsAt: undefined, moveIds: undefined } : access;
+    let initial: Access = { ...access, withheldScopes: [], revoked: false, revokedAt: undefined, pausedAt: undefined, endsAt: undefined, moveIds: undefined };
     if (inheritOnly && key.rotatedFromApiKeyId) {
       const predecessor = await readConnection(ctx, key.createdByUserId, `key:${key.rotatedFromApiKeyId}`);
-      if (predecessor) initial = { ...access, ...meet(access, sourceEntry(String(predecessor.apiKeyId), 1, connectionAccess(access, predecessor))) };
-    }
-    const limits = legacyKeyLimits(key);
-    initial = { ...initial, ...meet(initial, sourceEntry(String(key._id), 1, limits)) };
-    await seedConnection(ctx, access, { verifiedClientId: `key:${key._id}`, kind: "key", label: key.name, apiKeyId: key._id, ownBaseline: { ...policy(initial), ...limits }, policy: { ...policy(initial), revision: 1 }, pendingFloor: !legacy && !access.bootstrapped, inherited: !legacy && isRestricted(access), inheritedSources: legacy ? [] : access.entries.map(({sourceGrantId,sourceRevision}) => ({sourceGrantId,sourceRevision})) });
+      if (predecessor) initial = connectionAccess(access, predecessor);
+    } else initial = { ...initial, ...legacyKeyLimits(key) };
+    await seedConnection(ctx, access, { verifiedClientId: `key:${key._id}`, kind: "key", isCurrent: key.credentialRetiredAt === undefined, label: key.name, apiKeyId: key._id, ownBaseline: policy(initial), policy: { ...policy(initial), revision: 1 }, pendingFloor: false, inherited: false, inheritedSources: [] });
     connection = (await readConnection(ctx, key.createdByUserId, `key:${key._id}`))!;
-    if (!inheritOnly && isRestricted(initial)) access = addEntry(access, sourceEntry(String(key._id), 1, initial));
     const { _id, _creationTime, ...fields } = access; void _creationTime;
-    await ctx.db.patch(_id, { ...fields, currentGeneration: access.currentGeneration, connectionCount: access.connectionCount + 1, latestRegistrationId: connection._id, revision: access.connectionCount ? access.revision + 1 : access.revision });
+    await ctx.db.patch(_id, { ...fields, currentGeneration: access.currentGeneration, connectionCount: access.connectionCount + (key.credentialRetiredAt === undefined ? 1 : 0), latestRegistrationId: connection._id, revision: access.connectionCount ? access.revision + 1 : access.revision });
     await ctx.db.patch(key._id, { accessOwnerId: access._id });
     access = (await ctx.db.get(access._id))!;
   }
+  if (key.credentialRetiredAt !== undefined && connection.isCurrent) { await ctx.db.patch(connection._id, { isCurrent: false, supersededAt: key.credentialRetiredAt }); connection = (await ctx.db.get(connection._id))!; }
   connection = await finalizeConnection(ctx, access, connection);
   return { access: connectionAccess(access, connection), connection };
 }
@@ -286,10 +298,14 @@ export async function narrowConnection(ctx: MutationCtx, connection: Connection,
     revoked: baseline.revoked || input.action === "revoke", revokedAt: input.action === "revoke" ? now : baseline.revokedAt,
     endsAt: input.expiresAt === undefined ? baseline.endsAt : input.expiresAt!, moveIds: input.moveIds === undefined ? baseline.moveIds : input.moveIds as Id<"moves">[],
   } });
-  await writeFloor(ctx, root, [...root.entries.filter(row => row.sourceGrantId !== sourceId), entry]);
+  if (connection.kind === "oauth") await writeFloor(ctx, root, [...root.entries.filter(row => row.sourceGrantId !== sourceId), entry]);
+  else await mirrorKey(ctx, connection, next);
   access = next;
-  const receipt = await connectionChange(ctx, { ownerUserId: access.ownerUserId, accessOwnerId: access._id, connectionId: String(connection._id), actor: "ai", before, after: snapshot(access, connection), message: `Your AI ${input.action ?? "narrowed"} its access. New connections will inherit this limit.`, opId: input.opId, requestKey: connectionRequest(input) });
+  const receipt = await connectionChange(ctx, { ownerUserId: access.ownerUserId, accessOwnerId: access._id, connectionId: String(connection._id), actor: "ai", before, after: snapshot(access, connection), message: `Your AI ${input.action ?? "narrowed"} its access. ${connection.kind === "oauth" ? "New AI connections will inherit this limit." : "This affects only this key."}`, opId: input.opId, requestKey: connectionRequest(input) });
   return { version: access.revision, receipt, settings: SETTINGS_URL };
+}
+async function mirrorKey(ctx: MutationCtx, connection: Connection, access: Access) {
+  if (connection.apiKeyId) await ctx.db.patch(connection.apiKeyId, { status: access.revoked ? "revoked" : "active", pausedAt: access.pausedAt, expiresAt: access.endsAt, revokedAt: access.revokedAt, updatedAt: Date.now() });
 }
 export type PersonChange = {
   expectedVersion: number; opId: string; action: "pause" | "resume" | "revoke" | "restore" | "full" | "limits" | "forget";
@@ -302,10 +318,11 @@ export async function changeByPerson(ctx: MutationCtx, connection: Connection, i
   const replay = await previousChange(ctx, String(connection._id), input.opId, "person", input);
   if (replay) return replay.after;
   if (access.revision !== input.expectedVersion) throw new ConvexError("This connection changed. Reload Settings.");
+  if (connection.apiKeyId && (await ctx.db.get(connection.apiKeyId))?.credentialRetiredAt !== undefined) throw new ConvexError("A rotated credential stays retired. Use its replacement key.");
   const originalInput = { ...input };
   const originalAccess = access;
   if (input.action === "forget" && !access.revoked) throw new ConvexError("Only revoked connections can be forgotten.");
-  if (input.action === "restore" && connection.inherited) {
+  if ((input.action === "restore" || (input.action === "resume" && access.pausedAt !== undefined)) && connection.inherited) {
     // Releasing inherited floor limits is an explicit person widening. Own
     // changes made after connection are preserved through the saved policy.
     if (connection.ownBaseline) access = { ...access, ...connection.ownBaseline, endsAt: connection.ownBaseline.endsAt, pausedAt: connection.ownBaseline.pausedAt, moveIds: connection.ownBaseline.moveIds, revokedAt: connection.ownBaseline.revokedAt, revision: access.revision };
@@ -325,7 +342,7 @@ export async function changeByPerson(ctx: MutationCtx, connection: Connection, i
     moveIds: input.moveIds === null ? undefined : input.moveIds ?? access.moveIds,
     revision: access.revision + 1, changedBy: "person", changedAt: Date.now(),
   };
-  const widens = ["resume", "restore", "full"].includes(input.action) || access.withheldScopes.some(scope => !withheldScopes.includes(scope)) || (access.endsAt !== undefined && (next.endsAt === undefined || next.endsAt > access.endsAt)) || (access.moveIds !== undefined && (next.moveIds === undefined || next.moveIds.some(id => !access.moveIds!.includes(id))));
+  const widens = (originalAccess.revoked && !next.revoked) || (originalAccess.pausedAt !== undefined && next.pausedAt === undefined) || originalAccess.withheldScopes.some(scope => !withheldScopes.includes(scope)) || (originalAccess.endsAt !== undefined && (next.endsAt === undefined || next.endsAt > originalAccess.endsAt)) || (originalAccess.moveIds !== undefined && (next.moveIds === undefined || next.moveIds.some(id => !originalAccess.moveIds!.includes(id))));
   if (widens) {
     if (next.moveIds) await validateMoves(ctx, access.ownerUserId, next.moveIds, connection);
     const user = await ctx.db.get(access.ownerUserId);
@@ -341,9 +358,10 @@ export async function changeByPerson(ctx: MutationCtx, connection: Connection, i
   // A person releases exactly the source revisions in this transaction. No
   // permanent ignore-list exists: any later restriction writes a new entry.
   const sourceId = String(connection.grantId ?? connection.apiKeyId ?? connection._id);
-  const releases = [...(input.action === "forget" ? [] : connection.inheritedSources ?? []), ...root.entries.filter(row => row.sourceGrantId === sourceId)];
+  const releases = [...(input.action === "forget" ? [] : connection.inheritedSources ?? []), ...(connection.ownSources ?? []), ...root.entries.filter(row => row.sourceGrantId === sourceId)];
   let entries = widens || input.action === "forget" ? root.entries.filter(row => !releases.some(release => release.sourceGrantId === row.sourceGrantId && release.sourceRevision === row.sourceRevision)) : root.entries;
-  if (isRestricted(next) && input.action !== "forget") {
+  const changedLimits = JSON.stringify(sourceEntry("policy", 0, originalAccess)) !== JSON.stringify(sourceEntry("policy", 0, next));
+  if (isRestricted(next) && input.action !== "forget" && (changedLimits || widens)) {
     const sourceId = String(connection.grantId ?? connection.apiKeyId ?? connection._id);
     const entry = sourceEntry(sourceId, next.revision, next);
     entries = [...entries.filter(row => row.sourceGrantId !== sourceId), entry];
@@ -358,7 +376,9 @@ export async function changeByPerson(ctx: MutationCtx, connection: Connection, i
     moveIds: input.moveIds === undefined ? baseline.moveIds : input.moveIds ?? undefined,
   };
   await ctx.db.patch(connection._id, { policy: policy(next), ownBaseline: chosen, inherited: widens ? false : connection.inherited, inheritedSources: widens ? [] : connection.inheritedSources, forgottenAt: input.action === "forget" ? Date.now() : widens ? undefined : connection.forgottenAt, isCurrent: input.action === "forget" ? false : widens ? true : connection.isCurrent });
-  await writeFloor(ctx, root, entries);
+  if (connection.kind === "oauth") await writeFloor(ctx, root, entries);
+  else await mirrorKey(ctx, connection, next);
+  if ((connection.isCurrent && input.action === "forget") || (!connection.isCurrent && widens)) { const currentRoot = (await ctx.db.get(root._id))!; await ctx.db.patch(root._id, { connectionCount: Math.max(0, currentRoot.connectionCount + (input.action === "forget" ? -1 : 1)) }); }
   access = { ...next, entries };
   const activeConnection = (await ctx.db.get(connection._id))!;
   const after = snapshot(access, activeConnection);

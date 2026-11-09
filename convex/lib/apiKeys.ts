@@ -50,7 +50,7 @@ export function apiKeyEffectiveStatus(
 }
 
 export function countEffectivelyActiveApiKeys(
-  records: Array<Pick<ApiKeyVerificationInput, "status" | "expiresAt">>,
+  records: Array<Pick<ApiKeyVerificationInput, "status" | "expiresAt"> & { pausedAt?: number }>,
   now = Date.now(),
 ) {
   return records.filter(
@@ -234,8 +234,8 @@ function timingSafeEqual(left: string, right: string) {
 /** Indexed effective-active count; old expired rows never enter these ranges. */
 export async function readActiveApiKeyCount(db: QueryCtx["db"] | MutationCtx["db"], householdId: Id<"households">, limit = 100, now = Date.now()) {
   const [permanent, dated] = await Promise.all([
-    db.query("apiKeys").withIndex("by_household_status_expiry", q => q.eq("householdId", householdId).eq("status", "active").eq("expiresAt", undefined)).take(limit + 1),
-    db.query("apiKeys").withIndex("by_household_status_expiry", q => q.eq("householdId", householdId).eq("status", "active").gt("expiresAt", now)).take(limit + 1),
+    db.query("apiKeys").withIndex("by_household_status_expiry", q => q.eq("householdId", householdId).eq("status", "active").eq("expiresAt", undefined)).filter(q => q.eq(q.field("pausedAt"), undefined)).take(limit + 1),
+    db.query("apiKeys").withIndex("by_household_status_expiry", q => q.eq("householdId", householdId).eq("status", "active").gt("expiresAt", now)).filter(q => q.eq(q.field("pausedAt"), undefined)).take(limit + 1),
   ]);
   const count = permanent.length + dated.length;
   return { count: Math.min(count, limit), truncated: count > limit };

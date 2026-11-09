@@ -7,6 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 
 import {
+  withPublicationInput,
   addItemFromPhoto,
   addItemsToBox,
   applyAssignments,
@@ -2750,14 +2751,14 @@ function registerTool(target, name, config) {
     name,
     {
       title: config.title,
-      description: apiToolAccess[name]?.websiteOnly ? "Website-only. Household invitations stay website-only. The person must use https://movingmanifest.com/settings/ai." : config.description,
-      inputSchema: config.inputSchema,
+      description: apiToolAccess[name]?.websiteOnly ? "Website-only. Household invitations stay website-only. The person must use https://movingmanifest.com/settings/ai." : config.description + (config.annotations?.readOnlyHint === false ? " Changes reachable by a share link are publishing. Remove secrets and the person’s own private details; business contacts are expected. acknowledgeContactDetails must exactly match the batch counts, including on the first call. restorePrivately:true revokes affected links for a private restore." : ""),
+      inputSchema: config.annotations?.readOnlyHint === false ? { ...config.inputSchema, acknowledgeContactDetails: z.object({ emails: z.number().int().nonnegative(), phones: z.number().int().nonnegative(), addresses: z.number().int().nonnegative() }).optional(), restorePrivately: z.boolean().optional() } : config.inputSchema,
       annotations: config.annotations,
     },
     async (input) => {
       try {
         if (apiToolAccess[name]?.websiteOnly) throw new Error("Household invitations are website-only. The person must use https://movingmanifest.com/settings/ai.");
-        const result = await config.handler(input);
+        const result = await withPublicationInput(input, () => config.handler(input));
         // Most tools return plain data we wrap as a text block. Tools that need
         // to emit native content blocks (e.g. inline images) set rawResult and
         // return a ready { content: [...] } result we pass through untouched.
