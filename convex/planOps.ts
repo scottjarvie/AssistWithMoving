@@ -1,9 +1,9 @@
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 import { v } from "convex/values";
 
 import type { PlanOp } from "../src/lib/plan-ops";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
-  internalMutation,
   mutation,
   query,
   type MutationCtx,
@@ -49,8 +49,9 @@ export const applyOps = mutation({
   },
 });
 
-export const applyApiOps = internalMutation({
+export const applyApiOps = aiMutation({
   args: {
+    ...publicationArgs,
     householdId: v.id("households"),
     moveId: v.id("moves"),
     planId: v.id("floorPlans"),

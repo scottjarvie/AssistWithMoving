@@ -105,7 +105,7 @@ const helperPresets: HelperPreset[] = [
     id: "full",
     title: "Full trusted helper",
     description:
-      "Best when your assistant is actively helping set up the household, move, inventory, photos, exports, and collaborators.",
+      "Best when your assistant is actively helping set up the household, move, inventory, photos, exports, and existing household context. Invitations stay website-only.",
     name: "Full trusted AI helper key",
     scopes: fullTrustedAccessScopes,
     recommended: true,
@@ -122,7 +122,7 @@ const helperPresets: HelperPreset[] = [
     id: "setup",
     title: "Set up move and members",
     description:
-      "Lets an assistant create move structure and invite household collaborators without changing inventory.",
+      "Lets an assistant create move structure and read household members without changing inventory. Invitations stay website-only.",
     name: "Set up move and members key",
     scopes: setupMoveAndMembersScopes,
   },
@@ -136,9 +136,9 @@ const helperPresets: HelperPreset[] = [
   },
   {
     id: "members",
-    title: "Invite collaborators",
+    title: "Read household members",
     description:
-      "A narrow key for adding people to the household when that is the only job.",
+      "A narrow key for reading the existing household member list. Invitations stay website-only.",
     name: "Member manager key",
     scopes: memberManagerScopes,
   },
@@ -187,7 +187,7 @@ function summarizeScopes(scopes: ApiKeyScope[]) {
   if (sameScopes(scopes, addItemsOnlyScopes)) return "Add items and photos";
   if (sameScopes(scopes, setupMoveAndMembersScopes)) return "Set up move";
   if (sameScopes(scopes, readOnlyScopes)) return "Read only";
-  if (sameScopes(scopes, memberManagerScopes)) return "Member invites";
+  if (sameScopes(scopes, memberManagerScopes)) return "Member list";
   return `${scopes.length} custom permissions`;
 }
 
@@ -352,6 +352,8 @@ export function ApiKeyManager({
 
   async function handleRotateKey(apiKeyId: Id<"apiKeys">) {
     if (!effectiveHouseholdId) return;
+    const current = keys?.find(key => key.apiKeyId === apiKeyId);
+    if (!current) { setMessage("Reload Settings before rotating this connection."); return; }
     setBusy(`rotate-${apiKeyId}`);
     setMessage(null);
     setOneTimeSecret(null);
@@ -359,6 +361,7 @@ export function ApiKeyManager({
       const result = await rotateKey({
         householdId: effectiveHouseholdId,
         apiKeyId,
+        expectedVersion: current.version,
       });
       setOneTimeSecret(result.rawKey);
       setMessage("AI connection rotated. The previous key was revoked.");
@@ -575,7 +578,7 @@ export function ApiKeyManager({
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                   This is the normal choice when your assistant is helping set
                   up a move, add inventory, upload photos, export packets, or
-                  invite household collaborators.
+                  read existing household members. Invitations stay website-only.
                 </p>
               </div>
               <Badge variant="secondary">{summarizeScopes(scopes)}</Badge>
@@ -881,7 +884,7 @@ export function ApiKeyManager({
             <CardDescription className="mt-2 max-w-3xl leading-6">
               {setupMode
                 ? "You are signed in. Create one key, copy it, and paste it into the AI assistant you trust."
-                : "Give a trusted assistant a key so it can help with your household, moves, inventory, photos, and collaborators. You can revoke access any time."}
+                : "Give a trusted assistant a key so it can help with your household, moves, inventory, photos, and existing household context. Invitations stay website-only. You can revoke access any time."}
             </CardDescription>
           </div>
           <Badge variant="outline">

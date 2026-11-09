@@ -1,3 +1,5 @@
+import { internal as generatedInternal } from "./_generated/api";
+import connectionPolicy from "../shared/ai-connection-policy.json";
 import { anyApi, httpRouter } from "convex/server";
 import type { FunctionReference } from "convex/server";
 
@@ -1122,7 +1124,7 @@ function legacyClientIdFrom(claims: Record<string, unknown> | undefined): string
 function legacyClientNameFrom(
   claims: Record<string, unknown> | undefined,
 ): string | undefined {
-  const name = claims?.client_name ?? claims?.azp;
+  const name = claims?.client_name;
   return typeof name === "string" && name.trim() ? name.trim().slice(0, 80) : undefined;
 }
 
@@ -1255,16 +1257,43 @@ export function createLegacyGrantGate(
   };
 }
 
-const mcpHttpAction = httpAction((ctx, request) =>
-  mcpGatewayClient.handleMcpRequest(ctx, request, {
-    authorize: createLegacyGrantGate(ctx),
-    resolveIdentity: resolveMcpIdentity,
-    tools: mcpTools,
-    requireAuth: true,
-    cors: true,
+const mcpHttpAction = httpAction(async (ctx, request) => {
+  const input = request.method === "POST" ? await request.clone().json().catch(() => null) : null;
+  const response = await mcpGatewayClient.handleMcpRequest(ctx, request, {
+    authorize: createLegacyGrantGate(ctx), resolveIdentity: resolveMcpIdentity,
+    tools: mcpTools, requireAuth: true, cors: true,
     serverInfo: { name: "assistwithmoving", version: "0.2.0" },
-  }),
-);
+  });
+  if (input?.method !== "initialize" || !response.ok) return response;
+  const bearer = request.headers.get("authorization")?.replace(/^Bearer /i, "");
+  const identity = bearer ? await resolveMcpIdentity(bearer) : null;
+  let instructions = connectionPolicy.instructions;
+  if (identity) {
+    const clientId = legacyClientIdFrom(identity.claims);
+    // Initialize can succeed before a tool authorization callback. It must
+    // validate CIMD too, before it creates or binds any product connection.
+    let resolved;
+    try {
+      resolved = await resolveClientIdentity(clientId.slice("legacy:".length), {
+        declaredClientName: legacyClientNameFrom(identity.claims) ?? (typeof input?.params?.clientInfo?.name === "string" ? input.params.clientInfo.name : undefined),
+        fetchMetadata: id => ctx.runAction(anyApi.mcpClientMetadata.fetchDocument, { clientId: id }),
+      });
+    } catch {
+      return new Response(JSON.stringify({ error: "invalid_client", message: "OAuth client metadata could not be validated." }), { status: 401, headers: { "content-type": "application/json" } });
+    }
+    await ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, { subject: identity.subject, clientId: resolved.clientId, clientName: resolved.clientName });
+    const state = await ctx.runQuery(generatedInternal.aiGrants.describeConnection, { subject: identity.subject, clientId });
+    instructions += ` Connection state: ${state.status}; changed ${state.changedAt ?? "date unavailable"}; end date ${state.expiresAt ?? "none"}.`;
+  }
+  const decorate = (json: string) => {
+    const envelope = JSON.parse(json);
+    if (envelope.result) envelope.result.instructions = instructions;
+    return JSON.stringify(envelope);
+  };
+  const text = await response.text();
+  const body = response.headers.get("content-type")?.includes("text/event-stream") ? text.replace(/^data: (.+)$/gm, (_, data) => `data: ${decorate(data)}`) : decorate(text);
+  return new Response(body, { status: response.status, headers: response.headers });
+});
 
 // Keep the persisted gateway at a compatibility-only path. The canonical
 // /mcp resource is the stateless workflow surface registered below.

@@ -98,13 +98,13 @@ export function protectedResourceMetadataBody({
     dynamic_client_registration_fallback_supported: true,
     "x-assistwithmoving": {
       grantBoundaryVersion: GRANT_BOUNDARY_VERSION,
-      // Signing in is not authorization. Without an approved grant every tool
+      // Signing in creates full authority; saved limitations are checked on every tool
       // call is refused, so a client should send people to the grant manager
       // rather than reporting a broken connection.
       productGrantRequired: true,
       grantManager: `${origin}/settings/ai`,
       // The product ceiling, surfaced as a vendor hint rather than in
-      // `scopes_supported`: these are approved at the grant manager, not
+      // `scopes_supported`: these are managed at the grant manager, not
       // requested from Clerk.
       productScopes: [...mcpProductScopes],
       // Four doors, honestly named. Only /mcp is the canonical OAuth resource.

@@ -853,7 +853,7 @@ describe("Bring Your AI documentation truth", () => {
       expect(text, `${path} must state Partial`).toMatch(/\bPartial\b/);
       expect(text, `${path} must explain the grant`).toMatch(/\bgrant\b/i);
       expect(text, `${path} must disclose access at connection`).toMatch(
-        /connecting (?:creates a full-access grant|grants full access)/i,
+        /(?:connecting (?:creates a full-access grant|grants full access)|new (?:OAuth )?AI connections start with full access)/i,
       );
       expect(text, `${path} must disclose no automatic end date`).toMatch(
         /no\s+end\s+date\s+by\s+default/i,
@@ -892,7 +892,7 @@ describe("Bring Your AI documentation truth", () => {
       expect(text, `${path} queue loop`).toContain("list_queue_work");
       expect(text, `${path} idempotency`).toMatch(/operationId/);
       expect(text, `${path} stale tools`).toMatch(
-        /stale|disconnect and reconnect|disconnect,? then reconnect/i,
+        /stale|refresh\s+tools\/list/i,
       );
       expect(text, `${path} client identity`).toMatch(
         /Client ID Metadata Document/i,
@@ -915,7 +915,8 @@ describe("Bring Your AI documentation truth", () => {
 
       expect(text, `${path} permanent delete`).toMatch(/permanently delete/i);
       expect(text, `${path} whole-move archive`).toMatch(/archive a whole move/i);
-      expect(text, `${path} sharing`).toMatch(/publish|share link/i);
+      // Revised decision 5 permits publishing; invitations remain prohibited.
+      expect(text, `${path} invitations`).toMatch(/invit(?:e|ation)/i);
       expect(text, `${path} household access`).toMatch(/household/i);
       expect(text, `${path} outside action`).toMatch(
         /book,?\s*(or\s+)?buy,?\s*(or\s+)?sign,?\s*(or\s+)?pay/i,

@@ -1,10 +1,13 @@
 #!/usr/bin/env node
+import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
+import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 
 import {
+  withPublicationInput,
   addItemFromPhoto,
   addItemsToBox,
   applyAssignments,
@@ -75,6 +78,8 @@ import {
   convertItemToBox,
   convertPlannedItem,
   removeItemFromBox,
+  listArchivedAssignments,
+  restoreArchivedAssignment,
   rejectAiPhotoSuggestions,
   rejectAiTextSuggestions,
   rejectPlanningSuggestions,
@@ -940,7 +945,7 @@ export function createAssistWithMovingMcpServer(apiConfig, options = {}) {
     name: "assistwithmoving",
     version: "0.2.0",
     websiteUrl: "https://movingmanifest.com",
-  }, { instructions: "New AI connections default to all entitled current/future scopes, all owned moves and no end date. Use get_api_context first. reduce_connection can only narrow this calling bearer, with a version and durable receipt. Only the person in https://movingmanifest.com/settings/ai can widen or restore access. Existing chosen limits and this door’s product ceiling remain enforced." });
+  }, { instructions: connectionPolicy.instructions });
   registerTools(target, apiConfig, options);
   return target;
 }
@@ -971,7 +976,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "reduce_connection", {
     title: "Reduce this connection's access",
     description: "Narrow only this bearer key's scopes, moveIds (one move), expiry, pause or revoke. Get version from get_api_context. Only the person at https://movingmanifest.com/settings/ai can widen or restore access.",
-    inputSchema: { expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() },
+    inputSchema: { opId: z.string(), expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: input => reduceConnection(apiConfig, input),
   });
@@ -1664,10 +1669,23 @@ export function registerTools(target, apiConfig, options = {}) {
     handler: (input) => addItemsToBox(apiConfig, input),
   });
 
+  registerTool(target, "list_archived_box_assignments", {
+    title: "List archived box assignments", description: "Read recoverable AI unassignments and their archive ids, with complete quantity and notes.",
+    inputSchema: { moveId: z.string(), cursor: z.string().optional() },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: input => listArchivedAssignments(apiConfig, input),
+  });
+  registerTool(target, "restore_box_assignment", {
+    title: "Restore box assignment", description: "Restore an archived AI unassignment with its saved quantity and notes. Refuses to overwrite a current assignment.",
+    inputSchema: { moveId: z.string(), archiveId: z.string(), dryRun: z.boolean().optional() },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: input => restoreArchivedAssignment(apiConfig, input),
+  });
+
   registerTool(target, "remove_item_from_box", {
     title: "Remove item from box",
     description:
-      "Remove one item-to-box assignment without deleting the inventory item. Set dryRun true to preview the request without writing.",
+      "Archive one item-to-box assignment, retaining its quantity and notes for restore. Set dryRun true to preview the request without writing.",
     inputSchema: {
       moveId: z.string(),
       boxId: z.string(),
@@ -2680,7 +2698,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "create_share_link", {
     title: "Create share link",
     description:
-      "Create a scoped documentation share link. The raw token is returned only once in the create response; store it carefully.",
+      "Publish a scoped documentation share link. Remove secrets and the person’s own private contact details first. Business contact details are expected. The site returns one summary with counts; send acknowledgeContactDetails: {emails, phones, addresses} exactly matching the whole batch, including on the first call. Secrets always refuse. The raw token is returned only once in the create response; store it carefully.",
     inputSchema: {
       moveId: z.string(),
       documentationProfileId: z.string().optional(),
@@ -2702,6 +2720,7 @@ export function registerTools(target, apiConfig, options = {}) {
         )
         .optional(),
       expiresAt: z.number().optional(),
+      acknowledgeContactDetails: z.object({ emails: z.number().int().nonnegative(), phones: z.number().int().nonnegative(), addresses: z.number().int().nonnegative() }).optional(),
       dryRun: z.boolean().optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -2711,7 +2730,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "revoke_share_link", {
     title: "Revoke share link",
     description:
-      "Revoke a documentation share link so the public token can no longer be used.",
+      "Revoke a documentation share link so the public token can no longer be used. Requires an active connection, even with zero powers; publish power is not required.",
     inputSchema: {
       moveId: z.string(),
       shareLinkId: z.string(),
@@ -2732,13 +2751,14 @@ function registerTool(target, name, config) {
     name,
     {
       title: config.title,
-      description: config.description,
-      inputSchema: config.inputSchema,
+      description: apiToolAccess[name]?.websiteOnly ? "Website-only. Household invitations stay website-only. The person must use https://movingmanifest.com/settings/ai." : config.description + (config.annotations?.readOnlyHint === false ? " Changes reachable by a share link are publishing. Remove secrets and the person’s own private details; business contacts are expected. acknowledgeContactDetails must exactly match the batch counts, including on the first call. restorePrivately:true revokes affected links for a private restore." : ""),
+      inputSchema: config.annotations?.readOnlyHint === false ? { ...config.inputSchema, acknowledgeContactDetails: z.object({ emails: z.number().int().nonnegative(), phones: z.number().int().nonnegative(), addresses: z.number().int().nonnegative() }).optional(), restorePrivately: z.boolean().optional() } : config.inputSchema,
       annotations: config.annotations,
     },
     async (input) => {
       try {
-        const result = await config.handler(input);
+        if (apiToolAccess[name]?.websiteOnly) throw new Error("Household invitations are website-only. The person must use https://movingmanifest.com/settings/ai.");
+        const result = await withPublicationInput(input, () => config.handler(input));
         // Most tools return plain data we wrap as a text block. Tools that need
         // to emit native content blocks (e.g. inline images) set rawResult and
         // return a ready { content: [...] } result we pass through untouched.

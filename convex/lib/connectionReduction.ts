@@ -6,6 +6,7 @@ export function isSupportedConnectionExpiry(value: number) {
   return Number.isFinite(new Date(value).getTime());
 }
 export const reductionArgs = {
+  opId: v.string(),
   expectedVersion: v.number(),
   scopes: v.optional(v.array(v.string())),
   moveIds: v.optional(v.array(v.string())),
@@ -13,7 +14,7 @@ export const reductionArgs = {
   action: v.optional(v.string()),
 };
 export type Reduction = {
-  expectedVersion: number; scopes?: string[]; moveIds?: string[];
+  opId: string; expectedVersion: number; scopes?: string[]; moveIds?: string[];
   expiresAt?: number | null; action?: string;
 };
 /** The same subset law applies to each door, using that door's own ceiling. */
@@ -21,8 +22,8 @@ export function reducedAccess(current: {
   version: number; scopes: readonly string[]; moveIds?: readonly string[];
   expiresAt?: number; active: boolean;
 }, input: Reduction, now = Date.now()) {
+  void now;
   if (current.version !== input.expectedVersion) throw new ConvexError(`This connection changed. Current version: ${current.version}. Retry the reduction with that version.`);
-  if (!current.active || (current.expiresAt !== undefined && current.expiresAt <= now)) throw new ConvexError(SETTINGS_REFUSAL);
   if (input.action && !["narrow", "pause", "revoke"].includes(input.action)) throw new ConvexError(SETTINGS_REFUSAL);
   if (input.scopes?.some(scope => !current.scopes.includes(scope))) throw new ConvexError(SETTINGS_REFUSAL);
   if (input.moveIds && (input.moveIds.length === 0 || (current.moveIds && input.moveIds.some(id => !current.moveIds!.includes(id))))) throw new ConvexError(SETTINGS_REFUSAL);
@@ -30,6 +31,6 @@ export function reducedAccess(current: {
   return {
     scopes: input.scopes ? [...new Set(input.scopes)] : undefined,
     moveIds: input.moveIds ? [...new Set(input.moveIds)] : undefined,
-    expiresAt: input.action === "pause" ? Math.min(now, input.expiresAt ?? Infinity, current.expiresAt ?? Infinity) : input.expiresAt,
+    expiresAt: input.expiresAt,
   };
 }

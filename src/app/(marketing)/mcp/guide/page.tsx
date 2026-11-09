@@ -1,3 +1,4 @@
+import connectionPolicy from "../../../../../shared/ai-connection-policy.json";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
@@ -177,6 +178,7 @@ export default function McpPage() {
       }}
       visual={<McpVisual />}
     >
+      <p className="mx-auto max-w-5xl p-6 leading-7">{connectionPolicy.instructions}</p>
       <PublicBand>
         <FeatureGrid cards={mcpCards} />
       </PublicBand>

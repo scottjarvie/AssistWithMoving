@@ -204,6 +204,11 @@ export function paginate<T>(rows: T[], query: Record<string, string>) {
   };
 }
 
+/** Removing public exposure is available to every active connection. */
+export function isShareLinkUnpublish({ method, segments }: { method: RestMethod; segments: string[] }) {
+  return segments[0] === "moves" && Boolean(segments[1]) && segments[2] === "share-links" && Boolean(segments[3]) && ((method === "DELETE" && segments.length === 4) || (method === "POST" && segments.length === 5 && segments[4] === "revoke"));
+}
+
 export function requiredScopesForRestRoute({
   method,
   segments,
@@ -211,6 +216,7 @@ export function requiredScopesForRestRoute({
   method: RestMethod;
   segments: string[];
 }): ApiKeyScope[] {
+  if (isShareLinkUnpublish({ method, segments })) return [];
   if (segments[0] === "me" && method === "GET") {
     return ["moves/read"];
   }

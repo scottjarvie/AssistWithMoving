@@ -1,9 +1,9 @@
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import type { Id } from "./_generated/dataModel";
 import {
-  internalMutation,
   internalQuery,
   type MutationCtx,
   type QueryCtx,
@@ -79,6 +79,7 @@ const identityAndMoveArgs = {
 };
 
 export const listQueueItemsArgs = {
+  ...publicationArgs,
   ...identityAndMoveArgs,
   state: v.optional(queueStateValidator),
   ownerUserId: v.optional(v.id("users")),
@@ -146,6 +147,7 @@ export const listQueueItems = internalQuery({
 });
 
 export const getQueueItemArgs = {
+  ...publicationArgs,
   ...identityAndMoveArgs,
   queueItemId: v.id("queueItems"),
   activityLimit: v.optional(v.number()),
@@ -191,10 +193,11 @@ const commandArgs = {
 };
 
 export const claimQueueItemArgs = {
+  ...publicationArgs,
   ...commandArgs,
   nextStep: v.string(),
 };
-export const claimQueueItem = internalMutation({
+export const claimQueueItem = aiMutation({
   args: claimQueueItemArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(
@@ -209,7 +212,7 @@ export const claimQueueItem = internalMutation({
 });
 
 export const releaseQueueItemArgs = { ...commandArgs, reason: v.string() };
-export const releaseQueueItem = internalMutation({
+export const releaseQueueItem = aiMutation({
   args: releaseQueueItemArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(
@@ -224,10 +227,11 @@ export const releaseQueueItem = internalMutation({
 });
 
 export const requestQueueInputArgs = {
+  ...publicationArgs,
   ...commandArgs,
   requiredAction: v.string(),
 };
-export const requestQueueInput = internalMutation({
+export const requestQueueInput = aiMutation({
   args: requestQueueInputArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(
@@ -242,11 +246,12 @@ export const requestQueueInput = internalMutation({
 });
 
 export const completeQueueItemArgs = {
+  ...publicationArgs,
   ...commandArgs,
   resultSummary: v.optional(v.string()),
   resultRefs: v.optional(v.array(queueResultRefValidator)),
 };
-export const completeQueueItem = internalMutation({
+export const completeQueueItem = aiMutation({
   args: completeQueueItemArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(
@@ -261,13 +266,14 @@ export const completeQueueItem = internalMutation({
 });
 
 export const reportQueueFailureArgs = {
+  ...publicationArgs,
   ...commandArgs,
   code: v.string(),
   message: v.string(),
   retryable: v.boolean(),
   retryAfterMs: v.optional(v.number()),
 };
-export const reportQueueFailure = internalMutation({
+export const reportQueueFailure = aiMutation({
   args: reportQueueFailureArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(

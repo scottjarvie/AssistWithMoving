@@ -53,8 +53,8 @@ API keys can include these scopes:
 | `plans/write` | Apply Layout Studio op batches and create pending plan proposals. |
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
 | `exports/read` | List profiles, exports, share-link metadata, and read unexpired export artifacts. |
-| `exports/create` | Create export jobs and create/revoke documentation share links. |
-| `members/manage` | List household members and add or invite collaborators by email. |
+| `exports/create` | Create export jobs and checked share links. Revoking links requires only active access, with no powers. |
+| `members/manage` | Read existing household members; invitations stay website-only. |
 
 Keys may also be restricted to a single move. A move-restricted key should use
 move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
@@ -220,7 +220,7 @@ end date), scopes and whether it is move-restricted. With `moves/read`, it also
 includes the authorized household id/name and restricted move when applicable.
 Without that scope it returns credential metadata only, without household or
 move identifiers or content. This endpoint does not return the raw key or
-secret hash. Revoked or expired keys are refused by authentication.
+secret hash. Paused, revoked and expired keys can still inspect this credential metadata; domain calls remain refused.
 
 ## Queue handoffs
 
@@ -286,39 +286,8 @@ curl https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
   -H "Authorization: Bearer mmk_replace_with_a_members_manage_key"
 ```
 
-Add or invite a collaborator by email:
-
-```bash
-curl -X POST https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
-  -H "Authorization: Bearer mmk_replace_with_a_members_manage_key" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: add-spouse-001" \
-  -d '{ "email": "person@example.com", "role": "editor" }'
-```
-
-Member management requires `members/manage` and a household-scoped key. The
-target email can be added before the person has an account. If the email is not
-registered yet, Assist With Moving stores a pending invitation and activates
-household access when that person signs in with the same email. Owner access
-cannot be granted through the API.
-
-Expected write responses:
-
-| Status | Meaning |
-| --- | --- |
-| `201` | Existing Assist With Moving user was added as an active household member. |
-| `202` | Pending invitation was created for an email without an account yet. |
-| `200` | Existing member/invitation was updated or refreshed. |
-
-Supported roles:
-
-| Role | Use |
-| --- | --- |
-| `admin` | Trusted household administrator who can manage members/settings/keys. |
-| `editor` | Full move and inventory editing helper. |
-| `packer` | Packing-focused collaborator. |
-| `viewer` | Read-focused collaborator. |
-| `guest` | Minimal household access. |
+Invitations are website-only. POST /households/{id}/members is refused for
+all API keys. The person invites people on the signed-in website.
 
 List moves:
 
@@ -1766,46 +1735,23 @@ curl https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
-Create a documentation share link:
-
-```bash
-curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
-  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: share-link-001" \
-  -d '{
-    "documentationProfileId": "DOCUMENTATION_PROFILE_ID",
-    "scope": "profile",
-    "label": "PCS packet for transportation office",
-    "role": "guest",
-    "allowedActions": ["view", "download"],
-    "expiresAt": 1780876800000
-  }'
-```
-
-The create response includes the raw `token` and `/share/{token}` URL once.
-List responses only include safe metadata such as `shareLinkId`, `tokenPreview`,
-status, scope, allowed actions, expiration, and access counts.
-
-Create a move-scoped plan share link:
-
-```bash
-curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
-  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: plan-share-link-001" \
-  -d '{
-    "scope": "move",
-    "label": "Unload plan for crew",
-    "role": "guest",
-    "allowedActions": ["viewPlan"],
-    "expiresAt": 1780876800000
-  }'
-```
-
-`viewPlan` exposes the public read-only Layout Studio plan surface. The public
-payload hides blueprint underlays, values/prices, private notes, raw storage
-metadata, and free-text plan annotations.
+AI share-link creation is allowed: POST /moves/{id}/share-links checks the
+actual outgoing packet. Secrets refuse with a category and field path, never
+the secret value. The current publishing power is rechecked beside the visibility
+write in the same Convex transaction; stored packet reads participate in its
+version/conflict checks. Moving publishes stored packet text and inline plan SVG,
+not file-backed text bodies. Opaque body bytes or body-file references refuse
+until readable content is available; acknowledgement cannot waive this. Existing
+live packet reads also refuse secrets added after publication. JSON-quoted
+secrets are detected, and contact matches never cross line boundaries.
+Emails, phones and street addresses produce one counted
+summary. Supply `acknowledgeContactDetails: { emails: 12, phones: 30, addresses: 8 }`
+with counts exactly equal to what was found for the whole batch. It is accepted on the
+first call too. Business contact details are expected; remove only the person's
+own private details. Unpublishing needs only an active grant and current move access, even with zero
+powers; it never requires exports/create. The AI or person can revoke the link to unpublish, with
+attributed history. The HTTP/stdio `create_share_link` and `revoke_share_link`
+tools expose this existing publication path; OAuth catalogs remain unchanged.
 
 List recent public-recipient comments for all share links on a move:
 
@@ -2118,7 +2064,7 @@ names, and known launch blockers.
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
 | `reduce_connection` | Reduce only this bearer key’s scopes, one selected move, or expiry; pause or revoke. Requires expectedVersion from get_api_context and returns a durable receipt/version. |
 | `list_household_members` | List real household login access for the API key household. |
-| `add_household_member` | Add an existing user or create a pending household invitation by email, with `dryRun` support. |
+| `add_household_member` | Website-only; AI calls, including dry-run, are refused. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `setup_move` | Create or update a move, room lists, transport resources/zones, and starter inventory in one setup call. |
@@ -2207,7 +2153,7 @@ names, and known launch blockers.
 | `download_export` | Return an unexpired export artifact as text. |
 | `list_share_links` | List safe share-link metadata. |
 | `list_share_link_comments` | List public-recipient comments for a move or one share link without returning raw share tokens. |
-| `create_share_link` | Create a scoped documentation share link, with `dryRun` support. |
+| `create_share_link` | Website-only; refuses all API-key calls. |
 | `revoke_share_link` | Revoke a documentation share link, with `dryRun` support. |
 
 Canonical Queue tools (`list_queue_items`, `get_queue_item`,
@@ -2285,211 +2231,133 @@ under a new path such as `/api/v2`. Additive response fields may be added within
 `v1`; clients should ignore unknown fields.
 
 
-### AI connection defaults (23 October 2026)
+## AI connections — AWL-0015 (6 November 2026)
 
-Product policy applies at the first verified contact with no saved connection
-decision, including a valid OAuth credential issued before this deployment.
-Token age does not add a separate approval gate. This never lifts any existing
-scope/expiry choice or refusal; manual widening and reconnect require current
-person consent.
+All four doors (`/mcp`, `/mcp/connect`, API-key HTTP `/api/mcp`, and stdio)
+start with every entitled current and future power and no end date. Connecting
+needs no product approval. Only removed powers stay withheld when new tools
+arrive. Archive and restore are included; permanent delete, invitations remain off. Household invitations stay website-only. Live household roles, move participation,
+private-record visibility and agent-access switches still apply to every call.
 
-New OAuth connections on both `/mcp` and `/mcp/connect` create a full-access
-product grant with no end date. `scopeChoice: "full"` follows the current scope
-catalog, including future additions; it is not a frozen copy of scopes at sign-in.
-Settings show the resolved alias-intersected connection authority separately
-from saved row choices and historical consent. Incomplete history has no claimed
-effective authority until explicit recovery. Every owner limit edit and revoke requires the
-loaded generation-safe version and owner-management revision. Reconnect
-invalidates a delayed revoke even when its old alias row version is unchanged;
-legacy ID-only revokes fail closed.
+### Per-connection policy and durable floor (revised 9 November)
 
-Limit edits also require the loaded owner-management revision, even if the
-selected historical row itself has not changed. A row acknowledged by a newer
-reconnect cannot be edited back into governing authority. Connection quotas
-count resolved clients, including alias intersections and historical refusals,
-rather than preserved active rows from prior approvals. Original records stay
-intact. Oversized incomplete histories retain conservative bounded admission.
-Recovery offers currently eligible household choices only; an archived previous
-household remains historical context and cannot become the default target.
-Recovery paging retains the effective household and its eligibility witness,
-including when the person accepts the automatic default or reaches an empty
-final page. Explicit expiry choices and self-reductions must produce a supported
-date before any write. Settings preserves unsupported historical values and
-shows a date warning instead of crashing or describing them as unlimited.
+Each OAuth client and API key has its own revisioned policy in
+`aiAccessConnections`. Existing client IDs keep that policy exactly on sign-in;
+restricting one connection does not revoke, supersede or change another.
+`aiAccessOwners` holds the floor across every restricted, unreleased OAuth connection: union of withheld powers, any revoke/pause, earliest chosen date and
+intersected move limits. New OAuth connections inherit that floor regardless of name,
+host, CIMD or registration method. No identity matching decides inheritance.
 
-Settings at `https://movingmanifest.com/settings/ai` let the owner deliberately
-choose fewer permissions, add/change/remove an end date, or revoke the connection.
-Scope reductions write `scopeChoice: "chosen"`; all permissions on writes `"full"`.
-Explicit durations from older frontends are treated as person choices too.
+Every OAuth restriction updates its source ID/revision entry atomically with the
+connection policy and private receipt. Person Restore/Resume/widening releases
+inherited entries and that connection's entry only at the revisions overridden.
+Later source restrictions count again. Inherited connections display “Started
+with the limits of your most limited AI” with Restore; revoked connections offer
+Forget. Forget removes only that connection's own floor entries, never inherited
+source entries, without reviving the token. API keys are deliberate script credentials:
+the person picks their limits. Keys never feed the OAuth floor, and OAuth restrictions
+never shape a fresh or rotated key; rotation preserves only its predecessor's policy.
+Restore of an ordinary revoked connection preserves chosen powers, pause and
+end date, including a past date. Inherited Restore releases inherited limits
+while retaining choices made on that connection itself. No runtime history scan
+or record-count cap decides access.
 
-To reconnect a revoked or expired OAuth client, select it under **Connection**
-in the approval form, review the new permissions and end date, then approve.
-An unrelated new approval never overrides a client's refusal. Reconnect requires
-current person consent and the loaded history fingerprint; it binds a new grant
-to that client's existing verified identity on both OAuth doors. The exact prior
-grant revisions stay stored and audited. Later edits or revocations still apply.
-Reconnect advances the effective connection version beyond the previous
-generation, so an old delayed reduction cannot affect the new approval.
-New rows stop at the bounded history limit. At that limit an explicit reconnect
-reuses the selected record, preserving its full prior snapshot in private owner history
-in the same transaction. Oversized existing histories remain viewable and
-revocable in Settings while incomplete-history authorization stays closed.
-Older records can be paged through in Settings. A person can explicitly recover
-a selected verified client even from an oversized history: current consent and
-the loaded owner-management revision are required, and the original selected
-record is preserved in private owner history before reuse. Settings exposes those pages under **Original connection records**. The paginated
-`aiGrants.listSourceHistory` query returns complete originals only to the signed-in
-person owner, without requiring household admin permission. Household audit
-contains the approval summary, never client identity, superseded source IDs or
-revisions, or the private source document. Owner settings and activity queries
-also require a person session; OAuth callers cannot read sibling connections.
+### One-time lazy bootstrap; no migration
 
-Owner connection settings require a signed Clerk session token with a `sid`,
-not an OAuth access token or a legacy custom JWT template. Before release,
-enable Clerk's native Convex integration (session audience `convex`) for the
-app's Clerk instance. The existing `ConvexProviderWithClerk` supports it and
-uses the session token automatically. Keep the existing verified issuer and
-`convex` audience configuration. Legacy JWT templates do not carry session
-claims and are refused for owner administration; ordinary OAuth connections
-continue through their existing verified doors. No Clerk setting is changed
-by this PR. See [Clerk's Convex integration](https://clerk.com/docs/guides/development/integrations/databases/convex)
-and [JWT template claim limits](https://clerk.com/docs/guides/sessions/jwt-templates).
+On an owner's first access, `ensureAccess` creates and checkpoints the durable
+record. Its sole legacy traversal reads **every** grant through `by_owner_created`
+and every key through `by_created_by`, in complete indexed pages. Pages are
+checkpoints, never an authorization cap. Revoked, paused, expired, narrowed,
+unbound and unnamed connections are all checked. Retired, replaced and rotated
+history rows never count as connections or restrictions. Keys are bootstrapped
+for their own policy only, never as OAuth floor entries. A scheduled continuation finishes the
+remaining pages. Until both streams finish, all domain access stays stopped;
+inspection remains available. A failed continuation can be retried on the next
+access without losing the restrictions already read.
 
-Recovery household choices also include current move-only participation, in
-25-record pages. Labels expose only an accessible move's title; household
-profiles and unrelated moves stay private. Current participation is checked
-again when the person submits recovery.
+Unmarked main-era OAuth end dates were forced defaults and lift. Exact legacy
+90-day API-key default dates lift; other chosen key dates stay on that key.
+Legacy end dates already past at bootstrap never enter the OAuth floor.
+Only untouched active version-1 automatic OAuth scope defaults lift. An explicit
+system automatic marker, or the original immutable connected-by-signing-in
+receipt for the exact old 30-day default, proves provenance. Settings choices, AI reductions and ambiguous scope provenance retain their old
+powers. Bootstrap records restricted sources and its before/after system
+receipts without rewriting legacy OAuth scopes, dates or revisions. Key status, pause
+and effective date are mirrored to the key row so revocation/expiry frees plan slots. After completion,
+all mutations write the durable authority; no connection or tool call imports
+legacy records again. No separate migration or production data script is used.
 
-Member household choices and move choices in both connection managers are also
-paged. API-key Settings reads a bounded key-only summary, independently of the
-household's inventory, members, invitations and boxes. A move restriction stays
-selected across pages and resets when the person changes households.
+### Inspection, narrow-only control and private Settings
 
-Detailed grant approval, edit, revocation and reduction receipts are durable
-owner-private audit records, readable in Settings under Private connection
-receipts. Shared household audit contains only a generic connection-change
-event. Reads of older shared grant audit rows hide their private identifiers,
-limits and reasons while retaining the original stored source. Scope-free
-API-key context discovery returns credential settings, without household or
-move data; `moves/read` is required to include that context.
+OAuth `describe_connection` and API-key `get_api_context` / `GET /api/v1/me`
+work without domain powers, including while initializing, paused, revoked,
+expired or superseded. They return state, permitted tools, tools held back with
+the missing power and reason, chosen date, revision, and the absolute
+https://movingmanifest.com/settings/ai recovery link. A stopped or readless key
+receives credential metadata without household or move contents.
 
-API-key lifecycle and reduction receipts use the same private owner receipt
-boundary; shared events omit the key ID and limit history, including on reads
-of older source rows. A failure writing either receipt rolls back the entire
-reduction. Recovery and widening recheck that the household and selected moves
-are still active. Participant choices carry an eligible move ID, validated
-directly against current access when submitted, so later pages work without an
-unbounded participation scan. The move ID is an eligibility hint, never authority.
+All four doors offer `reduce_connection`; REST uses `POST /api/v1/me/access`.
+Supply a non-secret `opId` and the current `expectedVersion`, plus optional
+`scopes`, `moveIds`, `expiresAt`, and `action` (`narrow`, `pause`, `revoke`). Omitted
+fields preserve limits. Adding powers or moves, clearing/extending a date,
+resuming and restoring are refused with the narrow-only error and Settings link.
+A verified caller cannot choose a sibling credential through arguments. Matching
+replays return the original receipt; opId collisions and stale writes fail.
 
-Shared domain-work audit reads, including Claim Center, also remove credential
-identifiers and connection-attributed private reasons recursively. Stored source
-records remain intact. Account export creation, artifact retrieval and account
-controls require the same signed person-session boundary as connection settings.
-Private grant reduction receipts retain the before and after version, scopes,
-move limits, expiry and active state atomically. Scope-free API-key discovery
-omits the restricted move's ID as well as its content.
-Move-only participants can select a revoked or expired client in Settings and
-explicitly reconnect using verified current participation, even without a
-household membership. Selecting a reconnect uses that connection?s household,
-even when the person is also a member elsewhere. Move choices and API-key
-history are paginated. Current participants can edit move limits using only
-currently accessible moves. API-key settings reads also require a person session.
-Existing role and move ceilings still apply. Only that client's indexed
-recovered decision becomes authoritative; other incomplete histories stay
-closed. Recovered revisions are negative and decrease on edits and reconnects;
-clients must echo the exact version they receive. The legacy `describe_connection`
-tool reports only the calling credential?s version/status, independently of
-domain scopes and move restrictions; use it before `reduce_connection`. Positive legacy versions can
-never match a recovered generation. Later revocation of a historical alias also
-stops its recovered client; older alias forms cannot edit the new decision.
+`aiConnectionChanges` stores append-only, durable owner-private before/after
+history, actor, date and opId. Secret-shaped names and text are redacted.
+Mutation and receipt commit together. Shared household events and admin
+observability do not expose private connection history. Settings requires a
+signed Clerk person-session `sid`, refuses OAuth identities, paginates every
+current connection, and separately paginates earlier registrations and connection
+history. No arbitrary connection cap or historical scan decides authority.
 
-Only explicitly full grants follow future scopes. Legacy/unmarked and chosen
-scope arrays and every stored end date remain exact, including automatic old
-durations. No migration, lift, backfill or production record write is performed.
-New API keys likewise default to the full API catalog and no end date; explicit
-scope arrays remain chosen unless the person selects full. API-key exports and
-members capabilities retain their existing ceiling; canonical OAuth does not
-inherit those capabilities.
+Both OAuth HTTP doors validate a required CIMD document through the protected,
+DNS-pinned Node action **before** creating or binding any connection, including
+initialize. A failed validation has no product-grant effects. The atomic mutation
+then reads current durable restrictions, so a limit committed during metadata
+I/O still wins. `clientInfo.name` is accepted only on initialize; verified
+registration metadata has precedence. Names can only narrow, never widen.
 
-All four doors offer `reduce_connection`. OAuth takes the calling client's
-current `expectedVersion` from `describe_connection` on either OAuth door. API-key HTTP/stdio use
-`get_api_context` and `POST /api/v1/me/access`. Inputs are `scopes`, `moveIds`,
-`expiresAt` and `action` (`narrow`, `pause`, `revoke`). Omitted fields preserve
-limits; null expiry, additions, reactivation and extension are refused with a
-Settings link. Pause ends access immediately; only the person can restore it.
-The change, version and durable audit receipt commit atomically. API-key REST
-reductions execute in a Convex subtransaction, so a receipt failure rolls back
-the key change before the facade maps the failure to an HTTP response. A caller cannot
-supply a sibling grant/key id. Current consent evidence remains required for
-person-side approvals even when access choices use defaults.
+Before shipping, verify Clerk's native Convex integration supplies person
+session claims (`sid`, audience `convex`); legacy custom templates cannot be
+used for website administration. This PR changes no Clerk configuration.
 
+### Recoverable box unassignments
 
-### Shared OAuth credential history and connection metadata
+Both API-key DELETE paths that remove an item-to-box assignment move its full
+source into `archivedBoxAssignments`, with AI/key attribution, before removing
+the active relationship. Quantity and notes are retained. No archive purge is
+exposed. `GET /moves/:moveId/assignments?archived=true` pages Archive (use the
+returned cursor); `POST /moves/:moveId/assignments/:archiveId/restore` restores
+without overwriting a current assignment. HTTP/stdio tools expose these as
+`list_archived_box_assignments` and `restore_box_assignment`. Ordinary item and
+person deletes already archive or soft-delete; protocol receipt/rate-limit
+cleanup does not delete user move data.
 
-Both doors use the resolved identity from the verified OAuth claim after required
-metadata validation. Both `client_id` and `azp` use the same extraction rule;
-conflicting client identities are refused before effects. The internal `legacy:`
-history namespace cannot be supplied as an OAuth client claim to skip CIMD proof.
-Historical raw ids, their `legacy:` compatibility aliases,
-and equivalent CIMD URL serializations share an enforcement boundary. URL
-comparison uses the same URL serialization as metadata validation (including
-host case, default port, root slash and dot segments); distinct paths, queries
-and opaque client ids remain distinct. No caller-supplied alias or metadata name
-can link unrelated identities. Each exact stored alias's latest decision is
-resolved from its complete bounded history before status filtering. If aliases
-exist, allowed scopes and moves are their intersection, the earliest stored
-end date applies, and a refusal on either alias blocks both doors. Switching
-doors cannot mint another full grant or bypass a reduction. These are read-time
-rules: existing grants, exact legacy arrays, dates and revocations are not
-renamed, migrated or lifted. Only person edits with the existing loaded
-revision and consent checks can increase each governing stored approval.
-Own-access reductions use the effective connection revision (the sum of the
-current alias revisions), so an edit on either alias invalidates
-a previously loaded reduction revision. Because URL serialization cannot be
-reversed to enumerate all historical spellings, URL clients read the complete
-owner history with a 128-row safety bound and fail closed on overflow. Opaque
-clients keep bounded exact indexed lookups. No truncated scan may authorize.
+### Policy and catalogue maintenance
 
-Both OAuth doors validate a required Client ID Metadata Document through the
-bounded, DNS-pinned Node action before creating or binding a grant. Failed
-validation leaves grant and binding state untouched. After network validation,
-the binding mutation re-reads current authority and refusal history atomically;
-a decision made while metadata is loading still governs.
+`shared/ai-connection-policy.json` owns common instructions used on connect,
+`/ai`, `/ai.txt`, and `llms*.txt`. `node scripts/build-ai-access.mjs` regenerates
+the public policy prefix and API tool-to-power catalogue from handlers and
+backend route requirements; `--check` verifies parity and rejects undecided
+tools. Both API-key registries refuse household invitation tools locally, including
+dry-run, and the backend blocks that write route. Share-link creation scans the
+actual public packet: obvious keys/tokens/passwords are refused; email addresses,
+phones and street addresses require removal or acknowledgeContactDetails with counts exactly matching the whole batch.
+Edits, additions, moves, duplicates and restores that change an existing outgoing
+packet run the same complete check in the committing transaction. REST isolates
+these writes in a child mutation so returning an error cannot commit a refused edit.
+The full resulting batch is scanned, with current publish power rechecked. A refused
+restore offers restorePrivately:true, which revokes affected links in that transaction.
+Unscannable bodies refuse; the live public page shows an unavailable state if its
+current secret recheck fails. Secrets include escaped JSON, snake_case-prefixed
+keys, multiline values, credential URLs, common token formats and Luhn-valid cards.
+Both person and AI may revoke links with any active grant; no publish power is
+required to reduce exposure. Creation, updates and revocation retain AI attribution
+and audit history. Scrub shared content before publishing.
 
-`GET /api/v1/me` and `get_api_context` remain available without a domain read
-scope for connection inspection and own-access reduction. Their restricted move
-payload is returned only with `moves/read`. Removing read access, including
-reducing to an empty scope array, removes move titles, routes and dates from
-context on both API-key MCP doors as well as REST. Ordinary move reads continue
-to require their existing scopes.
-
-The context endpoint is intentionally enriched with authorized household and
-move context for callers with `moves/read`; it is credential-only when that
-scope is absent. Credential status and expiry are included in either case.
-API-key self-reduction receipts preserve before and after scopes, move limit,
-expiry, status and version privately and atomically, including pause and revoke.
-
-Administrative audit and observability summaries use the same shared privacy
-projection; detailed connection receipts remain available only to their owner.
-Settings distinguishes saved grant choices from the resolved alias scopes,
-selected moves and earliest end date. Current move eligibility rejects either
-archive marker. When widening a grant after it narrowed itself to another
-accessible household's move, the owner must still have access to that retained
-move; its original household is not treated as the move's household.
-
-Canonical `describe_connection` returns only this credential's revision,
-status, scopes, expiry and a move-restriction indicator, without selected move
-or source grant IDs. Settings keeps selections across pages and lets the person
-remove retained moves even when they are absent from the current choices.
-Participant limit edits resolve an eligibility witness in its actual current
-household. Person API-key revocation requires the displayed `expectedVersion`
-and advances that revision atomically; rotation also advances the revoked
-source row and creates a distinct key ID, never reusing a prior generation.
-
-Reconnect revisions advance beyond every revision discoverable from the
-complete alias history, including decisions superseded by a later historical
-refusal. Clients must treat revisions as opaque numbers and reload connection
-metadata after reconnecting. Incomplete histories or exhausted positive numeric
-precision use indexed disjoint recovery revisions, preserving the replaced
-original source privately. Move choices exclude archived households; an owner
-editing selected moves uses a retained move as the eligibility witness.
+Deploy the Convex schema, indexes and functions before the website. No production
+deployment or data mutation is part of the draft-PR build stage. Backend tests
+use `convex-test` with synthetic records; bootstrap and subsequent accesses are
+proved without live credentials.

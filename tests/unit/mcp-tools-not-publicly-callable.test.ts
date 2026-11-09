@@ -45,7 +45,7 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 /** `export const foo = query({` and friends, public constructors only. */
 const PUBLIC_EXPORT = /^export const (\w+) = (query|mutation|action)\(\{/gm;
 const INTERNAL_EXPORT =
-  /^export const (\w+) = (internalQuery|internalMutation|internalAction)\(\{/gm;
+  /^export const (\w+) = (internalQuery|internalMutation|aiMutation|internalAction)\(\{/gm;
 
 describe("MCP tool handlers are not publicly callable", () => {
   for (const modulePath of IDENTITY_ARGUMENT_MODULES) {
@@ -77,6 +77,13 @@ describe("MCP tool handlers are not publicly callable", () => {
       "convex/mcpToolsSetup.ts": 9,
       "convex/mcpToolsCanonicalQueue.ts": 7,
     });
+  });
+
+  it("the publication wrapper registers only internal mutations", () => {
+    const source = read("convex/lib/sharedPublishing.ts");
+    expect(source).toContain("export const aiMutation: typeof internalMutation");
+    expect(source).toContain("=> internalMutation({");
+    expect(source).not.toMatch(/=> mutation\(\{/);
   });
 
   it("never imports the public api surface for its own modules", () => {

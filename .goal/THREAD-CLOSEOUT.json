@@ -1,7 +1,0 @@
-{
-  "director": {"environmentId":"f2ebb2d2-da0d-4f30-b6d2-0d97e5e2e670","threadId":"mcp:launch:b348eb5d2973cd70a0d5bba44e669bc3ac881381035cecb6239cb51841bf330f","disposition":"ongoing-director"},
-  "threads": [
-    {"environmentId":"f2ebb2d2-da0d-4f30-b6d2-0d97e5e2e670","threadId":"mcp:launch:d99be0bd786683b93a8e970a8cf972ce02e9ad8cb4038baa0d2d1088e7c9c76b","disposition":"custody-pending","owes":"accept preserved source fixes and failure evidence before settlement"},
-    {"environmentId":"f2ebb2d2-da0d-4f30-b6d2-0d97e5e2e670","threadId":"thread:provider:codex:native-thread:01a1ad09-b882-7a41-b68c-c7b669fef951","disposition":"evidence-only-review","owes":"librarian settlement with retained REVIEW.md"}
-  ]
-}

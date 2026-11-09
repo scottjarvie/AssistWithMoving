@@ -222,7 +222,7 @@ async function seedWorkspace(grant?: GrantOptions) {
         ownerUserId: userId,
         householdId,
         label: "Synthetic connection",
-        clientId: grant.clientId,
+        clientId: grant.clientId ?? CLIENT_ID,
         scopes: grant.scopes ?? [...movingScopes],
         moveScope: grant.moveScope ?? "allMoves",
         moveIds:
@@ -233,6 +233,7 @@ async function seedWorkspace(grant?: GrantOptions) {
         consentBoundaryVersion: GRANT_BOUNDARY_VERSION,
         consentSnapshot: buildConsentSnapshot(grant.scopes ?? [...movingScopes]),
         expiresAt: grant.expiresAt,
+        expiryChoice: grant.expiresAt === undefined ? "none" : "chosen",
         approvedAt: now,
         useCount: 0,
         version: 1,
@@ -243,7 +244,10 @@ async function seedWorkspace(grant?: GrantOptions) {
     }
     return { userId, householdId, moveId, otherMoveId, itemId, queueItemId, grantId };
   });
-  if (grant && !grant.clientId) await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: CLIENT_ID });
+  if (grant) {
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: grant.clientId ?? CLIENT_ID });
+    while (!(await t.run(ctx => ctx.db.query("aiAccessOwners").first()))!.bootstrapped) await t.mutation(internal.aiGrants.continueBootstrap, { ownerUserId: ids.userId });
+  }
   return { t, ...ids };
 }
 
@@ -599,9 +603,7 @@ describe("enforcement on every call", () => {
       principal: PRINCIPAL,
       moveId: fixture.moveId,
     });
-    await fixture.t.run(async (ctx) => {
-      await ctx.db.patch(fixture.grantId, { status: "revoked", revokedAt: Date.now() });
-    });
+    await fixture.t.mutation(internal.aiGrants.reduceConnection, { subject: SUBJECT, clientId: CLIENT_ID, action: "revoke", opId: "revoke", expectedVersion: (await fixture.t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId: CLIENT_ID })).version! });
     const refusal = await refusalOf(
       fixture.t.query(mcp.getMoveBrief, {
         principal: PRINCIPAL,

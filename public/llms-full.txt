@@ -1,3 +1,5 @@
+New AI connections get all current and future powers with no end date unless earlier restricted, unreleased OAuth connections set a floor: every new connection starts with the limits of your most limited AI. Existing client ids keep their own limits. API keys use the limits deliberately chosen by the person; keys and OAuth AIs never feed each other’s floor. Call describe_connection (or get_api_context for API keys) to inspect the actual state, reason, end date and revision. Use reduce_connection with opId and expectedVersion to remove powers, shorten an end date, pause or revoke only your own connection. You can never widen or restore access. Only the person can restore it at https://movingmanifest.com/settings/ai. Reconnecting never removes a limit. Archive and restore are allowed. Your AI may publish or create share links: scrub secrets first; obvious secrets are refused, and contact details get one summary with counts. Send acknowledgeContactDetails: {emails, phones, addresses} with counts exactly equal to what was found for the whole batch, including on the first call. Business contact details are expected; remove only the person’s own private details. Edits, additions, moves, duplicates and restores reachable by a share link also count as publishing and are checked before commit. A refused restore can use restorePrivately:true to revoke affected links. The person and AI can unpublish with any active grant. Household invitations stay website-only; money, messaging and permanent deletion stay off.
+
 # Assist With Moving AI Assistant Guide
 
 Assist With Moving is a durable household move-planning workspace. It keeps the
@@ -120,9 +122,8 @@ the same move, they need household membership.
 Current flow:
 
 1. The owner creates the household/move.
-2. An owner/admin adds or invites the spouse by email from Settings, or an assistant uses
-   `POST /api/v1/households/{householdId}/members` with a key that has
-   `members/manage`.
+2. An owner/admin adds or invites the spouse by email from Settings on the website.
+   Household invitations stay website-only; API keys may create checked share links.
 3. If the spouse does not have an account yet, Assist With Moving keeps a pending
    invitation for that email.
 4. The spouse creates their own Assist With Moving account with that email and then
@@ -350,7 +351,7 @@ Local stdio package:      assistwithmoving-mcp
 Capability status for the canonical door: **Partial**. The endpoint, the five
 product scopes, the grant boundary, the Queue workflow, and immediate revocation
 are implemented. No AI product has completed a full connect → consent → grant →
-tool list → bounded read → evidence → complete save → revoke → reconnect
+tool list → bounded read → evidence → complete save → revoke → person restores
 lifecycle against it, and the provider-side configuration for the
 metadata-document client path is not yet done. The honest description of what
 can connect is a requirement, not a product name: any AI that speaks remote
@@ -362,8 +363,8 @@ and every call, decides which moves, which data, and which operations. Revoking
 a grant refuses the very next call rather than waiting for a token to expire. A
 broader token never widens a chosen grant. Full-access grants include future scopes.
 
-Until a grant exists, `tools/list` returns exactly one tool:
-`describe_connection`. It takes no scope, is always available, and reports the
+When domain access is stopped, `tools/list` returns the permission-free
+`describe_connection` and `reduce_connection` controls. Inspection reports the
 granted scopes, the client's recorded registration method, what this connection
 can never do, and the sentence to tell the person. Call it whenever no other
 tools appear instead of reporting an opaque protocol failure.
@@ -371,9 +372,8 @@ tools appear instead of reporting an opaque protocol failure.
 The person reviews, narrows, or revokes the grant at `https://movingmanifest.com/settings/ai` — the
 canonical grant screen, and the same URL `describe_connection` reports as its
 `grantManager`. There they choose all moves or selected moves, choose the
-operations, read the consent summary that is frozen onto the grant at approval
-time, review active and expired connections with client name, registration
-method, scopes, last use, and activity, revoke a connection, and copy a manual
+operations, review current connections and earlier registrations, powers, last
+use and attributed history, pause or revoke a connection, and copy a manual
 Queue brief. The older `/settings/ai-connections` path redirects to it.
 
 Client identity: a Client ID Metadata Document is preferred. The `client_id` is
@@ -451,9 +451,9 @@ How to work this door:
 7. Every write takes an `operationId`. Reuse the same one on a retry so it
    corrects the earlier attempt rather than duplicating it. Corrections also
    carry `expectedUpdatedAt` or `expectedVersion`.
-8. If a tool that used to exist stops working, or a new one never appears, the
-   client is holding a stale catalog from before a deployment. Disconnect and
-   reconnect. Saved move work is unaffected.
+8. If a tool is missing or refused, call describe_connection and refresh
+   tools/list. Only the person restores access at
+   https://movingmanifest.com/settings/ai. Reconnecting never removes limits.
 
 Queue loop (requires `moving.queue.work`): `list_queue_work` →
 `claim_queue_work` → `ask_queue_question` (smallest Needs you question) or
@@ -523,4 +523,4 @@ date, change or remove that date later, and revoke access at any time. A date yo
 choose is recorded as your choice and never removed automatically. Legacy grants
 with uncertain scope or expiry history keep their recorded limits.
 
-New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Existing chosen and legacy limits remain exact. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.
+New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Person-set and AI-set limits remain exact; proven old automatic defaults are lifted when checked. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.

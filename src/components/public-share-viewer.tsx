@@ -260,7 +260,7 @@ type PublicShareView =
       plan: PublicPlanPacket;
     }
   | {
-      status: "unsupported";
+      status: "unsupported" | "unavailable";
       reason: string;
       shareLink: ShareMetadata;
       profile?: { name: string; type: string };
@@ -460,14 +460,14 @@ export function PublicShareViewer({ token }: { token: string }) {
     );
   }
 
-  if (view.status === "unsupported") {
+  if (view.status !== "ready") {
     return (
       <PublicShareShell>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
-              Share link verified
+              {view.status === "unavailable" ? "Shared packet unavailable" : "Share link verified"}
             </CardTitle>
             <CardDescription>{view.reason}</CardDescription>
           </CardHeader>
