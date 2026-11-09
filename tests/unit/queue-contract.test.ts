@@ -16,7 +16,7 @@ import {
 } from "../../convex/lib/queue";
 
 describe("canonical Queue behavior contract", () => {
-  it("exposes exactly the four family states and labels", () => {
+  it("retains the legacy storage value while exposing three lifecycle labels plus the input flag", () => {
     expect(queueStates).toEqual([
       "needsYou",
       "working",
@@ -24,10 +24,10 @@ describe("canonical Queue behavior contract", () => {
       "done",
     ]);
     expect(queueStateLabels).toEqual({
-      needsYou: "Needs You",
-      working: "Working",
-      waitingForAi: "Waiting for your AI",
-      done: "Done",
+      needsYou: "Needs your input",
+      working: "AI working",
+      waitingForAi: "Waiting on AI",
+      done: "Answered",
     });
   });
 
@@ -154,7 +154,7 @@ describe("canonical Queue behavior contract", () => {
     expect(() => assertExpectedQueueVersion(4, 4)).not.toThrow();
   });
 
-  it("excludes missing expiries and holds canonical OAuth Queue registration", () => {
+  it("excludes missing expiries and keeps legacy Queue handlers internal", () => {
     const queueSource = readFileSync("convex/queue.ts", "utf8");
     expect(queueSource).toContain(
       'q.gt("expiresAt", undefined).lt("expiresAt", now)',
@@ -180,7 +180,7 @@ describe("canonical Queue behavior contract", () => {
     expect(oauthFunctions).not.toMatch(/export const \w+ = (query|mutation)\(\{/);
 
     const gatewayRegistry = readFileSync("convex/mcp.ts", "utf8");
-    expect(gatewayRegistry).not.toContain("mcpToolsCanonicalQueue");
+    expect(gatewayRegistry).toContain("mcpToolsCanonicalQueue.addQueueItem");
     expect(gatewayRegistry).not.toMatch(/name: "list_queue_items"/);
     expect(gatewayRegistry).not.toMatch(/name: "claim_queue_item"/);
     expect(gatewayRegistry).toContain(

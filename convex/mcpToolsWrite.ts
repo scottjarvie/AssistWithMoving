@@ -1,3 +1,6 @@
+import {readConnection} from "./lib/carriedAccess";
+import {requireQueueConnection} from "./lib/queueConnection";
+import {createQueueItem} from "./lib/queueService";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 // OAuth MCP gateway tools (orient + capture + organize + set up). Each resolves
 // the user from the gateway-injected caller.subject via the identity bridge
@@ -522,6 +525,11 @@ const queueDraftValidator = v.object({
   presentTransportId: v.optional(v.id("transportResources")),
 });
 export const captureToQueueArgs = {
+  addedBy: v.optional(
+    v.union(v.literal("ai_on_request"), v.literal("ai_suggestion")),
+  ),
+  reason: v.optional(v.string()),
+  operationId: v.optional(v.string()),
   ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
@@ -531,6 +539,12 @@ export const captureToQueueArgs = {
 export const captureToQueue = aiMutation({
   args: captureToQueueArgs,
   handler: async (ctx, args) => {
+    if (args.addedBy !== "ai_on_request" && args.addedBy !== "ai_suggestion")
+      throw new ConvexError(
+        "AI adds require addedBy: ai_on_request or ai_suggestion.",
+      );
+    if (!args.operationId)
+      throw new ConvexError("operationId is required for Queue adds.");
     const policy = await requireMoveForSubject(
       ctx,
       args.caller.subject,
@@ -539,10 +553,63 @@ export const captureToQueue = aiMutation({
       "inventory:edit",
     );
     const userId = policy.actor.userId;
+    const connectionId = await requireQueueConnection(
+      ctx,
+      userId,
+      args.caller,
+      args.moveId,
+      args.addedBy === "ai_suggestion",
+      "moving.work.write",
+    );
+    const connectionLabel =
+      (await readConnection(ctx, userId, connectionId))?.label ?? "Your AI";
+    if (args.addedBy === "ai_suggestion") {
+      const ids = [];
+      for (const [index, draft] of args.entries.entries())
+        ids.push(
+          (
+            await createQueueItem(
+              ctx,
+              {
+                userId,
+                actorType: "agent",
+                connectionId,
+                label: connectionLabel,
+                isManager: false,
+                delegatedOwnerIds: [],
+              },
+              {
+                householdId: args.householdId,
+                moveId: args.moveId,
+                directive: draft.instructions ?? "Review this move capture",
+                addedBy: "ai_suggestion",
+                reason: args.reason,
+                evidence: JSON.stringify(draft),
+                idempotencyKey: `${args.operationId}:${index}`,
+              },
+            )
+          )._id,
+        );
+      return { entryIds: ids };
+    }
     const now = Date.now();
     const entryIds: string[] = [];
 
-    for (const draft of args.entries) {
+    for (const [index, draft] of args.entries.entries()) {
+      const addOperationId = `${args.operationId}:${index}`;
+      const replay = await ctx.db
+        .query("ingestionQueueEntries")
+        .withIndex("by_move_add_operation", (q) =>
+          q
+            .eq("moveId", args.moveId)
+            .eq("createdByUserId", userId)
+            .eq("addOperationId", addOperationId),
+        )
+        .unique();
+      if (replay) {
+        entryIds.push(String(replay._id));
+        continue;
+      }
       // Confirm any referenced photos belong to this move (no cross-tenant refs).
       const mediaPhotoIds = draft.mediaPhotoIds ?? [];
       for (const photoId of mediaPhotoIds) {
@@ -567,6 +634,9 @@ export const captureToQueue = aiMutation({
       // Validate the structured starting/present refs belong to this move too.
       await assertCaptureStructuredRefs(ctx, args.moveId, draft);
       const entryId = await ctx.db.insert("ingestionQueueEntries", {
+        addOperationId,
+        addedBy: "ai_on_request",
+        agentLabel: "Connected AI",
         householdId: args.householdId,
         moveId: args.moveId,
         status: "queued",
@@ -609,6 +679,7 @@ export const captureToQueue = aiMutation({
 });
 
 // ---- setup_move ------------------------------------------------------------
+
 export const setupMoveArgs = {
   ...publicationArgs,
   caller: mcpCallerValidator,

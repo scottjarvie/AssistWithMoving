@@ -73,12 +73,11 @@ a capability is missing). Three code surfaces serve four public doors: `/mcp`,
 1. **Canonical stateless OAuth** — `convex/httpRoutes/mcp.ts` +
    `convex/mcpPlanning.ts` + `convex/mcpQueueWork.ts`, served at
    `movingmanifest.com/mcp`. Its catalog is the exact
-   `STATELESS_MOVING_TOOL_NAMES` array in `convex/httpRoutes/mcp.ts` — sixteen
-   workflow-level tools covering a durable move brief, bounded
+   `STATELESS_MOVING_TOOL_NAMES` array in `convex/httpRoutes/mcp.ts` — workflow-level tools covering a durable move brief, bounded
    search/read/media, move context, inventory, planning records,
    complete-result saves, the full Queue loop (list, claim, release, ask the
-   smallest Needs you question, complete), and reversible archive. Each tool is
-   gated by one of the five product grant scopes in `convex/lib/aiGrants.ts`, so
+   smallest question, raising the Needs your input flag (state unchanged), complete), and reversible archive. Each tool is
+   gated by product grant scopes in `convex/lib/aiGrants.ts`, so
    a connection is only shown what the person approved. Never retype this count;
    `tests/unit/mcp-doc-tool-catalog.test.ts` derives it from source.
 2. **Legacy persisted OAuth** — `convex/mcp.ts` + `convex/mcpTools*.ts`, served
@@ -151,3 +150,9 @@ The AI merges and deploys routine work after previewing it locally ([Core Philos
   source for current work. GitHub PRs carry implementation review and evidence.
 - Agent-facing Convex tools must throw `ConvexError` (plain `Error` may be redacted by an MCP transport).
 - No fabricated demo data in the UI — real data or an honest empty/explainer state.
+
+### AWL-0016 Queue contract
+
+Requests made through your AI are ordinary Queue items, marked “added by your AI”. Your AI’s own work ideas are “AI suggestions”: hidden by default in the Queue, counted, and waiting for you to accept, edit first or dismiss. Needs your input is a flag on Waiting on AI, AI working or Answered; answering clears the flag without moving the item. Draft edits to Moving records stay on those records as AI proposals. Only you can accept or dismiss; your AI may withdraw its own suggestion before you act. You can turn off Propose suggestions without blocking requested work.
+
+Canonical Queue additions: `add_queue_item`, `list_queue_suggestions`, `withdraw_queue_suggestion` (all `moving.queue.work`; unsolicited adds also require `moving.suggestions.propose`). API-key HTTP/stdio share these names with `queue/write`, `queue/read`, and removable `queue/suggest` on unsolicited adds. Legacy OAuth also exposes these; `capture_to_queue` requires explicit `addedBy` and `operationId`. Record-level generate/approve/reject tools keep their domain behavior; they are not Queue aliases.

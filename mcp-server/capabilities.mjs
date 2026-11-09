@@ -1,4 +1,4 @@
-export const ASSISTWITHMOVING_CAPABILITY_VERSION = "2026-06-12";
+export const ASSISTWITHMOVING_CAPABILITY_VERSION = "2026-11-09";
 
 export const ASSISTWITHMOVING_KNOWN_LAUNCH_BLOCKERS = [
   {
@@ -339,9 +339,12 @@ export const ASSISTWITHMOVING_API_CAPABILITIES = [
     title: "Person and chosen-AI Queue handoffs",
     status: "available",
     purpose:
-      "Use an explicitly scoped API key to discover, claim, release, complete, or return bounded move work with explicit state, concurrency, retry, and attribution rules. Canonical Queue tools are not registered on the OAuth gateway until distinct chosen-AI grants exist.",
+      "Use an explicitly scoped API key to discover, claim, release, complete, or return bounded move work with explicit state, concurrency, retry, and attribution rules. Requested work and AI work ideas share one add tool. Unaccepted AI suggestions cannot be worked. Needs your input is a flag, not a state.",
     requiredScopes: ["queue/read", "queue/write"],
     restEndpoints: [
+      "POST /api/v1/moves/:moveId/queue",
+      "GET /api/v1/moves/:moveId/queue/suggestions",
+      "POST /api/v1/moves/:moveId/queue/:queueItemId/withdraw",
       "GET /api/v1/moves/:moveId/queue",
       "GET /api/v1/moves/:moveId/queue/:queueItemId",
       "POST /api/v1/moves/:moveId/queue/:queueItemId/claim",
@@ -351,6 +354,9 @@ export const ASSISTWITHMOVING_API_CAPABILITIES = [
       "POST /api/v1/moves/:moveId/queue/:queueItemId/failure",
     ],
     mcpTools: [
+      "add_queue_item",
+      "list_queue_suggestions",
+      "withdraw_queue_suggestion",
       "list_queue_items",
       "get_queue_item",
       "claim_queue_item",
@@ -360,10 +366,10 @@ export const ASSISTWITHMOVING_API_CAPABILITIES = [
       "report_queue_failure",
     ],
     agentWorkflows: [
-      "Use the API-key REST/MCP/stdio surface; canonical OAuth Queue registration is intentionally held back.",
+      "Canonical OAuth and API-key HTTP/stdio expose the same suggestion safety boundary through their own grants.",
       "Read only the caller's own or explicitly delegated move Queue.",
       "Claim with an expiring lease and optimistic version before doing work.",
-      "Return exact human blockers as Needs You and attach readable results to Done.",
+      "Raise the Needs your input flag with exact human blockers (state unchanged), release your claim, and attach readable results to Answered.",
       "Record bounded retry failures without silent loops or untraceable writes.",
     ],
   },

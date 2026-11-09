@@ -1,6 +1,7 @@
 "use client";
+import { QueueSuggestions } from "@/components/queue-suggestions";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 
@@ -10,14 +11,16 @@ import {
   QueueDesk,
   type QueueDeskActivity,
   type QueueDeskItem,
-  type QueueState,
+  type QueueView,
 } from "@/components/queue-experience";
 import { describeMutationError } from "@/lib/mutation-error";
 import { defaultQueueOwnerScope } from "@/lib/queue-owner-scope";
 import { toastError, toastSaved } from "@/lib/toast";
 
 type QueueListResult = FunctionReturnType<typeof api.queue.listForMove>;
-type CaptureListResult = FunctionReturnType<typeof api.queue.listCaptureAdapter>;
+type CaptureListResult = FunctionReturnType<
+  typeof api.queue.listCaptureAdapter
+>;
 type ActivityResult = FunctionReturnType<typeof api.queue.listActivity>;
 
 function mapCanonicalItem(
@@ -32,6 +35,9 @@ function mapCanonicalItem(
     directive: item.directive,
     summary: item.summary,
     state: item.state,
+    needsInput: item.needsInput,
+    addedBy: item.addedBy,
+    addedByLabel: item.addedByLabel,
     stateLabel: item.stateLabel,
     requiredAction: item.requiredAction,
     nextStep: item.nextStep,
@@ -40,6 +46,8 @@ function mapCanonicalItem(
     resultRefs: item.resultRefs,
     claimLabel: item.claim?.label ?? null,
     claimExpiresAt: item.claim?.expiresAt ?? null,
+    fromRecord: item.fromRecord,
+    fromRecordHref: item.fromRecordHref,
     terminalReason: item.terminalReason,
     failure: item.failure,
     version: item.version,
@@ -60,6 +68,9 @@ function mapCaptureItem(
     directive: item.directive,
     summary: "Capture from the move notebook",
     state: item.state,
+    needsInput: item.needsInput,
+    addedBy: item.addedBy,
+    addedByLabel: item.addedByLabel,
     stateLabel: item.stateLabel,
     requiredAction: item.requiredAction,
     nextStep: item.nextStep,
@@ -101,9 +112,15 @@ export function QueueExperience({
     null,
   );
   const [ownerScope, setOwnerScope] = useState<string>("default");
-  const [activeState, setActiveState] = useState<QueueState>("needsYou");
+  const suggestionsVisible = useSyncExternalStore(
+    subscribeQueueFilter,
+    readQueueFilter,
+    () => false,
+  );
+  const [activeState, setActiveState] = useState<QueueView>("waitingForAi");
 
   const currentUser = useQuery(api.users.current);
+  const counts = useQuery(api.queue.counts, { householdId, moveId });
   const scopes = useQuery(api.moveParticipants.queueScopes, {
     householdId,
     moveId,
@@ -131,14 +148,24 @@ export function QueueExperience({
   const handoffs = usePaginatedQuery(
     api.queue.listForMove,
     paginationReady
-      ? { householdId, moveId, ownerUserId: selectedOwnerUserId, state: activeState }
+      ? {
+          householdId,
+          moveId,
+          ownerUserId: selectedOwnerUserId,
+          state: activeState === "everything" ? undefined : activeState,
+        }
       : "skip",
     { initialNumItems: 50 },
   );
   const captures = usePaginatedQuery(
     api.queue.listCaptureAdapter,
     paginationReady
-      ? { householdId, moveId, ownerUserId: selectedOwnerUserId, state: activeState }
+      ? {
+          householdId,
+          moveId,
+          ownerUserId: selectedOwnerUserId,
+          state: activeState === "everything" ? undefined : activeState,
+        }
       : "skip",
     { initialNumItems: 50 },
   );
@@ -149,7 +176,7 @@ export function QueueExperience({
           householdId,
           moveId,
           ownerUserId: selectedOwnerUserId,
-          state: activeState,
+          state: activeState === "everything" ? undefined : activeState,
         }
       : "skip",
     { initialNumItems: 50 },
@@ -173,7 +200,7 @@ export function QueueExperience({
   );
   const createDirective = useMutation(api.queue.createDirective);
   const provideInput = useMutation(api.queue.provideInput);
-  const cancelQueueItem = useMutation(api.queue.cancel);
+  const reviewSuggestion = useMutation(api.queue.reviewSuggestion);
 
   // State projection happens after the indexed read because expired leases can
   // change the effective state without a write. Keep paging automatically only
@@ -188,28 +215,24 @@ export function QueueExperience({
     if (handoffs.status === "CanLoadMore") handoffs.loadMore(50);
     if (captures.status === "CanLoadMore") captures.loadMore(50);
     if (legacyCaptures.status === "CanLoadMore") legacyCaptures.loadMore(50);
-  }, [
-    captures,
-    handoffs,
-    legacyCaptures,
-  ]);
+  }, [captures, handoffs, legacyCaptures]);
 
-  const currentHandoffs =
-    handoffs.results.map((item) =>
-      mapCanonicalItem(
-        item,
-        effectiveOwnerScope === "all"
-          ? ownerLabels.get(item.ownerUserId) ?? "Move participant"
-          : null,
-      ),
-    );
-  const currentCaptures = [...captures.results, ...legacyCaptures.results].map((item) =>
-    mapCaptureItem(
+  const currentHandoffs = handoffs.results.map((item) =>
+    mapCanonicalItem(
       item,
       effectiveOwnerScope === "all"
-        ? ownerLabels.get(item.ownerUserId) ?? "Move participant"
+        ? (ownerLabels.get(item.ownerUserId) ?? "Move participant")
         : null,
     ),
+  );
+  const currentCaptures = [...captures.results, ...legacyCaptures.results].map(
+    (item) =>
+      mapCaptureItem(
+        item,
+        effectiveOwnerScope === "all"
+          ? (ownerLabels.get(item.ownerUserId) ?? "Move participant")
+          : null,
+      ),
   );
   const ownerOptions = [
     { value: currentUser?._id ?? "mine", label: "My Queue" },
@@ -217,9 +240,7 @@ export function QueueExperience({
       value: owner.userId,
       label: `${owner.name}'s Queue`,
     })) ?? []),
-    ...(scopes?.canManage
-      ? [{ value: "all", label: "Everyone's Queue" }]
-      : []),
+    ...(scopes?.canManage ? [{ value: "all", label: "Everyone's Queue" }] : []),
   ].filter(
     (option, index, all) =>
       all.findIndex((candidate) => candidate.value === option.value) === index,
@@ -267,6 +288,7 @@ export function QueueExperience({
         moveId,
         queueItemId: item.id as Id<"queueItems">,
         response,
+        clearOnly: response === "",
         expectedVersion: item.version ?? undefined,
         idempotencyKey: crypto.randomUUID(),
       });
@@ -280,18 +302,20 @@ export function QueueExperience({
 
   async function handleCancel(item: QueueDeskItem) {
     try {
-      await cancelQueueItem({
+      await reviewSuggestion({
         householdId,
         moveId,
         queueItemId: item.id as Id<"queueItems">,
-        reason: "Canceled by the person from the Queue screen.",
-        expectedVersion: item.version ?? undefined,
-        idempotencyKey: crypto.randomUUID(),
+        action: "archive",
+        expectedVersion: item.version ?? 1,
+        operationId: crypto.randomUUID(),
       });
-      toastSaved("Handoff canceled and kept in Done");
+      toastSaved("Handoff archived");
       return true;
     } catch (error) {
-      toastError(describeMutationError(error, "Could not cancel the handoff."));
+      toastError(
+        describeMutationError(error, "Could not archive the handoff."),
+      );
       return false;
     }
   }
@@ -304,7 +328,7 @@ export function QueueExperience({
       canCreateDirective={selectedOwnerUserId !== undefined}
       directiveTargetLabel={
         selectedOwnerUserId
-          ? ownerLabels.get(selectedOwnerUserId) ?? "Selected person's Queue"
+          ? (ownerLabels.get(selectedOwnerUserId) ?? "Selected person's Queue")
           : "Choose one person's Queue"
       }
       activeApiKeyCount={connectionStatus?.queueCapableApiKeyCount ?? null}
@@ -317,8 +341,19 @@ export function QueueExperience({
       onLoadMoreHandoffs={() => handoffs.loadMore(50)}
       onLoadMoreCaptures={() => {
         if (captures.status === "CanLoadMore") captures.loadMore(50);
-        if (legacyCaptures.status === "CanLoadMore") legacyCaptures.loadMore(50);
+        if (legacyCaptures.status === "CanLoadMore")
+          legacyCaptures.loadMore(50);
       }}
+      counts={selectedOwnerUserId === currentUser?._id ? counts : undefined}
+      suggestionsVisible={suggestionsVisible}
+      suggestionPanel={
+        <QueueSuggestions
+          householdId={householdId}
+          moveId={moveId}
+          active={suggestionsVisible}
+          onFilterChange={updateQueueFilter}
+        />
+      }
       onCreateDirective={handleCreateDirective}
       onSelectItem={(item) =>
         setSelectedCanonicalId(item?.source === "handoff" ? item.id : null)
@@ -340,4 +375,23 @@ export function QueueExperience({
       savedWorkPath={`/app/moves/${encodeURIComponent(moveId)}/overview#planning-results`}
     />
   );
+}
+
+function subscribeQueueFilter(onChange: () => void) {
+  window.addEventListener("popstate", onChange);
+  window.addEventListener("moving-queue-filter", onChange);
+  return () => {
+    window.removeEventListener("popstate", onChange);
+    window.removeEventListener("moving-queue-filter", onChange);
+  };
+}
+function readQueueFilter() {
+  return new URLSearchParams(window.location.search).get("suggestions") === "1";
+}
+function updateQueueFilter(value: boolean) {
+  const url = new URL(window.location.href);
+  if (value) url.searchParams.set("suggestions", "1");
+  else url.searchParams.delete("suggestions");
+  window.history.replaceState(null, "", url);
+  window.dispatchEvent(new Event("moving-queue-filter"));
 }

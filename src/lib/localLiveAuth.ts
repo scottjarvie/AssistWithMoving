@@ -1,3 +1,9 @@
+import {
+  hasOAuthSessionMarkers,
+  MOVING_LOCAL_LIVE_ORIGINS,
+  MOVING_LOCAL_SANDBOX_ORIGINS,
+  websiteAuthorizedParty,
+} from "../../shared/person-session";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import { NextResponse, type NextRequest } from "next/server";
 const PRIVATE_CACHE_CONTROL = "private, no-store";
@@ -6,15 +12,11 @@ const isPrivatePath = (pathname: string) => /^\/(?:app|settings)(?:\/|$)/.test(p
 // Public verification material belongs to this site's production Clerk instance.
 // Never infer an issuer or fetch URL from an unverified token.
 export const LOCAL_LIVE_ISSUER = "https://clerk.movingmanifest.com";
-export const LOCAL_LIVE_ORIGINS = [
-  "https://local.movingmanifest.com",
-  "http://127.0.0.1:3828",
-  "http://localhost:3828",
-] as const;
+export const LOCAL_LIVE_ORIGINS = MOVING_LOCAL_LIVE_ORIGINS;
 const publicKeys = createRemoteJWKSet(new URL(`${LOCAL_LIVE_ISSUER}/.well-known/jwks.json`), { timeoutDuration: 5000 });
 
 export const LOCAL_SANDBOX_ISSUER = "https://glorious-swine-50.clerk.accounts.dev";
-export const LOCAL_SANDBOX_ORIGINS = ["http://moving.localhost:3827"] as const;
+export const LOCAL_SANDBOX_ORIGINS = MOVING_LOCAL_SANDBOX_ORIGINS;
 const sandboxPublicKeys = createRemoteJWKSet(new URL(`${LOCAL_SANDBOX_ISSUER}/.well-known/jwks.json`), { timeoutDuration: 5000 });
 export function localSandboxEnabled(env: Record<string, string | undefined> = process.env): boolean {
   return env.NODE_ENV === "development" && env.LOCAL_DEVELOPMENT_MODE === "sandbox"
@@ -38,13 +40,14 @@ export function localLiveEnabled(env: Record<string, string | undefined> = proce
 export async function verifyLocalSession(token: string | undefined, keys: JWTVerifyGetKey = localSandboxEnabled() ? sandboxPublicKeys : publicKeys, mode: "live" | "sandbox" = localSandboxEnabled() ? "sandbox" : "live") {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, keys, {
+    const { payload, protectedHeader } = await jwtVerify(token, keys, {
       algorithms: ["RS256"], issuer: mode === "sandbox" ? LOCAL_SANDBOX_ISSUER : LOCAL_LIVE_ISSUER,
-      requiredClaims: ["exp", "nbf", "iat", "sub", "sid", "azp"],
+      requiredClaims: ["exp", "nbf", "iat", "sub", "sid"],
     });
     if (typeof payload.sub !== "string" || !payload.sub.startsWith("user_")
       || typeof payload.sid !== "string" || !payload.sid.startsWith("sess_")
-      || !(mode === "sandbox" ? LOCAL_SANDBOX_ORIGINS : LOCAL_LIVE_ORIGINS).some(origin => origin === payload.azp)
+      || protectedHeader.typ === "at+jwt" || hasOAuthSessionMarkers(payload)
+      || !websiteAuthorizedParty(payload.azp, mode === "sandbox" ? LOCAL_SANDBOX_ORIGINS : LOCAL_LIVE_ORIGINS)
       || payload.sts === "pending") return null;
     return { userId: payload.sub, sessionId: payload.sid };
   } catch {

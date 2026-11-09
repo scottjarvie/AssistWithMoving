@@ -55,7 +55,7 @@ export function AppShell({
       <aside
         className={`fixed bottom-0 left-0 top-16 z-20 hidden flex-col border-r border-border bg-background px-3 py-4 lg:flex ${SIDEBAR_WIDTH}`}
       >
-        <WorkspaceNav variant="sidebar" />
+        <WorkspaceNav variant="sidebar" countsEnabled={workspaceEnabled} />
         <div className="mt-auto">
           {workspaceEnabled ? <MobileCaptureAction variant="sidebar" /> : null}
         </div>
@@ -75,7 +75,7 @@ export function AppShell({
           comfortable width. WorkspaceNav supplies the <nav> landmark. */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-xl items-stretch">
-          <WorkspaceNav variant="mobile" />
+          <WorkspaceNav variant="mobile" countsEnabled={workspaceEnabled} />
           {workspaceEnabled ? <MobileCaptureAction /> : null}
         </div>
       </div>

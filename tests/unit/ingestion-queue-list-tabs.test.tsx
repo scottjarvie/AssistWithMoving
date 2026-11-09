@@ -23,6 +23,7 @@ const apiMock = vi.hoisted(() => ({
 }));
 
 const queueData = vi.hoisted(() => ({
+  flaggedClaim: false,
   mutation: vi.fn(),
 }));
 
@@ -71,7 +72,8 @@ vi.mock("convex/react", () => ({
       ? [
           queueEntry({
             _id: "entry_needs_input" as Id<"ingestionQueueEntries">,
-            status: "needsInput",
+            status: queueData.flaggedClaim ? "claimed" : "needsInput",
+            needsInput: queueData.flaggedClaim ? true : undefined,
             instructions: "Identify the blue bin.",
             agentQuestion: "Which room is this from?",
             roomHint: "Garage",
@@ -147,6 +149,7 @@ vi.mock("convex/react", () => ({
 import { IngestionQueueList } from "@/components/ingestion-queue-list";
 
 beforeEach(() => {
+  queueData.flaggedClaim = false;
   queueData.mutation.mockReset();
   queueData.mutation.mockResolvedValue(undefined);
   toastMock.toast.mockReset();
@@ -157,6 +160,68 @@ beforeEach(() => {
 });
 
 describe("IngestionQueueList tabs view", () => {
+  it("lets a person answer, resolve or discard a flagged claimed capture in Needs action", async () => {
+    queueData.flaggedClaim = true;
+    const user = userEvent.setup();
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: /Needs action/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByText(/Which room is this from/)).toBeVisible();
+    const row = screen.getByText(/Which room is this from/).closest("li")!;
+    expect(within(row).getByRole("button", { name: "Discard" })).toBeEnabled();
+    expect(
+      within(row).getByRole("button", { name: "Mark resolved" }),
+    ).toBeEnabled();
+    await user.click(row);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/Which room is this from/)).toBeVisible();
+    expect(within(dialog).getByRole("textbox")).toBeEnabled();
+    expect(
+      within(dialog).getByRole("button", { name: "Discard" }),
+    ).toBeEnabled();
+    expect(
+      within(dialog).getByRole("button", { name: "Mark resolved" }),
+    ).toBeEnabled();
+    await user.keyboard("{Escape}");
+    await user.click(
+      within(row).getByRole("button", {
+        name: "Answer & requeue",
+      }),
+    );
+    await user.clear(within(row).getByRole("textbox"));
+    await user.type(
+      within(row).getByRole("textbox"),
+      "Blue bins go in the bedroom.",
+    );
+    await user.click(
+      within(row).getByRole("button", { name: "Save directions" }),
+    );
+    expect(queueData.mutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entryId: "entry_needs_input",
+        instructions: "Blue bins go in the bedroom.",
+      }),
+    );
+    await user.click(within(row).getByRole("button", { name: "Discard" }));
+    expect(queueData.mutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entryId: "entry_needs_input",
+        status: "discarded",
+      }),
+    );
+    await user.click(screen.getByRole("tab", { name: /Working/ }));
+    expect(
+      screen.queryByText(/Which room is this from/),
+    ).not.toBeInTheDocument();
+  });
+
   it("separates needs-action, working, and archived entries", async () => {
     const user = userEvent.setup();
 
@@ -190,8 +255,12 @@ describe("IngestionQueueList tabs view", () => {
         "Queued or claimed captures still being processed by an agent.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Holiday bins need inventory.")).toBeInTheDocument();
-    expect(screen.getByText("Kitchen counter walkthrough.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Holiday bins need inventory."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Kitchen counter walkthrough."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Codex helper")).toBeInTheDocument();
     expect(
       screen.queryByText(/Which room is this from?/i),
@@ -441,10 +510,13 @@ describe("IngestionQueueList todo-done view", () => {
 
     // "To do" is the default filter (queued lifecycle bucket). The three queued
     // captures show; the resolved one does not.
+    expect(screen.getByRole("tab", { name: /To do/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(
-      screen.getByRole("tab", { name: /To do/ }),
-    ).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Holiday bins need inventory.")).toBeInTheDocument();
+      screen.getByText("Holiday bins need inventory."),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Resolved capture.")).not.toBeInTheDocument();
 
     // Review bucket holds processed + needsInput.
@@ -592,9 +664,13 @@ describe("IngestionQueueList detail modal (MOVE-356)", () => {
     const textarea = within(dialog).getByLabelText("Directions");
     await user.clear(textarea);
     await user.type(textarea, "Garage shelf");
-    await user.click(within(dialog).getByRole("button", { name: "Save directions" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save directions" }),
+    );
 
-    expect(within(dialog).queryByText("Directions saved.")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Directions saved."),
+    ).not.toBeInTheDocument();
     expect(toastMock.toastError).toHaveBeenCalledWith(
       "Could not save those directions",
     );

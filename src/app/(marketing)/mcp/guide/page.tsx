@@ -88,6 +88,9 @@ const canonicalToolCatalog = [
   {
     scope: "moving.queue.work",
     tools: [
+      "add_queue_item",
+      "list_queue_suggestions",
+      "withdraw_queue_suggestion",
       "list_queue_work",
       "claim_queue_work",
       "release_queue_work",
@@ -262,7 +265,7 @@ export default function McpPage() {
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               The Queue loop is list_queue_work, claim_queue_work, then either
-              ask_queue_question for the smallest Needs you question or
+              ask_queue_question for the smallest question, raising the Needs your input flag (state unchanged) or
               release_queue_work to hand it back, and finally
               complete_queue_work. A Queue directive says what the person wants;
               it never widens the grant.

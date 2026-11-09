@@ -242,7 +242,7 @@ export function AiReviewQueue({
       setMessage(
         error instanceof Error
           ? error.message
-          : "Could not approve selected AI suggestions.",
+          : "Could not approve selected AI proposals.",
       );
     } finally {
       setWorking(false);
@@ -274,7 +274,7 @@ export function AiReviewQueue({
       setMessage(
         error instanceof Error
           ? error.message
-          : "Could not reject selected AI suggestions.",
+          : "Could not reject selected AI proposals.",
       );
     } finally {
       setWorking(false);
@@ -302,7 +302,7 @@ export function AiReviewQueue({
           <div>
             <CardTitle className="flex items-center gap-2">
               <ListChecks className="size-4 text-primary" aria-hidden="true" />
-              AI review queue
+              AI proposals
             </CardTitle>
             <CardDescription>
               Clear pending text, photo, duplicate, estimate, and assignment
@@ -431,7 +431,7 @@ export function AiReviewQueue({
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-16">Use</TableHead>
-                        <TableHead className="w-[35%]">Suggestion</TableHead>
+                        <TableHead className="w-[35%]">AI proposal</TableHead>
                         <TableHead>Reason</TableHead>
                         <TableHead className="w-24">Edit</TableHead>
                       </TableRow>
@@ -489,7 +489,7 @@ export function AiReviewQueue({
           </>
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-            No pending AI suggestions.
+            No pending AI proposals.
           </div>
         )}
       </CardContent>
@@ -557,7 +557,7 @@ function AiReviewEntrySummary({ entry }: { entry: AiReviewEntry }) {
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap gap-1">
-        <Badge variant="outline">{entry.kind}</Badge>
+        <Badge variant="outline">AI proposal · {entry.kind}</Badge>
         <Badge variant="outline">{entry.type}</Badge>
         {entry.confidence ? (
           <Badge variant={entry.confidence === "low" ? "secondary" : "outline"}>

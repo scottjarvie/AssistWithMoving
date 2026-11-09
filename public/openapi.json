@@ -315,7 +315,7 @@
       "get": {
         "summary": "List canonical Queue handoffs",
         "operationId": "listQueueItems",
-        "description": "Returns a bounded, owner-safe page using exactly Needs You, Working, Waiting for your AI, and Done. Requires queue/read.",
+        "description": "Returns a bounded, owner-safe page of Waiting on AI, AI working and Answered items. Needs your input is an independent flag (state unchanged when raised or cleared). Requires queue/read.",
         "parameters": [
           {
             "$ref": "#/components/parameters/moveId"
@@ -1280,6 +1280,7 @@
     "schemas": {
       "QueueState": {
         "type": "string",
+        "description": "Lifecycle states are waitingForAi, working and done. needsYou is a legacy filter for the Needs your input flag; reads keep the lifecycle state unchanged.",
         "enum": [
           "needsYou",
           "working",

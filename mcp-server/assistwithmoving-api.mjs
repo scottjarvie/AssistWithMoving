@@ -2635,3 +2635,7 @@ export async function restoreArchivedAssignment(config, input) {
   if (input.dryRun) return { dryRun: true, archiveId: input.archiveId };
   return assistWithMovingRequest(config, { method: "POST", path: `/moves/${input.moveId}/assignments/${input.archiveId}/restore` });
 }
+
+export function addQueueItem(config,input){return assistWithMovingRequest(config,{method:"POST",path:`/moves/${input.moveId}/queue`,body:input,idempotencyKey:input.operationId});}
+export function listQueueSuggestions(config,input){return assistWithMovingRequest(config,{method:"GET",path:`/moves/${input.moveId}/queue/suggestions`,query:{archived:input.archived?"true":undefined,cursor:input.cursor,limit:input.limit}});}
+export function withdrawQueueSuggestion(config,input){return assistWithMovingRequest(config,{method:"POST",path:`/moves/${input.moveId}/queue/${input.queueItemId}/withdraw`,body:input,idempotencyKey:input.operationId});}

@@ -10,7 +10,8 @@ import { reductionArgs, type Reduction } from "./lib/connectionReduction";
 import { connectionAccess, ensureAccess, readAccess, readConnection, connectKey, keyScopes, accessState, narrowConnection, changeByPerson, snapshot } from "./lib/carriedAccess";
 import { connectionChange, safeConnectionText } from "./lib/connectionHistory";
 
-const scopeValidator = v.union(v.literal("moves/read"), v.literal("moves/write"), v.literal("inventory/read"), v.literal("inventory/write"), v.literal("queue/read"), v.literal("queue/write"), v.literal("plans/read"), v.literal("plans/write"), v.literal("photos/write"), v.literal("exports/read"), v.literal("exports/create"), v.literal("members/manage"));
+const scopeValidator = v.union(v.literal("moves/read"), v.literal("moves/write"), v.literal("inventory/read"), v.literal("inventory/write"), v.literal("queue/read"), v.literal("queue/write"),
+  v.literal("queue/suggest"), v.literal("plans/read"), v.literal("plans/write"), v.literal("photos/write"), v.literal("exports/read"), v.literal("exports/create"), v.literal("members/manage"));
 export const settingsSummary = query({ args: { householdId: v.id("households") }, handler: async (ctx, args) => {
   await requirePersonConnectionManagement(ctx); const user = await requireCurrentUser(ctx);
   await requireHouseholdPermission(ctx, args.householdId, "api_keys:manage");
@@ -50,7 +51,7 @@ export const create = mutation({ args: { householdId: v.id("households"), moveId
   const scopes = normalizeApiKeyScopes(args.scopes ?? [...apiKeyScopes]);
   if (args.scopeChoice === "full" && scopes.length !== apiKeyScopes.length) throw new ConvexError("Full access requires the whole current API catalogue.");
   const rawKey = generateApiKeySecret(), now = Date.now();
-  const apiKeyId = await ctx.db.insert("apiKeys", { householdId: args.householdId, moveId: args.moveId, name, prefix: apiKeyPrefix(rawKey), tokenPreview: apiKeyPreview(rawKey), secretHash: await hashApiKey(rawKey), scopes, scopeChoice: args.scopeChoice ?? (args.scopes === undefined ? "full" : "chosen"), status: "active", version: 1, expiresAt: args.expiresAt, createdByUserId: actor.userId, createdAt: now, updatedAt: now });
+  const apiKeyId = await ctx.db.insert("apiKeys", { householdId: args.householdId, moveId: args.moveId, name, prefix: apiKeyPrefix(rawKey), tokenPreview: apiKeyPreview(rawKey), secretHash: await hashApiKey(rawKey), scopes, withheldScopes:apiKeyScopes.filter(scope=>!scopes.includes(scope)), scopeChoice: args.scopeChoice ?? (args.scopes === undefined ? "full" : "chosen"), status: "active", version: 1, expiresAt: args.expiresAt, createdByUserId: actor.userId, createdAt: now, updatedAt: now });
   const key = (await ctx.db.get(apiKeyId))!;
   const { access, connection } = await connectKey(ctx, key);
   if (connection) await connectionChange(ctx, { ownerUserId: actor.userId, accessOwnerId: access._id, connectionId: String(connection._id), actor: "person", before: null, after: snapshot(access, connection), message: "You created an API-key credential with your chosen limits. OAuth AI restrictions do not apply to this key.", opId: `create:${apiKeyId}` });

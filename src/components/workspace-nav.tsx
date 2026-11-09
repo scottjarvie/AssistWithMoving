@@ -1,5 +1,9 @@
 "use client";
 
+import { Component, type ReactNode } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { useMoveWorkspace } from "@/components/move-workspace-context";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -25,8 +29,10 @@ const navIcons = {
 
 export function WorkspaceNav({
   variant = "sidebar",
+  countsEnabled = false,
 }: {
   variant?: "sidebar" | "mobile";
+  countsEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const mobile = variant === "mobile";
@@ -52,7 +58,7 @@ export function WorkspaceNav({
               active &&
                 (mobile
                   ? "text-foreground"
-                  : "bg-sidebar-accent text-sidebar-accent-foreground")
+                  : "bg-sidebar-accent text-sidebar-accent-foreground"),
             )}
           >
             <Icon
@@ -65,9 +71,61 @@ export function WorkspaceNav({
             <span className={mobile ? "max-w-full truncate" : undefined}>
               {mobile ? (item.shortLabel ?? item.label) : item.label}
             </span>
+            {item.iconKey === "queue" && countsEnabled ? (
+              <QueueNavCounts />
+            ) : null}
           </Link>
         );
       })}
     </nav>
   );
+}
+
+function QueueNavCounts() {
+  const { householdId, moveId } = useMoveWorkspace();
+  return householdId && moveId ? (
+    <QueueBadgeBoundary key={`${householdId}:${moveId}`}>
+      <QueueBadgeQuery householdId={householdId} moveId={moveId} />
+    </QueueBadgeBoundary>
+  ) : null;
+}
+function QueueBadgeQuery({
+  householdId,
+  moveId,
+}: {
+  householdId: import("../../convex/_generated/dataModel").Id<"households">;
+  moveId: import("../../convex/_generated/dataModel").Id<"moves">;
+}) {
+  const counts = useQuery(api.queue.badges, { householdId, moveId });
+  return counts ? (
+    <span className="inline-flex gap-1 text-xs tabular-nums">
+      <span
+        className="text-muted-foreground"
+        aria-label={`${counts.suggestions} AI suggestions`}
+      >
+        {counts.suggestions}
+      </span>
+      {counts.needsYou ? (
+        <span
+          className="rounded-full bg-primary px-1 text-primary-foreground"
+          aria-label={`${counts.needsYou} need your input`}
+        >
+          {counts.needsYou}
+        </span>
+      ) : null}
+    </span>
+  ) : null;
+}
+
+class QueueBadgeBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
 }

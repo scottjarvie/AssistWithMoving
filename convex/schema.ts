@@ -225,6 +225,7 @@ export const apiKeyScope = v.union(
   v.literal("inventory/write"),
   v.literal("queue/read"),
   v.literal("queue/write"),
+  v.literal("queue/suggest"),
   v.literal("plans/read"),
   v.literal("plans/write"),
   v.literal("photos/write"),
@@ -250,6 +251,7 @@ export const movingGrantScope = v.union(
   v.literal("moving.evidence.read"),
   v.literal("moving.work.write"),
   v.literal("moving.queue.work"),
+  v.literal("moving.suggestions.propose"),
   v.literal("moving.archive")
 );
 
@@ -1948,6 +1950,13 @@ export default defineSchema({
   // Capture-now, process-later work orders for the user's own AI agent.
   // Evidence lives in itemPhotos (image/audio/video); entries reference it.
   ingestionQueueEntries: defineTable({
+    claimedByConnectionId: v.optional(v.string()),
+    needsInput: v.optional(v.boolean()),
+    needsInputAt: v.optional(v.number()),
+    needsInputBy: v.optional(v.string()),
+    addedBy: v.optional(v.union(v.literal("person"),v.literal("ai_on_request"))),
+    agentLabel: v.optional(v.string()),
+    addOperationId: v.optional(v.string()),
     householdId: v.id("households"),
     moveId: v.id("moves"),
     status: ingestionQueueStatusValidator,
@@ -2018,8 +2027,12 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_move_owner_input", ["moveId", "ownerUserId", "needsInput"])
+    .index("by_move_creator_owner_input", ["moveId", "createdByUserId", "ownerUserId", "needsInput"])
+    .index("by_move_creator_owner_status", ["moveId", "createdByUserId", "ownerUserId", "status"])
     .index("by_move_status_order", ["moveId", "status", "sortOrder"])
     .index("by_move_owner_status", ["moveId", "ownerUserId", "status", "sortOrder"])
+    .index("by_move_add_operation", ["moveId", "createdByUserId", "addOperationId"])
     .index("by_move_owner_created", ["moveId", "ownerUserId", "createdAt"])
     .index("by_move_creator_owner_created", [
       "moveId",
@@ -2037,6 +2050,24 @@ export default defineSchema({
   // their own statuses and may be projected through adapters; they are not
   // silently relabeled or migrated into this table.
   queueItems: defineTable({
+    addRequestKey:v.optional(v.string()),
+    addedBy: v.optional(v.union(v.literal("person"), v.literal("ai_on_request"), v.literal("ai_suggestion"))),
+    addedByLabel: v.optional(v.string()),
+    addedByConnection: v.optional(v.string()),
+    suggestionStatus: v.optional(v.union(v.literal("open"), v.literal("accepted"), v.literal("dismissed"), v.literal("withdrawn"))),
+    suggestionReason: v.optional(v.string()),
+    suggestionFingerprint: v.optional(v.string()),
+    suggestionOptions: v.optional(v.array(v.string())),
+    suggestionEvidence: v.optional(v.string()),
+    // Permanent first person accept, dismiss, edit or reply; restore never clears it.
+    suggestionActedAt: v.optional(v.number()),
+    suggestionDismissedAt: v.optional(v.number()),
+    dismissReason: v.optional(v.string()),
+    fromRecord: v.optional(queueResultRefValidator),
+    archivedAt: v.optional(v.number()),
+    needsInput: v.optional(v.boolean()),
+    needsInputAt: v.optional(v.number()),
+    needsInputBy: v.optional(v.string()),
     householdId: v.id("households"),
     moveId: v.id("moves"),
     ownerUserId: v.id("users"),
@@ -2076,6 +2107,10 @@ export default defineSchema({
     updatedAt: v.number(),
     completedAt: v.optional(v.number()),
   })
+    .index("by_move_owner_input", ["moveId", "ownerUserId", "needsInput"])
+    .index("by_move_owner_review", ["moveId", "ownerUserId", "suggestionStatus"])
+    .index("by_move_owner_fingerprint_dismissed", ["moveId", "ownerUserId", "suggestionFingerprint", "suggestionDismissedAt"])
+    .index("by_move_owner_fingerprint_review", ["moveId", "ownerUserId", "suggestionFingerprint", "suggestionStatus"])
     .index("by_move_state_updated", ["moveId", "state", "updatedAt"])
     .index("by_move_owner_state_updated", [
       "moveId",

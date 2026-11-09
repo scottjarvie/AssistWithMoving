@@ -35,7 +35,13 @@ import { cn } from "@/lib/utils";
 
 export type QueueState = "needsYou" | "working" | "waitingForAi" | "done";
 
+export type QueueView = QueueState | "everything";
 export type QueueDeskItem = {
+  needsInput?: boolean;
+  addedBy?: string;
+  addedByLabel?: string | null;
+  fromRecordHref?: string | null;
+  fromRecord?: { type: string; id: string; label?: string } | null;
   id: string;
   source: "handoff" | "capture";
   ownerUserId: string;
@@ -74,15 +80,16 @@ export type QueueDeskActivity = {
   createdAt: number;
 };
 
-const stateOrder: QueueState[] = [
-  "needsYou",
-  "working",
+const stateOrder: QueueView[] = [
   "waitingForAi",
+  "working",
+  "needsYou",
   "done",
+  "everything",
 ];
 
 const statePresentation: Record<
-  QueueState,
+  QueueView,
   {
     label: string;
     shortDescription: string;
@@ -93,8 +100,17 @@ const statePresentation: Record<
     panelClass: string;
   }
 > = {
+  everything: {
+    label: "Everything",
+    shortDescription: "All ordinary handoffs.",
+    emptyTitle: "No handoffs yet",
+    emptyBody: "Leave a directive for your AI.",
+    icon: ClipboardList,
+    markerClass: "bg-muted",
+    panelClass: "border-border",
+  },
   needsYou: {
-    label: "Needs You",
+    label: "Needs your input",
     shortDescription: "A fact, file, or decision is blocking the handoff.",
     emptyTitle: "Nothing needs you",
     emptyBody: "When your AI needs one exact answer, it will wait here.",
@@ -103,8 +119,9 @@ const statePresentation: Record<
     panelClass: "border-orange-500/35 bg-orange-500/5",
   },
   working: {
-    label: "Working",
-    shortDescription: "Your chosen AI has claimed the handoff.",
+    label: "AI working",
+    shortDescription:
+      "Work has started; a question can pause the AI without changing the state.",
     emptyTitle: "Nothing is being worked",
     emptyBody: "A handoff appears here only after an AI claims it.",
     icon: LoaderCircle,
@@ -112,16 +129,17 @@ const statePresentation: Record<
     panelClass: "border-sky-600/30 bg-sky-600/5",
   },
   waitingForAi: {
-    label: "Waiting for your AI",
+    label: "Waiting on AI",
     shortDescription: "Saved and ready; no AI is running yet.",
     emptyTitle: "No handoffs are waiting",
-    emptyBody: "Leave a route note when you want your chosen AI to pick up work.",
+    emptyBody:
+      "Leave a route note when you want your chosen AI to pick up work.",
     icon: Clock3,
     markerClass: "bg-amber-500",
     panelClass: "border-amber-500/35 bg-amber-500/5",
   },
   done: {
-    label: "Done",
+    label: "Answered",
     shortDescription: "A result or terminal outcome is recorded.",
     emptyTitle: "No completed handoffs yet",
     emptyBody: "Finished work remains readable as part of the move record.",
@@ -215,7 +233,12 @@ function QueueConnectionNote({
           )}
         </div>
       </div>
-      <Button asChild variant="outline" size="touch" className="self-start sm:self-center">
+      <Button
+        asChild
+        variant="outline"
+        size="touch"
+        className="self-start sm:self-center"
+      >
         <Link href="/settings/ai">Manage AI access</Link>
       </Button>
     </div>
@@ -229,10 +252,11 @@ function QueueItemCard({
   item: QueueDeskItem;
   onOpen: (item: QueueDeskItem) => void;
 }) {
-  const presentation = statePresentation[item.state];
+  const presentation =
+    statePresentation[item.state === "needsYou" ? "waitingForAi" : item.state];
   const Icon = presentation.icon;
   const primaryDetail =
-    item.state === "needsYou"
+    (item.needsInput ?? item.state === "needsYou")
       ? item.requiredAction
       : item.state === "working"
         ? item.nextStep
@@ -247,7 +271,10 @@ function QueueItemCard({
       className="group relative w-full overflow-hidden rounded-xl border border-border bg-card p-4 text-left shadow-[0_1px_0_color-mix(in_oklch,var(--foreground),transparent_94%)] transition hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transform-none motion-reduce:transition-none"
     >
       <span
-        className={cn("absolute inset-y-0 left-0 w-1", presentation.markerClass)}
+        className={cn(
+          "absolute inset-y-0 left-0 w-1",
+          presentation.markerClass,
+        )}
         aria-hidden="true"
       />
       <div className="flex items-start gap-3 pl-1">
@@ -258,24 +285,38 @@ function QueueItemCard({
           )}
         >
           <Icon
-            className={cn("size-4", item.state === "working" && "animate-spin motion-reduce:animate-none")}
+            className={cn(
+              "size-4",
+              item.state === "working" &&
+                item.claimExpiresAt !== null &&
+                !item.needsInput &&
+                "animate-spin motion-reduce:animate-none",
+            )}
             aria-hidden="true"
           />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">{presentation.label}</Badge>
+            {(item.needsInput ?? item.state === "needsYou") ? (
+              <Badge variant="secondary">Needs your input</Badge>
+            ) : null}
             <span className="text-xs text-muted-foreground">
               {item.source === "capture" ? "Capture" : "Handoff"}
             </span>
             {item.ownerLabel ? (
-              <span className="text-xs text-muted-foreground">{item.ownerLabel}</span>
+              <span className="text-xs text-muted-foreground">
+                {item.ownerLabel}
+              </span>
             ) : null}
-            <span className="text-xs text-muted-foreground">{formatWhen(item.updatedAt)}</span>
+            <span className="text-xs text-muted-foreground">
+              {formatWhen(item.updatedAt)}
+            </span>
           </div>
           <h3 className="mt-2 text-sm font-semibold leading-6 text-foreground sm:text-base">
             {item.directive}
           </h3>
+          <QueueOrigin item={item} />
           {primaryDetail ? (
             <p className="mt-2 line-clamp-2 text-sm leading-5 text-muted-foreground">
               {primaryDetail}
@@ -289,7 +330,9 @@ function QueueItemCard({
           {item.failure ? (
             <p className="mt-2 text-xs font-medium text-destructive">
               {item.failure.message}
-              {item.failure.retryable ? " A bounded retry may be attempted." : ""}
+              {item.failure.retryable
+                ? " A bounded retry may be attempted."
+                : ""}
             </p>
           ) : null}
         </div>
@@ -311,6 +354,7 @@ function QueueDetailSheet({
   response,
   onResponseChange,
   onProvideInput,
+  onClearInput,
   onCancel,
   busy,
   captureWorkspacePath,
@@ -325,6 +369,7 @@ function QueueDetailSheet({
   response: string;
   onResponseChange: (value: string) => void;
   onProvideInput: () => void;
+  onClearInput?: () => void;
   onCancel: () => void;
   busy: boolean;
   captureWorkspacePath: string | null;
@@ -332,7 +377,8 @@ function QueueDetailSheet({
   onClose: () => void;
 }) {
   if (!item) return null;
-  const presentation = statePresentation[item.state];
+  const presentation =
+    statePresentation[item.state === "needsYou" ? "waitingForAi" : item.state];
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -340,13 +386,20 @@ function QueueDetailSheet({
         <SheetHeader className="border-b pr-12">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge variant="outline">{presentation.label}</Badge>
+            {(item.needsInput ?? item.state === "needsYou") ? (
+              <Badge variant="secondary">Needs your input</Badge>
+            ) : null}
             <span className="text-xs text-muted-foreground">
               {item.source === "capture" ? "Capture note" : "Queue handoff"}
             </span>
           </div>
-          <SheetTitle className="text-lg leading-7">{item.directive}</SheetTitle>
+          <SheetTitle className="text-lg leading-7">
+            {item.directive}
+          </SheetTitle>
+          <QueueOrigin item={item} link />
           <SheetDescription>
-            Saved {formatWhen(item.createdAt)} · updated {formatWhen(item.updatedAt)}
+            Saved {formatWhen(item.createdAt)} · updated{" "}
+            {formatWhen(item.updatedAt)}
           </SheetDescription>
         </SheetHeader>
 
@@ -360,15 +413,23 @@ function QueueDetailSheet({
             </section>
           ) : null}
 
-          {item.state === "needsYou" ? (
-            <section className={cn("rounded-xl border p-4", presentation.panelClass)}>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em]">Exact next step</p>
+          {(item.needsInput ?? item.state === "needsYou") ? (
+            <section
+              className={cn("rounded-xl border p-4", presentation.panelClass)}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.16em]">
+                Exact next step
+              </p>
               <p className="mt-2 leading-6">
-                {item.requiredAction ?? "Review this handoff and provide the missing detail."}
+                {item.requiredAction ??
+                  "Review this handoff and provide the missing detail."}
               </p>
               {item.source === "handoff" ? (
                 <div className="mt-4 space-y-2">
-                  <label htmlFor="queue-response" className="text-sm font-medium">
+                  <label
+                    htmlFor="queue-response"
+                    className="text-sm font-medium"
+                  >
                     Your answer
                   </label>
                   <Textarea
@@ -382,9 +443,25 @@ function QueueDetailSheet({
                     onClick={onProvideInput}
                     disabled={busy || !response.trim()}
                   >
-                    {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}
+                    {busy ? (
+                      <LoaderCircle
+                        className="animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Send aria-hidden="true" />
+                    )}
                     Send answer
                   </Button>
+                  {onClearInput ? (
+                    <Button
+                      variant="ghost"
+                      onClick={onClearInput}
+                      disabled={busy}
+                    >
+                      Clear flag
+                    </Button>
+                  ) : null}
                 </div>
               ) : (
                 <p className="mt-3 text-xs text-muted-foreground">
@@ -395,20 +472,47 @@ function QueueDetailSheet({
           ) : null}
 
           {item.state === "working" ? (
-            <section className={cn("rounded-xl border p-4", presentation.panelClass)}>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em]">Current step</p>
-              <p className="mt-2 leading-6">{item.nextStep ?? "The claimed work is in progress."}</p>
+            <section
+              className={cn("rounded-xl border p-4", presentation.panelClass)}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.16em]">
+                Current step
+              </p>
+              <p className="mt-2 leading-6">
+                {item.nextStep ??
+                  (item.claimExpiresAt
+                    ? "The claimed work is in progress."
+                    : item.needsInput
+                      ? "Work is paused for your answer."
+                      : "Ready for your AI to resume.")}
+              </p>
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span>{item.claimLabel ? `Claimed by ${item.claimLabel}` : "Claim identity unavailable"}</span>
-                {item.claimExpiresAt ? <span>Lease until {formatWhen(item.claimExpiresAt)}</span> : null}
+                <span>
+                  {item.claimLabel
+                    ? `Claimed by ${item.claimLabel}`
+                    : item.needsInput
+                      ? "Waiting for your answer; no AI holds a claim."
+                      : "Ready for your AI to resume; no active claim."}
+                </span>
+                {item.claimExpiresAt ? (
+                  <span>Lease until {formatWhen(item.claimExpiresAt)}</span>
+                ) : null}
               </div>
             </section>
           ) : null}
 
           {item.state === "waitingForAi" ? (
-            <section className={cn("rounded-xl border p-4", presentation.panelClass)}>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em]">Handoff status</p>
-              <p className="mt-2 leading-6">{waitingReasonLabel(item.waitingReason)}</p>
+            <section
+              className={cn("rounded-xl border p-4", presentation.panelClass)}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.16em]">
+                Handoff status
+              </p>
+              <p className="mt-2 leading-6">
+                {item.needsInput
+                  ? "Waiting for your answer; your AI cannot start."
+                  : waitingReasonLabel(item.waitingReason)}
+              </p>
               <p className="mt-2 text-xs text-muted-foreground">
                 Nothing starts merely because this note was saved.
               </p>
@@ -416,8 +520,12 @@ function QueueDetailSheet({
           ) : null}
 
           {item.state === "done" ? (
-            <section className={cn("rounded-xl border p-4", presentation.panelClass)}>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em]">Recorded result</p>
+            <section
+              className={cn("rounded-xl border p-4", presentation.panelClass)}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.16em]">
+                Recorded result
+              </p>
               <p className="mt-2 leading-6">
                 {item.resultSummary ??
                   (item.terminalReason === "canceled"
@@ -429,8 +537,14 @@ function QueueDetailSheet({
               {item.resultRefs.length ? (
                 <ul className="mt-3 space-y-2">
                   {item.resultRefs.map((ref, index) => (
-                    <li key={`${ref.type ?? "result"}:${ref.id ?? index}`} className="flex items-center gap-2 text-sm">
-                      <PackageOpen className="size-4 text-primary" aria-hidden="true" />
+                    <li
+                      key={`${ref.type ?? "result"}:${ref.id ?? index}`}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <PackageOpen
+                        className="size-4 text-primary"
+                        aria-hidden="true"
+                      />
                       {ref.label ?? ref.type ?? "Move record"}
                     </li>
                   ))}
@@ -446,7 +560,8 @@ function QueueDetailSheet({
                 Linked move work
               </p>
               <p className="mt-2 leading-6">
-                {item.resultSummary ?? "Your AI saved move work for this handoff."}
+                {item.resultSummary ??
+                  "Your AI saved move work for this handoff."}
               </p>
               {item.resultRefs.length ? (
                 <ul className="mt-3 space-y-2">
@@ -455,7 +570,10 @@ function QueueDetailSheet({
                       key={`${ref.type ?? "result"}:${ref.id ?? index}`}
                       className="flex items-center gap-2 text-sm"
                     >
-                      <PackageOpen className="size-4 text-primary" aria-hidden="true" />
+                      <PackageOpen
+                        className="size-4 text-primary"
+                        aria-hidden="true"
+                      />
                       {ref.label ?? ref.type ?? "Move record"}
                     </li>
                   ))}
@@ -467,35 +585,48 @@ function QueueDetailSheet({
                 </Button>
               ) : null}
               <p className="mt-3 text-xs text-muted-foreground">
-                This link records useful work without claiming or completing the handoff.
+                This link records useful work without claiming or completing the
+                handoff.
               </p>
             </section>
           ) : null}
 
           {item.failure ? (
             <section className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-              <p className="font-medium text-destructive">Work did not finish cleanly</p>
+              <p className="font-medium text-destructive">
+                Work did not finish cleanly
+              </p>
               <p className="mt-1 text-sm leading-6">{item.failure.message}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Attempt {item.failure.attemptCount} of {item.failure.maxAttempts}
-                {item.failure.nextAttemptAt ? ` · next retry ${formatWhen(item.failure.nextAttemptAt)}` : ""}
+                Attempt {item.failure.attemptCount} of{" "}
+                {item.failure.maxAttempts}
+                {item.failure.nextAttemptAt
+                  ? ` · next retry ${formatWhen(item.failure.nextAttemptAt)}`
+                  : ""}
               </p>
             </section>
           ) : null}
 
           <section>
             <div className="flex items-center gap-2">
-              <History className="size-4 text-muted-foreground" aria-hidden="true" />
+              <History
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
               <h3 className="font-semibold">Activity</h3>
             </div>
             {item.source === "capture" ? (
               <div className="mt-3 space-y-3">
                 <p className="text-sm leading-6 text-muted-foreground">
-                  This capture is shown through the compatibility view. Its detailed evidence and capture-specific actions remain attached to the capture record.
+                  This capture is shown through the compatibility view. Its
+                  detailed evidence and capture-specific actions remain attached
+                  to the capture record.
                 </p>
                 {captureWorkspacePath ? (
                   <Button asChild variant="outline" size="sm">
-                    <Link href={captureWorkspacePath}>Open capture workspace</Link>
+                    <Link href={captureWorkspacePath}>
+                      Open capture workspace
+                    </Link>
                   </Button>
                 ) : null}
               </div>
@@ -509,12 +640,21 @@ function QueueDetailSheet({
                 <ol className="space-y-3 border-l border-border pl-4">
                   {activities.map((activity) => (
                     <li key={activity.id} className="relative">
-                      <CircleDot className="absolute -left-[1.35rem] top-0.5 size-3.5 bg-popover text-primary" aria-hidden="true" />
+                      <CircleDot
+                        className="absolute -left-[1.35rem] top-0.5 size-3.5 bg-popover text-primary"
+                        aria-hidden="true"
+                      />
                       <div className="flex flex-wrap items-baseline gap-x-2">
-                        <p className="text-sm font-medium">{activityTypeLabel(activity.type)}</p>
-                        <time className="text-xs text-muted-foreground">{formatWhen(activity.createdAt)}</time>
+                        <p className="text-sm font-medium">
+                          {activityTypeLabel(activity.type)}
+                        </p>
+                        <time className="text-xs text-muted-foreground">
+                          {formatWhen(activity.createdAt)}
+                        </time>
                       </div>
-                      <p className="mt-1 text-sm leading-5 text-muted-foreground">{activity.message}</p>
+                      <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                        {activity.message}
+                      </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {activity.actorLabel}
                         {activity.fromState
@@ -525,24 +665,37 @@ function QueueDetailSheet({
                   ))}
                 </ol>
                 {hasMoreActivities ? (
-                  <Button variant="outline" size="sm" onClick={onLoadMoreActivities}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onLoadMoreActivities}
+                  >
                     Load older activity
                   </Button>
                 ) : null}
               </div>
             ) : (
-              <p className="mt-3 text-sm text-muted-foreground">No activity is recorded yet.</p>
+              <p className="mt-3 text-sm text-muted-foreground">
+                No activity is recorded yet.
+              </p>
             )}
           </section>
 
           {item.source === "handoff" && item.state !== "done" ? (
             <section className="border-t pt-4">
-              <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy} className="text-destructive">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onCancel}
+                disabled={busy}
+                className="text-destructive"
+              >
                 <X aria-hidden="true" />
-                Cancel handoff
+                Archive
               </Button>
               <p className="mt-2 text-xs text-muted-foreground">
-                Canceling records a Done outcome; it does not delete the history.
+                Archiving hides this handoff from the active Queue; it keeps its
+                state and history.
               </p>
             </section>
           ) : null}
@@ -577,10 +730,16 @@ export function QueueDesk({
   onCancel,
   captureWorkspacePath,
   savedWorkPath,
+  counts,
+  suggestionPanel,
+  suggestionsVisible = false,
 }: {
   items: QueueDeskItem[];
-  selectedState?: QueueState;
-  onStateChange?: (state: QueueState) => void;
+  counts?: Partial<Record<QueueView, number>>;
+  suggestionPanel?: React.ReactNode;
+  suggestionsVisible?: boolean;
+  selectedState?: QueueView;
+  onStateChange?: (state: QueueView) => void;
   canCreateDirective?: boolean;
   directiveTargetLabel?: string;
   activeApiKeyCount: number | null;
@@ -604,7 +763,7 @@ export function QueueDesk({
   savedWorkPath: string | null;
 }) {
   const [internalActiveState, setInternalActiveState] =
-    useState<QueueState>("needsYou");
+    useState<QueueView>("waitingForAi");
   const activeState = selectedState ?? internalActiveState;
   const [directive, setDirective] = useState("");
   const [selectedItemKey, setSelectedItemKey] = useState<{
@@ -614,17 +773,25 @@ export function QueueDesk({
   const [response, setResponse] = useState("");
   const [busy, setBusy] = useState(false);
 
-  function selectState(state: QueueState) {
+  function selectState(state: QueueView) {
     setInternalActiveState(state);
     onStateChange?.(state);
   }
 
-  const visibleItems = items.filter((item) => item.state === activeState);
+  const visibleItems = items.filter(
+    (item) =>
+      activeState === "everything" ||
+      (activeState === "needsYou"
+        ? (item.needsInput ?? item.state === "needsYou")
+        : (item.state === "needsYou" ? "waitingForAi" : item.state) ===
+          activeState),
+  );
   const selectedItem = selectedItemKey
-    ? items.find(
+    ? (items.find(
         (item) =>
-          item.source === selectedItemKey.source && item.id === selectedItemKey.id,
-      ) ?? null
+          item.source === selectedItemKey.source &&
+          item.id === selectedItemKey.id,
+      ) ?? null)
     : null;
 
   async function createDirective() {
@@ -647,7 +814,6 @@ export function QueueDesk({
       setResponse("");
       setSelectedItemKey(null);
       onSelectItem(null);
-      selectState("waitingForAi");
     }
   }
 
@@ -666,18 +832,28 @@ export function QueueDesk({
   return (
     <div className="space-y-5">
       <section className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-        <div className="pointer-events-none absolute -right-8 -top-12 size-44 rounded-full border-[28px] border-primary/[0.04]" aria-hidden="true" />
+        <div
+          className="pointer-events-none absolute -right-8 -top-12 size-44 rounded-full border-[28px] border-primary/[0.04]"
+          aria-hidden="true"
+        />
         <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div>
             <div className="flex items-center gap-2 text-primary">
               <Route className="size-4" aria-hidden="true" />
-              <p className="text-xs font-semibold uppercase tracking-[0.18em]">Leave a route note</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+                Leave a route note
+              </p>
             </div>
-            <label htmlFor="queue-directive" className="mt-2 block text-lg font-semibold">
+            <label
+              htmlFor="queue-directive"
+              className="mt-2 block text-lg font-semibold"
+            >
               What should your AI pick up next?
             </label>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-              A clear direction is enough. The selected move is attached automatically; room, belongings, and evidence can be added when useful.
+              A clear direction is enough. The selected move is attached
+              automatically; room, belongings, and evidence can be added when
+              useful.
             </p>
             <Textarea
               id="queue-directive"
@@ -696,13 +872,21 @@ export function QueueDesk({
               size="touch"
               className="w-full"
             >
-              {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <ClipboardList aria-hidden="true" />}
+              {busy ? (
+                <LoaderCircle className="animate-spin" aria-hidden="true" />
+              ) : (
+                <ClipboardList aria-hidden="true" />
+              )}
               Save handoff
             </Button>
             <p className="text-xs leading-5 text-muted-foreground">
               {canCreateDirective ? (
                 <>
-                  Saves to <strong className="font-medium text-foreground">{directiveTargetLabel}</strong> in Waiting for your AI. Nothing runs until an AI claims it.
+                  Saves to{" "}
+                  <strong className="font-medium text-foreground">
+                    {directiveTargetLabel}
+                  </strong>{" "}
+                  in Waiting on AI. Nothing runs until an AI claims it.
                 </>
               ) : (
                 <>Choose one person&apos;s Queue before saving a handoff.</>
@@ -712,8 +896,18 @@ export function QueueDesk({
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
-        <nav aria-label="Queue states" className="grid grid-cols-2 gap-2 lg:sticky lg:top-4 lg:grid-cols-1">
+      {suggestionPanel}
+      <div
+        hidden={suggestionsVisible}
+        className={cn(
+          !suggestionsVisible &&
+            "grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start",
+        )}
+      >
+        <nav
+          aria-label="Queue states"
+          className="grid grid-cols-2 gap-2 lg:sticky lg:top-4 lg:grid-cols-1"
+        >
           {stateOrder.map((state) => {
             const stateMeta = statePresentation[state];
             const Icon = stateMeta.icon;
@@ -726,18 +920,38 @@ export function QueueDesk({
                 onClick={() => selectState(state)}
                 className={cn(
                   "relative overflow-hidden rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                  active ? "border-primary/35 bg-primary/[0.065] shadow-sm" : "border-border bg-card hover:border-primary/25",
+                  active
+                    ? "border-primary/35 bg-primary/[0.065] shadow-sm"
+                    : "border-border bg-card hover:border-primary/25",
                 )}
               >
-                <span className={cn("absolute inset-y-0 left-0 w-1", stateMeta.markerClass)} aria-hidden="true" />
+                <span
+                  className={cn(
+                    "absolute inset-y-0 left-0 w-1",
+                    stateMeta.markerClass,
+                  )}
+                  aria-hidden="true"
+                />
                 <div className="flex items-center gap-2 pl-1">
-                  <Icon className={cn("size-4 shrink-0", state === "working" && active && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
-                  <span className="min-w-0 flex-1 text-sm font-semibold">{stateMeta.label}</span>
+                  <Icon
+                    className={cn(
+                      "size-4 shrink-0",
+                      state === "working" &&
+                        active &&
+                        "animate-spin motion-reduce:animate-none",
+                    )}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1 text-sm font-semibold">
+                    {stateMeta.label}
+                  </span>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
-                    {active ? visibleItems.length : "—"}
+                    {counts?.[state] ?? (active ? visibleItems.length : "—")}
                   </span>
                 </div>
-                <p className="mt-2 hidden pl-1 text-xs leading-5 text-muted-foreground lg:block">{stateMeta.shortDescription}</p>
+                <p className="mt-2 hidden pl-1 text-xs leading-5 text-muted-foreground lg:block">
+                  {stateMeta.shortDescription}
+                </p>
               </button>
             );
           })}
@@ -746,8 +960,15 @@ export function QueueDesk({
         <section aria-labelledby="queue-state-heading" className="min-w-0">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Move handoffs</p>
-              <h2 id="queue-state-heading" className="mt-1 text-lg font-semibold">{statePresentation[activeState].label}</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Move handoffs
+              </p>
+              <h2
+                id="queue-state-heading"
+                className="mt-1 text-lg font-semibold"
+              >
+                {statePresentation[activeState].label}
+              </h2>
             </div>
             <div className="flex items-center gap-2">
               {ownerOptions.length > 1 ? (
@@ -760,12 +981,16 @@ export function QueueDesk({
                     className="h-11 rounded-lg border border-input bg-background px-2 text-base font-medium text-foreground md:h-8 md:text-sm"
                   >
                     {ownerOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
                     ))}
                   </select>
                 </label>
               ) : null}
-              <span className="text-xs text-muted-foreground">{visibleItems.length} loaded</span>
+              <span className="text-xs text-muted-foreground">
+                {visibleItems.length} loaded
+              </span>
             </div>
           </div>
 
@@ -797,18 +1022,34 @@ export function QueueDesk({
               <span className="mx-auto flex size-11 items-center justify-center rounded-xl border border-border bg-background text-primary">
                 <PackageOpen className="size-5" aria-hidden="true" />
               </span>
-              <h3 className="mt-3 font-semibold">{statePresentation[activeState].emptyTitle}</h3>
-              <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">{statePresentation[activeState].emptyBody}</p>
+              <h3 className="mt-3 font-semibold">
+                {statePresentation[activeState].emptyTitle}
+              </h3>
+              <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
+                {statePresentation[activeState].emptyBody}
+              </p>
             </div>
           )}
 
-          {(hasMoreHandoffs || hasMoreCaptures) ? (
+          {hasMoreHandoffs || hasMoreCaptures ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {hasMoreHandoffs ? (
-                <Button variant="outline" size="sm" onClick={onLoadMoreHandoffs}>Load older handoffs</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onLoadMoreHandoffs}
+                >
+                  Load older handoffs
+                </Button>
               ) : null}
               {hasMoreCaptures ? (
-                <Button variant="outline" size="sm" onClick={onLoadMoreCaptures}>Load older captures</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onLoadMoreCaptures}
+                >
+                  Load older captures
+                </Button>
               ) : null}
             </div>
           ) : null}
@@ -827,6 +1068,9 @@ export function QueueDesk({
         onLoadMoreActivities={onLoadMoreActivities}
         response={response}
         onResponseChange={setResponse}
+        onClearInput={() => {
+          if (selectedItem) void onProvideInput(selectedItem, "");
+        }}
         onProvideInput={provideInput}
         onCancel={cancel}
         busy={busy}
@@ -839,5 +1083,38 @@ export function QueueDesk({
         }}
       />
     </div>
+  );
+}
+
+function QueueOrigin({
+  item,
+  link = false,
+}: {
+  item: QueueDeskItem;
+  link?: boolean;
+}) {
+  return (
+    <>
+      {item.addedBy && item.addedBy !== "person" ? (
+        <p className="text-xs text-muted-foreground">
+          {item.addedBy === "ai_suggestion"
+            ? "From AI suggestion"
+            : "Added by your AI"}{" "}
+          · {item.addedByLabel ?? "Your AI"}
+        </p>
+      ) : null}
+      {item.fromRecord ? (
+        <p className="text-xs">
+          From:{" "}
+          {link ? (
+            <a className="underline" href={item.fromRecordHref ?? "/app/queue"}>
+              {item.fromRecord.label ?? item.fromRecord.type}
+            </a>
+          ) : (
+            <span>{item.fromRecord.label ?? item.fromRecord.type}</span>
+          )}
+        </p>
+      ) : null}
+    </>
   );
 }

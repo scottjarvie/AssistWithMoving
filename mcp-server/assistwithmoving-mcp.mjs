@@ -17,6 +17,9 @@ import {
   archiveMovePerson,
   archiveDocumentationProfile,
   addHouseholdMember,
+  addQueueItem,
+  listQueueSuggestions,
+  withdrawQueueSuggestion,
   approveAiPhotoSuggestions,
   approveAiTextSuggestions,
   createApiConfig,
@@ -1734,7 +1737,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "list_planning_suggestions", {
     title: "List planning suggestions",
     description:
-      "List AI planning review suggestions for a move, optionally filtered by pending, approved, edited, or rejected status.",
+      "List AI planning record proposals for a move, optionally filtered by pending, approved, edited, or rejected status.",
     inputSchema: {
       moveId: z.string(),
       status: planningSuggestionStatusSchema.optional(),
@@ -1757,10 +1760,13 @@ export function registerTools(target, apiConfig, options = {}) {
     handler: (input) => listAiJobs(apiConfig, input),
   });
 
+  registerTool(target,"add_queue_item",{title:"Add to Queue",description:"Add requested work with addedBy ai_on_request, or your own work idea with ai_suggestion and a reason. An AI add without addedBy is refused. Record-level AI proposals stay on records.",inputSchema:{moveId:z.string(),directive:z.string(),addedBy:z.enum(["ai_on_request","ai_suggestion"]).optional(),reason:z.string().optional(),options:z.array(z.string()).max(26).optional(),evidence:z.string().optional(),fromRecord:z.object({type:z.string(),id:z.string(),label:z.string().optional()}).optional(),operationId:z.string()},annotations:{readOnlyHint:false},handler:input=>addQueueItem(apiConfig,input)});
+  registerTool(target,"list_queue_suggestions",{title:"Read AI suggestions",description:"Read your person's open suggestions or archived decisions and withdrawal reasons.",inputSchema:{moveId:z.string(),archived:z.boolean().optional(),cursor:z.string().optional(),limit:z.number().int().min(1).max(100).optional()},annotations:{readOnlyHint:true},handler:input=>listQueueSuggestions(apiConfig,input)});
+  registerTool(target,"withdraw_queue_suggestion",{title:"Withdraw your suggestion",description:"Withdraw only your own unacted-on suggestion. Only the person can accept or dismiss.",inputSchema:{moveId:z.string(),queueItemId:z.string(),expectedVersion:z.number(),operationId:z.string(),reason:z.string().optional()},annotations:{readOnlyHint:false},handler:input=>withdrawQueueSuggestion(apiConfig,input)});
   registerTool(target, "list_queue_items", {
     title: "List Queue handoffs",
     description:
-      "List move-scoped handoffs using exactly Needs You, Working, Waiting for your AI, and Done. Results include version numbers required by safe write commands.",
+      "List move-scoped Waiting on AI, AI working and Answered items with an independent Needs your input flag. Results include version numbers required by safe write commands.",
     inputSchema: {
       moveId: z.string(),
       state: queueStateSchema.optional(),
@@ -1814,7 +1820,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "request_queue_input", {
     title: "Request human Queue input",
     description:
-      "Move your claimed handoff to Needs You with the exact decision, fact, file, approval, or outside-world action required.",
+      "Raise Needs your input with the exact question or approval needed; keep the lifecycle state.",
     inputSchema: {
       moveId: z.string(),
       queueItemId: z.string(),
@@ -1845,7 +1851,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "report_queue_failure", {
     title: "Report Queue failure",
     description:
-      "Record a bounded failure. Retryable work returns to Waiting for your AI within its attempt budget; exhausted work becomes Needs You instead of looping silently.",
+      "Record a bounded failure. Retryable work returns to Waiting for your AI within its attempt budget; exhausted work waits with the Needs your input flag instead of looping silently.",
     inputSchema: {
       moveId: z.string(),
       queueItemId: z.string(),
@@ -1872,7 +1878,7 @@ export function registerTools(target, apiConfig, options = {}) {
   });
 
   registerTool(target, "list_ai_text_suggestions", {
-    title: "List AI text suggestions",
+    title: "List AI text proposals",
     description:
       "List text-intake AI review suggestions for a move before exact-ID approval or rejection.",
     inputSchema: {
@@ -1885,7 +1891,7 @@ export function registerTools(target, apiConfig, options = {}) {
   });
 
   registerTool(target, "list_ai_photo_suggestions", {
-    title: "List AI photo suggestions",
+    title: "List AI photo proposals",
     description:
       "List photo-intake AI review suggestions for a move before exact-ID approval or rejection.",
     inputSchema: {
@@ -1898,9 +1904,9 @@ export function registerTools(target, apiConfig, options = {}) {
   });
 
   registerTool(target, "generate_ai_text_suggestions", {
-    title: "Generate AI text suggestions",
+    title: "Generate AI text proposals",
     description:
-      "Parse supplied source text into pending text-intake suggestions for explicit review. This creates an AI job and review queue rows, but does not create trusted inventory.",
+      "Parse supplied source text into pending text-intake AI proposals for explicit review. This creates an AI job and review queue rows, but does not create trusted inventory.",
     inputSchema: {
       moveId: z.string(),
       sourceText: z.string().min(1).max(12000),
@@ -1910,9 +1916,9 @@ export function registerTools(target, apiConfig, options = {}) {
   });
 
   registerTool(target, "generate_ai_photo_suggestions", {
-    title: "Generate AI photo suggestions",
+    title: "Generate AI photo proposals",
     description:
-      "Create pending photo-intake suggestions for explicit photo IDs. Existing pending suggestions are reused instead of duplicated.",
+      "Create pending photo-intake AI proposals for explicit photo IDs. Existing pending suggestions are reused instead of duplicated.",
     inputSchema: {
       moveId: z.string(),
       photoId: z.string().optional(),
@@ -1923,9 +1929,9 @@ export function registerTools(target, apiConfig, options = {}) {
   });
 
   registerTool(target, "approve_ai_text_suggestions", {
-    title: "Approve AI text suggestions",
+    title: "Approve AI text proposals",
     description:
-      "Approve exact pending text-intake suggestion IDs. Use dryRun true first to validate and preview created items, boxes, and assignments without writing.",
+      "Website-only decision: only the person accepts or dismisses AI proposals. This compatibility tool refuses AI writes. ",
     inputSchema: {
       moveId: z.string(),
       approvals: z.array(aiTextApprovalSchema).min(1).max(100),
@@ -1936,9 +1942,9 @@ export function registerTools(target, apiConfig, options = {}) {
   });
 
   registerTool(target, "reject_ai_text_suggestions", {
-    title: "Reject AI text suggestions",
+    title: "Reject AI text proposals",
     description:
-      "Reject exact pending text-intake suggestion IDs without creating inventory.",
+      "Website-only decision: only the person accepts or dismisses AI proposals. This compatibility tool refuses AI writes. ",
     inputSchema: {
       moveId: z.string(),
       suggestionIds: z.array(z.string()).min(1).max(100),
@@ -1948,9 +1954,9 @@ export function registerTools(target, apiConfig, options = {}) {
   });
 
   registerTool(target, "approve_ai_photo_suggestions", {
-    title: "Approve AI photo suggestions",
+    title: "Approve AI photo proposals",
     description:
-      "Approve exact pending photo-intake suggestion IDs. Use dryRun true first to validate and preview created items or boxes without writing.",
+      "Website-only decision: only the person accepts or dismisses AI proposals. This compatibility tool refuses AI writes. ",
     inputSchema: {
       moveId: z.string(),
       approvals: z.array(aiPhotoApprovalSchema).min(1).max(100),
@@ -1961,9 +1967,9 @@ export function registerTools(target, apiConfig, options = {}) {
   });
 
   registerTool(target, "reject_ai_photo_suggestions", {
-    title: "Reject AI photo suggestions",
+    title: "Reject AI photo proposals",
     description:
-      "Reject exact pending photo-intake suggestion IDs without creating inventory or changing photo evidence links.",
+      "Website-only decision: only the person accepts or dismisses AI proposals. This compatibility tool refuses AI writes. ",
     inputSchema: {
       moveId: z.string(),
       suggestionIds: z.array(z.string()).min(1).max(100),
@@ -1975,7 +1981,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "generate_planning_suggestions", {
     title: "Generate planning suggestions",
     description:
-      "Create deterministic estimate and load-assignment suggestions in the review queue. This writes suggestions, but does not apply them to inventory or boxes.",
+      "Create deterministic estimate and load-assignment AI proposals on their records. This writes suggestions, but does not apply them to inventory or boxes.",
     inputSchema: {
       moveId: z.string(),
       dryRun: z.boolean().optional(),
@@ -1987,7 +1993,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "approve_planning_suggestions", {
     title: "Approve planning suggestions",
     description:
-      "Approve specific pending planning suggestions, optionally with edited estimate drafts or assignment override reasons.",
+      "Website-only decision: only the person accepts or dismisses AI proposals. This compatibility tool refuses AI writes. ",
     inputSchema: {
       moveId: z.string(),
       approvals: z.array(planningApprovalSchema).min(1).max(100),
@@ -2000,7 +2006,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "reject_planning_suggestions", {
     title: "Reject planning suggestions",
     description:
-      "Reject specific pending planning suggestions without applying their estimate or assignment draft.",
+      "Website-only decision: only the person accepts or dismisses AI proposals. This compatibility tool refuses AI writes. ",
     inputSchema: {
       moveId: z.string(),
       suggestionIds: z.array(z.string()).min(1).max(100),

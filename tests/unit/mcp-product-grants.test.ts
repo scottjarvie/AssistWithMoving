@@ -283,6 +283,7 @@ describe("the scope catalog", () => {
       expect(scopeForTool(name), `${name} has no scope`).not.toBeNull();
     }
     const used = new Set(Object.values(MOVING_TOOL_SCOPES));
+    used.add("moving.suggestions.propose"); // Conditional power on add_queue_item; separately tested by queue-suggestions.
     for (const scope of movingScopes) {
       expect([...used], `${scope} is published but unreachable`).toContain(scope);
     }
@@ -700,7 +701,8 @@ describe("the Queue workflow under a grant", () => {
       operationId: "synthetic-question-0001",
       question: "Is the bookshelf solid oak or veneer?",
     });
-    expect(asked.queue.state).toBe("needsYou");
+    expect(asked.queue.state).toBe("working");
+    expect(asked.queue.needsInput).toBe(true);
     expect(asked.queue.requiredAction).toMatch(/oak or veneer/i);
   });
 

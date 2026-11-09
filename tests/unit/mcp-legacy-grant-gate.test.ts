@@ -65,11 +65,11 @@ describe("legacy gateway catalog", () => {
   });
 
   it("covers the whole live surface rather than a sample of it", () => {
-    expect(registeredNames.length).toBe(31);
+    expect(registeredNames.length).toBe(34);
     expect(
       Object.keys(LEGACY_GATEWAY_TOOL_SCOPES).length +
         LEGACY_GATEWAY_NEVER_PERMITTED_TOOLS.length,
-    ).toBe(31);
+    ).toBe(34);
   });
 });
 

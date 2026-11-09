@@ -91,6 +91,9 @@ export const LEGACY_GATEWAY_TOOL_SCOPES: Readonly<
   place_box: "moving.work.write",
   update_box: "moving.work.write",
   upsert_transport: "moving.work.write",
+  add_queue_item: "moving.queue.work",
+  list_queue_suggestions: "moving.queue.work",
+  withdraw_queue_suggestion: "moving.queue.work",
   capture_to_queue: "moving.work.write",
   // Uploading and filing photographs lands permanently on the person's record
   // and spends their stored bytes. Moving's scope vocabulary has no separate
@@ -155,8 +158,7 @@ export const LEGACY_PENDING_POLICY = {
    * Q8 — may a connected AI *add* to the person's Queue?
    *
    * `capture_to_queue` drops capture notes into the Queue. The family Queue law
-   * is that the AI *answers* Queue items and never adds to them; a thing the AI
-   * wants done belongs on the separate suggestions surface instead. Moving's
+   * is that the AI may add requested work or raise an unaccepted work idea in the Queue. Moving's
    * capture pipeline is the product, so removing this is a real workflow change
    * and waits on Scott's ruling. `"enqueueAllowed"` preserves today's
    * behaviour; `"queueLawStrict"` refuses the tool with a message that points
@@ -220,6 +222,7 @@ export function describeLegacyCapabilities(
     "moving.context.read": "read the move context you choose",
     "moving.evidence.read": "open the private photos and files for that work",
     "moving.work.write": "save the work you ask for",
+    "moving.suggestions.propose": "propose suggestions",
     "moving.queue.work": "work the Queue handoffs you hand it",
     "moving.archive": "reversibly archive records that turned out wrong",
   };
@@ -368,7 +371,7 @@ export function decideLegacyGatewayAccess(input: {
       allowed: false,
       refusalCode: "QUEUE_LAW",
       reason:
-        "Assist With Moving's Queue is work the person hands to their AI to finish; the AI does not add to it. Offer this as a suggestion the person can accept instead.",
+        "Assist With Moving's Queue is work the person hands to their AI to finish; the AI does not add to it. Use add_queue_item with explicit addedBy instead.",
     };
   }
 

@@ -226,14 +226,14 @@ secret hash. Paused, revoked and expired keys can still inspect this credential 
 
 The canonical Queue is the durable handoff between a person and their chosen
 AI. It is not the inventory task list, the internal AI job monitor, or the
-suggestion approval queue. It uses exactly four user-facing states:
+record-level AI proposals. It uses three lifecycle states plus an independent input flag and archive:
 
 | State | Contract |
 | --- | --- |
-| **Needs You** (`needsYou`) | The item names the exact human decision, fact, file, approval, or outside-world action required. |
-| **Working** (`working`) | An attributable actor holds an expiring lease and the current bounded next step is visible. |
-| **Waiting for your AI** (`waitingForAi`) | The handoff is accepted but no work is running. `waitingReason` distinguishes unknown connection truth, ready work, a proven AI connection requirement, or a scheduled retry. |
-| **Done** (`done`) | A readable result or durable result reference is recorded; canceled and expired handoffs use `terminalReason` without inventing extra states. |
+| **Needs your input (flag)** | `needsInput`, `needsInputAt`, `needsInputBy` and `requiredAction` record the exact question; setting or clearing it does not change the state. Legacy `needsYou` storage reads as Waiting on AI with this flag. |
+| **AI working** (`working`) | An attributable actor holds an expiring lease and the current bounded next step is visible. |
+| **Waiting on AI** (`waitingForAi`) | The handoff is accepted but no work is running. `waitingReason` distinguishes unknown connection truth, ready work, a proven AI connection requirement, or a scheduled retry. |
+| **Answered** (`done`) | A readable result or durable result reference is recorded; canceled and expired handoffs use `terminalReason` without inventing extra states. |
 
 Queue reads require `queue/read`; commands require `queue/write`. Those scopes
 do not grant permission to change inventory, plans, members, exports, or any
@@ -258,16 +258,14 @@ Queue so authorization filtering cannot create incomplete pages; the response
 lists `runnableOwnerIds` and an explicitly delegated owner can be selected.
 A human manager's in-product recovery authority is never inherited by an API
 key or OAuth agent. Claim requires `nextStep`; release requires a
-reason; Needs You requires `requiredAction`; completion requires
+reason; raising Needs your input requires `requiredAction`; completion requires
 `resultSummary` or at least one `{type,id,label?}` result reference. Failure
 requires a stable code, readable message, and `retryable`; retryable work
 returns to Waiting for your AI until its attempt budget is exhausted, then
-becomes Needs You. Claims expire after 15 minutes and the bounded maintenance
+stays waiting with the Needs your input flag. Claims expire after 15 minutes and the bounded maintenance
 sweep records their release rather than leaving invisible stuck work.
 
-Queue directives are created by the signed-in product service, not by the
-agent tools. This prevents a connected AI from inventing objectives or using
-Queue access as broad write authorization. The existing capture pipeline keeps
+Queue directives can be added by the person or their AI. AI adds require explicit `addedBy: ai_on_request | ai_suggestion`; unaccepted AI suggestions remain private and cannot be worked on. Queue text never grants additional access. The existing capture pipeline keeps
 its `queued|claimed|processed|needsInput|resolved|discarded` storage vocabulary
 and is exposed through a non-destructive adapter; no production backfill is
 required for correctness.
@@ -1885,10 +1883,13 @@ connection never sees a capability nobody approved.
 | `save_inventory` | `moving.work.write` | Replay-safe inventory creation and optimistic corrections with estimates, review flags, and source provenance. |
 | `save_planning_record` | `moving.work.write` | Create or optimistically correct a decision, estimate, plan result, or source check. |
 | `save_complete_result` | `moving.work.write` | Preferred happy path: atomically save a readable result and its related locations, inventory, decisions, estimates, plan sections, and source checks. With `completeQueueItem`, finishes the handoff in the same approval when the grant also carries `moving.queue.work`. |
-| `list_queue_work` | `moving.queue.work` | Return only the handoffs the person left **Waiting for your AI** on one move, each with the version to claim it with. Needs you items wait on the person and are not listed. |
+| `add_queue_item` | `moving.queue.work` | Add requested work or an AI work idea with explicit addedBy and operationId. |
+| `list_queue_suggestions` | `moving.queue.work` | Read private ideas, reasons and decisions. |
+| `withdraw_queue_suggestion` | `moving.queue.work` | Withdraw your own unacted-on idea. |
+| `list_queue_work` | `moving.queue.work` | Return only the handoffs the person left **Waiting for your AI** on one move, each with the version to claim it with. Items flagged Needs your input wait on the person and are not listed. |
 | `claim_queue_work` | `moving.queue.work` | Take one waiting handoff under a 15-minute lease so no other AI picks it up. Echo the `expectedVersion` from `list_queue_work`. |
 | `release_queue_work` | `moving.queue.work` | Hand a claimed handoff back to Waiting for your AI with a durable reason, without pretending it is finished. |
-| `ask_queue_question` | `moving.queue.work` | Move a claimed handoff to **Needs you** with one specific smallest question, instead of guessing. |
+| `ask_queue_question` | `moving.queue.work` | Raise the **Needs your input** flag with one specific smallest question (state unchanged), releasing the claim instead of guessing. |
 | `complete_queue_work` | `moving.queue.work` | Mark a claimed handoff **Done** with its result summary and references. |
 | `archive_move_records` | `moving.archive` | Reversibly archive or restore belongings, boxes, rooms, or planning records, with a per-record result. Never permanently deletes. |
 
@@ -1903,10 +1904,11 @@ finished work, prefer `save_complete_result`; use granular saves for later
 corrections.
 
 **Canonical OAuth can work the Queue.** With `moving.queue.work` the loop is
-list → claim → (ask the smallest Needs you question, or release) → complete, and
+list → claim → (ask the smallest question, raising the Needs your input flag (state unchanged), or release) → complete, and
 `save_complete_result` with `completeQueueItem` does the save and the completion
-under one approval (`convex/mcpQueueWork.ts`). The four person-facing states are
-unchanged: **Needs you / Working / Waiting for your AI / Done**.
+under one approval (`convex/mcpQueueWork.ts`). The three lifecycle states are
+**Waiting on AI / AI working / Answered**. **Needs your input** is a flag; raising
+or clearing it leaves the state unchanged.
 
 When a grant stops at `moving.work.write`, a save that names
 `relatedQueueItemId` or asks to complete a handoff still links the result and an
@@ -2077,7 +2079,7 @@ names, and known launch blockers.
 | `get_queue_item` | Read one Queue handoff and its attributable activity history. |
 | `claim_queue_item` | Claim Waiting for your AI work with a visible next step, expiring lease, expected version, and idempotency key. |
 | `release_queue_item` | Return an active claim to Waiting for your AI with a durable reason. |
-| `request_queue_input` | Return active work to Needs You with the exact human action required. |
+| `request_queue_input` | Raise the Needs your input flag without changing the lifecycle state. |
 | `complete_queue_item` | Complete claimed work with a readable result or durable result reference. |
 | `report_queue_failure` | Record retryable or exhausted failure without silent loops. |
 | `plans_list` | List Layout Studio floor plans for a move. |
@@ -2361,3 +2363,9 @@ Deploy the Convex schema, indexes and functions before the website. No productio
 deployment or data mutation is part of the draft-PR build stage. Backend tests
 use `convex-test` with synthetic records; bootstrap and subsequent accesses are
 proved without live credentials.
+
+### AWL-0016 Queue contract
+
+Requests made through your AI are ordinary Queue items, marked “added by your AI”. Your AI’s own work ideas are “AI suggestions”: hidden by default in the Queue, counted, and waiting for you to accept, edit first or dismiss. Needs your input is a flag on Waiting on AI, AI working or Answered; answering clears the flag without moving the item. Draft edits to Moving records stay on those records as AI proposals. Only you can accept or dismiss; your AI may withdraw its own suggestion before you act. You can turn off Propose suggestions without blocking requested work.
+
+Canonical Queue additions: `add_queue_item`, `list_queue_suggestions`, `withdraw_queue_suggestion` (all `moving.queue.work`; unsolicited adds also require `moving.suggestions.propose`). API-key HTTP/stdio share these names with `queue/write`, `queue/read`, and removable `queue/suggest` on unsolicited adds. Legacy OAuth also exposes these; `capture_to_queue` requires explicit `addedBy` and `operationId`. Record-level generate/approve/reject tools keep their domain behavior; they are not Queue aliases.

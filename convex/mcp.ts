@@ -46,17 +46,48 @@ import {
   upsertSpacesArgs,
 } from "./mcpToolsWrite";
 
+import {
+  addQueueItemArgs,
+  listSuggestionsArgs,
+  withdrawSuggestionArgs,
+} from "./mcpToolsCanonicalQueue";
 export const tools: McpToolRegistration[] = [
+  defineMcpMutation({
+    name: "add_queue_item",
+    description:
+      "Add requested work (ai_on_request) or an AI work idea (ai_suggestion); addedBy is required for AI writes. Record-level AI proposals stay on records.",
+    fn: internal.mcpToolsCanonicalQueue.addQueueItem,
+    args: addQueueItemArgs,
+    identityArg: "caller",
+  }),
+  defineMcpQuery({
+    name: "list_queue_suggestions",
+    description:
+      "Read your person's open AI suggestions, or archived decisions and reasons.",
+    fn: internal.mcpToolsCanonicalQueue.listSuggestions,
+    args: listSuggestionsArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "withdraw_queue_suggestion",
+    description:
+      "Withdraw only your own unacted-on suggestion. Only the person can accept or dismiss.",
+    fn: internal.mcpToolsCanonicalQueue.withdrawSuggestion,
+    args: withdrawSuggestionArgs,
+    identityArg: "caller",
+  }),
   defineMcpQuery({
     name: "describe_connection",
-    description: "Read only your calling connection version and status, even with no domain scopes or selected moves. Use this version for reduce_connection; no household, move or sibling data is returned.",
+    description:
+      "Read only your calling connection version and status, even with no domain scopes or selected moves. Use this version for reduce_connection; no household, move or sibling data is returned.",
     fn: internal.aiGrants.describeLegacyConnection,
     args: { caller: mcpCallerValidator },
     identityArg: "caller",
   }),
   defineMcpMutation({
     name: "reduce_connection",
-    description: "Reduce only your own calling connection: scopes, selected moveIds, expiry, pause or revoke. Requires current expectedVersion from describe_connection. Only the person in Settings can widen or restore access.",
+    description:
+      "Reduce only your own calling connection: scopes, selected moveIds, expiry, pause or revoke. Requires current expectedVersion from describe_connection. Only the person in Settings can widen or restore access.",
     fn: internal.aiGrants.reduceLegacyConnection,
     args: { caller: mcpCallerValidator, ...reductionArgs },
     identityArg: "caller",
@@ -79,7 +110,8 @@ export const tools: McpToolRegistration[] = [
   }),
   defineMcpQuery({
     name: "get_move_summary",
-    description: "Basic facts about one move (title, route, type, status, packets).",
+    description:
+      "Basic facts about one move (title, route, type, status, packets).",
     fn: internal.mcpTools.getMoveSummary,
     args: {
       caller: mcpCallerValidator,

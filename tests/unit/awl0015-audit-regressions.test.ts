@@ -136,6 +136,6 @@ it.each(["automatic", "none"] as const)("a %s expiry marker never makes a forced
   const f = await accessFixture();
   await f.legacyGrant({ clientId: "own-limits", scopeChoice: "chosen", scopes: ["moving.context.read"], expiryChoice, expiresAt: Date.now() + 60000, ownerDecisionAt: Date.now() - 500 });
   await f.connect("new"); await f.finish();
-  expect(await f.connect("own-limits")).toMatchObject({ status: "active", scopes: ["moving.context.read"], expiresAt: null });
-  expect(await f.connect("new")).toMatchObject({ status: "active", scopes: ["moving.context.read"], expiresAt: null });
+  expect(await f.connect("own-limits")).toMatchObject({ status: "active", scopes: ["moving.context.read", "moving.suggestions.propose"], expiresAt: null });
+  expect(await f.connect("new")).toMatchObject({ status: "active", scopes: ["moving.context.read", "moving.suggestions.propose"], expiresAt: null });
 });

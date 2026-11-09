@@ -24,7 +24,7 @@ const aiReviewTabs = [
     value: "queue",
     label: "Queue",
     description:
-      "Approve or reject pending AI suggestions before they change move data.",
+      "Approve or reject pending AI proposals before they change move data.",
   },
   {
     value: "text",
@@ -54,8 +54,8 @@ export function AiReviewWorkspacePage() {
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <MoveWorkspaceHeader
-        title="AI suggestions"
-        description="The optional deeper review — approve or reject AI suggestions and run text/photo intake. Day-to-day, your captures live on the move's Queue."
+        title="AI proposals"
+        description="The optional deeper review — approve or reject AI proposals and run text/photo intake. Day-to-day, your captures live on the move's Queue."
       />
       <MoveOperationsNav />
 
@@ -74,7 +74,7 @@ export function AiReviewWorkspacePage() {
           ) : (
             <FeatureUnavailable
               title="AI photo intake disabled"
-              description="Photo-based AI suggestions are currently hidden by rollout controls. Existing photo review remains available."
+              description="Photo-based AI proposals are currently hidden by rollout controls. Existing photo review remains available."
             />
           )}
         </TabsContent>

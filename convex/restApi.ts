@@ -1,3 +1,7 @@
+import {queueNeedsInput} from "./lib/queue";
+import {queueWorkFilter} from "./lib/queue";
+import { createQueueItem, readQueueSuggestions, reviewQueueSuggestion, type QueueResultRef } from "./lib/queueService";
+import { ConvexError } from "convex/values";
 import { withSharedPublishing } from "./lib/sharedPublishing";
 import { readAccess, readConnection, connectionAccess, accessState, keyScopes } from "./lib/carriedAccess";
 import { previewPublicPacket } from "./publicPackets";
@@ -122,7 +126,7 @@ import {
   requestQueueInput,
   requireQueueItem,
   requireQueueItemVisible,
-  shapeQueueItem,
+  shapeQueueItemForRead,
   type QueueAccessActor,
 } from "./lib/queueService";
 import {
@@ -678,6 +682,7 @@ async function routeRequest(
     return await routeMoveSpaces(ctx, args, auth, moveId, nestedId);
   }
 
+  if (["ai-text-suggestions","ai-photo-suggestions","planning-suggestions"].includes(nested??"") && args.method === "POST" && ["approve","reject"].includes(nestedId??"")) throw new ConvexError("Only the person can accept, dismiss or edit-accept AI proposals on the website.");
   if (nested === "queue") {
     return await routeQueue(ctx, args, auth, moveId, nestedId, segments[4]);
   }
@@ -846,13 +851,55 @@ async function routeQueue(
   action?: string,
 ) {
   const actor = await queueApiActor(ctx, auth, moveId);
+  const queueInput = args.body && typeof args.body === "object" && !Array.isArray(args.body) ? args.body as Record<string,unknown> : {};
+  if(args.method!=="GET" && args.body && typeof args.body === "object" && (queueInput.needsInput === false || queueInput.clearOnly === true || queueInput.clearNeedsInput === true)) throw new ConvexError("Only the person can clear Needs your input");
+  if (args.method === "POST" && !queueItemIdSegment) {
+    if (!args.idempotencyKey)
+      throw new ConvexError("Idempotency-Key is required for Queue adds.");
+    const body = bodyObject(args.body);
+    if (
+      body.addedBy === "ai_suggestion" &&
+      !auth.scopes.includes("queue/suggest")
+    )
+      throw new ConvexError(
+        "Propose suggestions is off; requested work remains available.",
+      );
+    return restOk(
+      {
+        data: await shapeQueueItemForRead(ctx,
+          await createQueueItem(ctx, actor, {
+            householdId: auth.householdId,
+            moveId,
+            directive: asString(body.directive) ?? "",
+            addedBy: body.addedBy as "ai_on_request" | "ai_suggestion",
+            reason: asString(body.reason),
+            options: body.options as string[] | undefined,
+            evidence: asString(body.evidence),
+            fromRecord: body.fromRecord as QueueResultRef | undefined,
+            idempotencyKey: args.idempotencyKey,
+          }),
+        ),
+      },
+      201,
+    );
+  }
+  if (args.method === "GET" && queueItemIdSegment === "suggestions")
+    return restOk({
+      data: await readQueueSuggestions(ctx, actor, {
+        moveId,
+        archived: args.query.archived === "true",
+          cursor:args.query.cursor,limit:args.query.limit?Number(args.query.limit):undefined,
+      }),
+    });
   if (args.method === "GET" && !queueItemIdSegment) {
     const limit = Math.min(
       Math.max(Math.floor(Number(args.query.limit || "50")), 1),
       100,
     );
     const state = restQueueState(args.query.state);
-    const requestedOwnerUserId = args.query.ownerUserId as Id<"users"> | undefined;
+    const requestedOwnerUserId = args.query.ownerUserId as
+      | Id<"users">
+      | undefined;
     const runnableOwnerIds = await resolveRunnableQueueOwnerIds(
       ctx,
       auth.householdId,
@@ -871,19 +918,17 @@ async function routeQueue(
     const cursor = args.query.cursor || null;
     const page = ownerUserId
       ? await ctx.db
-        .query("queueItems")
-        .withIndex("by_move_owner_updated", (q) =>
-          q
-            .eq("moveId", moveId)
-            .eq("ownerUserId", ownerUserId),
-        )
-        .order("desc")
-        .paginate({ cursor, numItems: limit })
+          .query("queueItems")
+          .withIndex("by_move_owner_updated", (q) =>
+            q.eq("moveId", moveId).eq("ownerUserId", ownerUserId),
+          )
+          .order("desc")
+          .filter(queueWorkFilter).paginate({ cursor, numItems: limit })
       : await ctx.db
-        .query("queueItems")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
-        .order("desc")
-        .paginate({ cursor, numItems: limit });
+          .query("queueItems")
+          .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+          .order("desc")
+          .filter(queueWorkFilter).paginate({ cursor, numItems: limit });
     const now = Date.now();
     const visible = page.page.filter((item) => {
       if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
@@ -896,7 +941,7 @@ async function routeQueue(
       });
     });
     return restOk({
-      data: visible.map((item) => shapeQueueItem(item, now)),
+      data: await Promise.all(visible.map(async (item) => await shapeQueueItemForRead(ctx, item, now))),
       page: {
         limit,
         nextCursor: page.isDone ? null : page.continueCursor,
@@ -927,7 +972,7 @@ async function routeQueue(
       .order("desc")
       .take(50);
     return restOk({
-      data: shapeQueueItem(item),
+      data: await shapeQueueItemForRead(ctx, item),
       activity: activities.map((entry) => ({
         type: entry.type,
         actorType: entry.actorType,
@@ -940,6 +985,11 @@ async function routeQueue(
     });
   }
 
+  if(args.method!=="GET" && (action === "archive" || queueInput.archived === true || queueInput.archivedAt !== undefined || queueInput.state === "archived")) {
+   const item=await requireQueueItem(ctx,{householdId:auth.householdId,moveId,queueItemId});requireQueueItemVisible(actor,item);
+   if(queueNeedsInput(item))throw new ConvexError("Only the person can clear Needs your input");
+   throw new ConvexError("Only the person can archive a Queue item on the website.");
+  }
   if (args.method !== "POST") {
     return restError({
       status: 405,
@@ -948,7 +998,9 @@ async function routeQueue(
     });
   }
   if (!canPerformHouseholdAction(auth.effectiveRole, "queue:run")) {
-    throw new Error("This API key's participant role is not allowed to run Queue work.");
+    throw new Error(
+      "This API key's participant role is not allowed to run Queue work.",
+    );
   }
   if (!args.idempotencyKey) {
     throw new Error("Idempotency-Key is required for Queue commands.");
@@ -961,27 +1013,60 @@ async function routeQueue(
     expectedVersion: restExpectedVersion(body),
     idempotencyKey: args.idempotencyKey,
   };
+  if (
+    action === "withdraw" ||
+    action === "accept" ||
+    action === "dismiss" ||
+    action === "edit-accept"
+  ) {
+    if (action !== "withdraw")
+      throw new ConvexError(
+        "Only the person can accept, dismiss or edit-accept suggestions.",
+      );
+    return restOk({
+      data: await shapeQueueItemForRead(ctx,
+        await reviewQueueSuggestion(ctx, actor, {
+          ...base,
+          action: "withdraw",
+          reason: asString(body.reason),
+          idempotencyKey: args.idempotencyKey,
+        }),
+      ),
+    });
+  }
   if (action === "claim") {
     const nextStep = asString(body.nextStep);
     if (!nextStep) throw new Error("nextStep is required.");
-    return restOk({ data: shapeQueueItem(await claimQueueItem(ctx, actor, { ...base, nextStep })) });
+    return restOk({
+      data: await shapeQueueItemForRead(ctx,
+        await claimQueueItem(ctx, actor, { ...base, nextStep }),
+      ),
+    });
   }
   if (action === "release") {
     const reason = asString(body.reason);
     if (!reason) throw new Error("reason is required.");
-    return restOk({ data: shapeQueueItem(await releaseQueueItem(ctx, actor, { ...base, reason })) });
+    return restOk({
+      data: await shapeQueueItemForRead(ctx,
+        await releaseQueueItem(ctx, actor, { ...base, reason }),
+      ),
+    });
   }
   if (action === "needs-you") {
     const requiredAction = asString(body.requiredAction);
     if (!requiredAction) throw new Error("requiredAction is required.");
-    return restOk({ data: shapeQueueItem(await requestQueueInput(ctx, actor, { ...base, requiredAction })) });
+    return restOk({
+      data: await shapeQueueItemForRead(ctx,
+        await requestQueueInput(ctx, actor, { ...base, requiredAction }),
+      ),
+    });
   }
   if (action === "complete") {
     const resultRefs = Array.isArray(body.resultRefs)
       ? (body.resultRefs as Array<{ type: string; id: string; label?: string }>)
       : undefined;
     return restOk({
-      data: shapeQueueItem(
+      data: await shapeQueueItemForRead(ctx,
         await completeQueueItem(ctx, actor, {
           ...base,
           resultSummary: asString(body.resultSummary),
@@ -997,7 +1082,7 @@ async function routeQueue(
       throw new Error("code, message, and retryable are required.");
     }
     return restOk({
-      data: shapeQueueItem(
+      data: await shapeQueueItemForRead(ctx,
         await reportQueueFailure(ctx, actor, {
           ...base,
           code,

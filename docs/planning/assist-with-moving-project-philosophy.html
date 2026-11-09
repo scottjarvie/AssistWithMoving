@@ -13,7 +13,7 @@
     >
     <meta
       name="source-sha256"
-      content="ecd5149b17fe633222379db068544178a5720b8e07de57a14dd2e027be4f199e"
+      content="8a7b3ef4ea3770982f979c9f5d78e36173032921c31e526b9c15b3098ff6cdd1"
     >
     <link
       rel="icon"
@@ -1358,7 +1358,7 @@
           </div>
           <div>
             <dt>Source digest</dt>
-            <dd data-source-digest-short>ecd5149b…e4f199e</dd>
+            <dd data-source-digest-short>8a7b3ef4…ff6cdd1</dd>
           </div>
         </dl>
 
@@ -1405,7 +1405,7 @@
         </p>
         <p class="source-hash">
           Source SHA-256:
-          <span data-source-digest-full>ecd5149b17fe633222379db068544178a5720b8e07de57a14dd2e027be4f199e</span>
+          <span data-source-digest-full>8a7b3ef4ea3770982f979c9f5d78e36173032921c31e526b9c15b3098ff6cdd1</span>
         </p>
       </div>
     </footer>
@@ -1461,7 +1461,7 @@
 > re-audited 2026-08-09 without reclassifying implementation capability
 >
 > **Adopted:** the three-way promise and “your AI” language; shared route and
-> truth-surface direction; the four-state Queue and bounded directive rule;
+> truth-surface direction; the three-state Queue with an input flag and bounded directive rule;
 > the distinction between the platform's boundary and the person's freedom to
 > direct their own AI; granular, revocable authority and attributable handoff;
 > activity, provenance, identity, privacy and access rules; the accessible
@@ -1589,7 +1589,7 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 | Person / Assist workspace / your AI | The released home, signed-in launchpad, `/ai` copy, scoped keys, canonical stateless OAuth MCP and compatibility/API-key surfaces separate the person's authority, Moving's durable record and the person's chosen AI. The first-run promise now leads with the changing move and durable context rather than inventory alone. | **Current/verified production foundation** at PR `#184` and `MOV-WO-007`. “Assist your AI, so it can assist you with moving” is current visible copy. The broader family sentence remains product guidance rather than an unverified capability claim. |
 | Domain promise and objects | Moves, households, people, spaces, items, planned items, boxes, photos/evidence, transport resources/zones/trips, layouts, documentation profiles, exports, share links, and MCP-saved decisions, estimates, plan results and source checks are modeled in `convex/schema.ts`. These support a simple-to-complex direction, but general tasks, budgets and provider/vendor records are not complete first-class models. | **Current/verified repository foundation** for the named records; progressive composition and unscheduled extensions are **Later**. Moving's vocabulary is retained. |
 | Product Queue versus internal Tracker | `/app/queue` and move Queue routes expose the capture/ingestion Queue. `docs/tracker/` now holds the separate repo-owned Cards / Work Orders / Guide package and generated owner readers. | The separation is **Current/verified in repository source**. The Queue is user product work; the Tracker is internal build coordination. Card `MOV-0001` records the completed same-SHA GitHub, Vercel and retained-production proof for the state fast lane. |
-| Queue states | Canonical Queue records and the global/move Queue workspace use exactly **Needs you / Working / Waiting for your AI / Done**. Older capture records retain their source states and project into those four person-facing lanes for compatibility. | **Current/verified repository and released-source foundation.** The Queue remains a handoff desk; lease/retry/expiry are operational details, not extra person-facing states. |
+| Queue states | Canonical Queue records and the global/move Queue workspace use **Waiting on AI / AI working / Answered**, plus the **Needs your input** flag. Older capture records retain their source states and project into three lifecycle states plus an input filter for compatibility. | **Current/verified repository and released-source foundation.** The Queue remains a handoff desk; lease/retry/expiry are operational details, not extra person-facing states. |
 | Directive authority | Capture instructions can be claimed by an authorized AI; tools enforce move/owner access and claims. A Queue item records intent but does not itself create a missing tool, data, operation or external-action grant. | **Owner clarification adopted now in product truth:** Moving checks authority separately from the instruction. Missing authority returns the smallest exact **Needs you** question. When a separately visible grant already names the AI, scope, permitted data, operation or external-action category, approval and duration, Moving may hand the approved context and intent to that AI and record the result. Complete implementation remains **Later**. |
 | MCP and `/ai` | Source routes provide a canonical stateless Streamable HTTP OAuth `/mcp` whose catalog is the exact `STATELESS_MOVING_TOOL_NAMES` array in `convex/httpRoutes/mcp.ts` — sixteen grant-gated move-workflow tools including the full Queue loop and reversible archive — plus a persisted compatibility catalog at `/mcp/connect` and separate API-key `/api/mcp` and stdio doors: four doors in total. Public `/ai`, `/ai/start`, `/ai.txt`, `llms.txt` and `llms-full.txt` state the door and Queue boundaries and derive their tool list from that array. `/settings/ai` is the canonical grant manager; `/settings/ai-connections` redirects to it. | **Current/verified in production** for anonymous OAuth/resource discovery, exact door boundaries, the served grant block (`productGrantRequired`, five `moving.*` scopes, `grantBoundaryVersion`, four doors), official-SDK consent/token exchange, brief/search/read, one-call source-backed save, idempotent replay, granular correction, normal Move/Queue reflection, refresh/client/session cleanup, and hard purge. **Current/verified in source** for the product grant, its five separate scopes, immediate revocation, metadata-document-first client identity with DCR fallback, canonical OAuth Queue transitions, reversible archive, and `/settings/ai`. The complete Bring Your AI lifecycle is still **Partial**, for one honest reason: **no named AI client has completed the lifecycle**, so private-media rendering and reconnect in a real AI product remain unproved and every client stays **Unknown**. Clerk still issues identity-only token scopes, which is by design — authority comes from the grant, never from a token scope. `MOV-WO-010` shipped; `MOV-0035` holds the outstanding real-client run. Public pages must list only the exact catalog and client lifecycle attached to their evidence. |
 | Activity and provenance | `auditLogs`, move/object queries, item activity UI, plan journals, API-key/agent write events, and MCP planning records preserve actor and time. Stateless MCP saves add client id, operation id, version, reason, source status, and replay receipts, and the web workspace shows “Your AI via MCP.” Coverage and human-readable before/after/evidence detail are not universal, and no complete external-action handoff/result receipt is verified. | **Current/verified partial repository foundation.** Complete “if an AI did it, the record says so,” including grant, handoff, result, failure or return, is **Later**. |
@@ -2196,16 +2196,16 @@ environment and user-owned Moving data.
 
 ### The queue carries the handoff
 
-The family destination uses exactly four user-facing states:
+The family destination uses three lifecycle states plus Archived. **Needs your input** is an independent flag, never a lifecycle state:
 
 | Family Queue state | Meaning in Moving |
 |---|---|
 | **Waiting for your AI** | The directive has been accepted but the person's connected AI has not picked it up. Nothing is running. |
 | **Working** | The person's AI has picked up the directive; show the current step and handoff identity. |
-| **Needs you** | Work stopped on the smallest exact fact, file, decision or authority boundary only the person can resolve. |
+| **Needs your input (flag)** | The exact question is attached without changing the lifecycle state; the person’s answer clears it. |
 | **Done** | A readable result or answered question is attached to the durable move record. |
 
-No fifth user-facing state is part of the destination contract. Before an AI
+Tabs: Waiting on AI · AI working · Needs your input · Answered · Everything. Before an AI
 is connected, a person may still leave a directive; it remains **Waiting for
 your AI** and points to `/ai`. The current capture Queue's six stored states and
 its To do / Review / Archive groupings are implementation facts, not synonyms
@@ -2221,7 +2221,7 @@ request, not a silent expansion of the person's AI grant. Moving may allow
 only the tools, data and operations already covered by an explicit grant. A new
 objective, destructive change, additional sensitive data, publish/share/export
 operation, identity or access change, or external-action category needs its own
-authority. Missing authority or genuinely unclear scope moves the item to
+authority. Missing authority or genuinely unclear scope flags the item as
 **Needs you** with the smallest exact question that unlocks it.
 
 When a visible, unexpired grant already names the chosen AI, scope, permitted
@@ -2249,7 +2249,7 @@ must preserve enough meaning for useful progress across AI sessions:
   decisions, and uncertainty the work depends on;
 - **authority:** the chosen AI, permitted scope and data, Moving operation or
   outside-action category, approval, and expiry/revocation state;
-- **state and responsibility:** one of the four family states, plus who or which
+- **state and responsibility:** one of the three lifecycle states, plus the independent input flag, plus who or which
   chosen AI last acted and when;
 - **questions, blockers, and dependencies:** what prevents safe progress and
   what answer or event would unblock it; and
@@ -2640,7 +2640,7 @@ work lacks an active delivery commitment, it is **Later**, not **Coming soon**.
 | Inventory and packing | Items, planned items, boxes, contents, spaces, photos, disposition, values, review flags, archive or soft-delete paths | **Current/verified repository foundation.** Inventory is a major capability, not the whole identity |
 | Transport and layouts | Resources, zones, trips, trip spaces, capacity, assignments, floor plans, proposals, reversible plan operations, SVG snapshots | **Current/verified repository foundation.** Maps, live routing, booking and provider execution are **Later or outside Moving** |
 | Evidence and documentation | Private photo records, research sources, documentation profiles, exports, recipient-safe fields and packet-oriented source | **Current/verified repository foundation.** Full Document Memory / Move Evidence Packets, extraction-confirmation states, completed-form snapshots, requirements progress and post-move retrieval are **Later / unverified**. Private evidence does not become shareable merely because a summary or packet exists |
-| Questions, Move Brief and queue | Derived readiness questions; a bounded MCP move brief; compact move/context summaries; and a per-user four-state Queue with directives, evidence, claim expiry, delegation, AI question, summary, activity and result references. The canonical OAuth surface can now list only actionable granted work, claim and release it under a lease, ask the smallest **Needs you** question, and complete it — including a one-call save that finishes the handoff in the same approval | **Current/verified repository foundation.** The complete cross-domain Move Brief and attachable question system are **Later**. Queue transitions are held behind a distinct `moving.queue.work` grant, so a work-write grant links a result and leaves the state to the person |
+| Questions, Move Brief and queue | Derived readiness questions; a bounded MCP move brief; compact move/context summaries; and a per-user three-state Queue with an input flag, directives, evidence, claim expiry, delegation, AI question, summary, activity and result references. The canonical OAuth surface can now list only actionable granted work, claim and release it under a lease, ask the smallest **Needs you** question, and complete it — including a one-call save that finishes the handoff in the same approval | **Current/verified repository foundation.** The complete cross-domain Move Brief and attachable question system are **Later**. Queue transitions are held behind a distinct `moving.queue.work` grant, so a work-write grant links a result and leaves the state to the person |
 | History and provenance | Move-scoped audit logs, actor and API-key fields on selected records, timestamps, review states, research/source checks, MCP client/operation/version receipts, web-visible saved planning results, and plan operation inverses | **Current/verified partial repository foundation.** Complete dependency, revision and AI-activity coverage is **Later** |
 | API and MCP source surfaces | Documented REST API; a canonical stateless Streamable HTTP OAuth resource in `convex/httpRoutes/mcp.ts` + `convex/mcpPlanning.ts` with sixteen grant-gated workflow tools; a persisted compatibility gateway in `convex/mcp*.ts`; and a separate API-key HTTP/stdio registry in `src/app/api/mcp` + `mcp-server/` | **Current/verified repository foundation** for anonymous discovery/challenge, door separation, exact move isolation, grant-filtered tool discovery, complete source-backed save, replay, correction, canonical Queue claim/question/completion, reversible archive, normal UI reflection and fixture purge. The complete connection is **Partial**: `MOV-WO-010` closed product scopes/grants, immediate revocation, metadata-document-first client identity and Queue transitions in source, but no deployment, no provider metadata-document enablement, and no named AI product lifecycle is proved |
 | Granular chosen-AI grants and external-action handoffs | An `aiGrants` record binds one OAuth client to selected moves, five separate product scopes, an approval, a frozen consent snapshot, an expiry, last use and revocation, re-read from the database on every discovery and every tool call. `aiGrantActivities` keeps an owner-readable use-and-refusal trail. Tested for scope separation, move separation, cross-client isolation, expiry and immediate revocation. No external-action contract binds selected data/intent to an attributable result/failure/return | **Current/verified repository contract for Moving-side grants; Later for deployment proof and for external-action handoffs.** Revocation is immediate in source and untested in production. `MOV-0036` preserves external-action handoffs outside `MOV-WO-010`. Do not claim any particular AI can connect |
@@ -3104,7 +3104,7 @@ Evidence-led capability updates may change without redefining the philosophy.
   `dpl_AxReSqDrxvy6vMoL13Q5PYumxmPz`, public OAuth/resource and door-boundary
   proof, signed-out privacy, and an official SDK anonymous-client challenge.
   Named-client consent/refresh/private-media proof remains Partial / Unknown.
-- **1.6.0 · 2026-08-12** — reconciled the released four-state Queue and the
+- **1.6.0 · 2026-08-12** — reconciled the released three-state Queue with an input flag and the
   protected-release candidate for Moving's first stateless OAuth MCP: eight
   bounded workflow tools, server-derived identity, replay-safe complete-result
   saves, web-visible planning records, `/ai.txt`, distinct compatibility/API-key
@@ -3208,6 +3208,12 @@ document about product identity or language, this document governs identity;
 when they contain newer capability evidence, reverify the claim and update this
 document's dated ledger. Historical and machine-facing names must remain intact
 until their own compatibility and cutover plans authorize change.
+
+## AWL-0016 Queue contract (approved 2026-11-09)
+
+Requests made through your AI are ordinary Queue items, marked “added by your AI”. Your AI’s own work ideas are “AI suggestions”: hidden by default in the Queue, counted, and waiting for you to accept, edit first or dismiss. Needs your input is a flag on Waiting on AI, AI working or Answered; answering clears the flag without moving the item. Draft edits to Moving records stay on those records as AI proposals. Only you can accept or dismiss; your AI may withdraw its own suggestion before you act. You can turn off Propose suggestions without blocking requested work.
+
+Existing Needs You rows read as Waiting on AI with the input flag; no historical data rewrite. Personal suggestions stay private even from delegated runners and household managers until accepted. Record-level inventory/photo/planning/Layout drafts retain their review history and are not migrated to Queue work.
     </script>
     <script>
       (() => {

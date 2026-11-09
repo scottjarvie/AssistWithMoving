@@ -1,3 +1,5 @@
+import { captureNeedsInput, ingestionStatusToQueueState } from "./lib/queue";
+import { queueIsWork, queueNeedsInput, effectiveQueueState, queueWorkFilter } from "./lib/queue";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 import { effectiveScopes } from "./lib/aiGrants";
 import { ConvexError, v } from "convex/values";
@@ -385,56 +387,122 @@ export const getMoveBrief = internalQuery({
       "inventory:read",
       "moving.context.read",
     );
-    const [items, boxes, spaces, photos, planningRecords, queueNeedsYou, queueWorking, queueWaiting] =
-      await Promise.all([
-        ctx.db
-          .query("items")
-          .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
-          .order("desc")
-          .take(MAX_BRIEF_ROWS + 1),
-        ctx.db
-          .query("boxes")
-          .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
-          .order("desc")
-          .take(MAX_BRIEF_ROWS + 1),
-        ctx.db
-          .query("moveSpaces")
-          .withIndex("by_move_status", (q) =>
-            q.eq("moveId", move._id).eq("status", "active"),
-          )
-          .take(MAX_BRIEF_ROWS + 1),
-        ctx.db
-          .query("itemPhotos")
-          .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
-          .order("desc")
-          .take(MAX_BRIEF_ROWS + 1),
-        ctx.db
-          .query("movePlanningRecords")
-          .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
-          .order("desc")
-          .take(20),
-        ctx.db
-          .query("queueItems")
-          .withIndex("by_move_owner_state_updated", (q) =>
-            q.eq("moveId", move._id).eq("ownerUserId", policy.user._id).eq("state", "needsYou"),
-          )
-          .order("desc")
-          .take(10),
-        ctx.db
-          .query("queueItems")
-          .withIndex("by_move_owner_state_updated", (q) =>
-            q.eq("moveId", move._id).eq("ownerUserId", policy.user._id).eq("state", "working"),
-          )
-          .order("desc")
-          .take(10),
-        ctx.db
-          .query("queueItems")
-          .withIndex("by_move_owner_state_updated", (q) =>
-            q.eq("moveId", move._id).eq("ownerUserId", policy.user._id).eq("state", "waitingForAi"),
-          )
-          .order("desc")
-          .take(10),
-      ]);
+    const [
+      items,
+      boxes,
+      spaces,
+      photos,
+      planningRecords,
+      queueNeedsYou,
+      queueWorking,
+      queueWaiting,
+      queueFlagged,
+      captureFlags,
+    ] = await Promise.all([
+      ctx.db
+        .query("items")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+        .order("desc")
+        .take(MAX_BRIEF_ROWS + 1),
+      ctx.db
+        .query("boxes")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+        .order("desc")
+        .take(MAX_BRIEF_ROWS + 1),
+      ctx.db
+        .query("moveSpaces")
+        .withIndex("by_move_status", (q) =>
+          q.eq("moveId", move._id).eq("status", "active"),
+        )
+        .take(MAX_BRIEF_ROWS + 1),
+      ctx.db
+        .query("itemPhotos")
+        .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
+        .order("desc")
+        .take(MAX_BRIEF_ROWS + 1),
+      ctx.db
+        .query("movePlanningRecords")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+        .order("desc")
+        .take(20),
+      ctx.db
+        .query("queueItems")
+        .withIndex("by_move_owner_state_updated", (q) =>
+          q
+            .eq("moveId", move._id)
+            .eq("ownerUserId", policy.user._id)
+            .eq("state", "needsYou"),
+        )
+        .order("desc")
+        .filter(queueWorkFilter)
+        .take(10),
+      ctx.db
+        .query("queueItems")
+        .withIndex("by_move_owner_state_updated", (q) =>
+          q
+            .eq("moveId", move._id)
+            .eq("ownerUserId", policy.user._id)
+            .eq("state", "working"),
+        )
+        .order("desc")
+        .filter(queueWorkFilter)
+        .take(10),
+      ctx.db
+        .query("queueItems")
+        .withIndex("by_move_owner_state_updated", (q) =>
+          q
+            .eq("moveId", move._id)
+            .eq("ownerUserId", policy.user._id)
+            .eq("state", "waitingForAi"),
+        )
+        .order("desc")
+        .filter(queueWorkFilter)
+        .take(10),
+      ctx.db
+        .query("queueItems")
+        .withIndex("by_move_owner_input", (q) =>
+          q
+            .eq("moveId", move._id)
+            .eq("ownerUserId", policy.user._id)
+            .eq("needsInput", true),
+        )
+        .filter(queueWorkFilter)
+        .order("desc")
+        .take(11),
+      readCaptureInputBrief(ctx, move._id, policy.user._id),
+    ]);
+    const flaggedWork = [
+      ...new Map(
+        [...queueFlagged, ...queueNeedsYou]
+          .filter(queueIsWork)
+          .filter(queueNeedsInput)
+          .map((row) => [row._id, row]),
+      ).values(),
+    ];
+    const inputSummaries = [
+      ...flaggedWork.map(shapeQueueSummary),
+      ...captureFlags.map((entry) => {
+        const stored = ingestionStatusToQueueState(
+          entry.status,
+          entry.claimExpiresAt,
+          Date.now(),
+        );
+        return {
+          source: "capture" as const,
+          entryId: entry._id,
+          state:
+            stored === "needsYou"
+              ? entry.status === "processed"
+                ? "done"
+                : "waitingForAi"
+              : stored,
+          needsInput: true,
+          directive: entry.instructions ?? "Review this capture",
+          requiredAction: entry.agentQuestion ?? "Review the captured result.",
+          updatedAt: entry.updatedAt,
+        };
+      }),
+    ];
     const liveItems = items.filter((item) => item.deletedAt === undefined);
     const liveBoxes = boxes.filter((box) => box.archivedAt === undefined);
     const livePhotos = photos.filter((photo) => photo.archivedAt === undefined);
@@ -486,14 +554,24 @@ export const getMoveBrief = internalQuery({
         .filter((record) => record.archivedAt === undefined)
         .map(shapePlanningRecord),
       queue: {
-        note:
-          "These are person-facing Queue summaries only. This stateless OAuth surface does not claim or complete canonical Queue work until Moving has a distinct chosen-AI grant.",
-        needsYou: queueNeedsYou.map(shapeQueueSummary),
-        working: queueWorking.map(shapeQueueSummary),
-        waitingForAi: queueWaiting.map(shapeQueueSummary),
+        note: "These are person-facing Queue summaries only. This stateless OAuth surface does not claim or complete canonical Queue work until Moving has a distinct chosen-AI grant.",
+        needsInput: inputSummaries.slice(0, 20),
+        needsInputTruncated:
+          queueFlagged.length > 10 ||
+          captureFlags.length > 10 ||
+          inputSummaries.length > 20,
+        working: [...queueNeedsYou, ...queueWorking, ...queueWaiting]
+          .filter(queueIsWork)
+          .filter((row) => effectiveQueueState(row, Date.now()) === "working")
+          .map(shapeQueueSummary),
+        waitingForAi: [...queueNeedsYou, ...queueWorking, ...queueWaiting]
+          .filter(queueIsWork)
+          .filter(
+            (row) => effectiveQueueState(row, Date.now()) === "waitingForAi",
+          )
+          .map(shapeQueueSummary),
       },
-      next:
-        "Use search_move_records to avoid duplicates, get_move_records for full context, get_evidence_media for private photos, save_complete_result for normal finished work, and granular save tools for corrections.",
+      next: "Use search_move_records to avoid duplicates, get_move_records for full context, get_evidence_media for private photos, save_complete_result for normal finished work, and granular save tools for corrections.",
     };
   },
 });
@@ -520,7 +598,8 @@ export const resolveMoveScope = internalQuery({
 function shapeQueueSummary(row: Doc<"queueItems">) {
   return {
     queueItemId: row._id,
-    state: row.state,
+    needsInput: queueNeedsInput(row),
+    state: effectiveQueueState(row,Date.now()),
     directive: row.directive,
     summary: row.summary ?? null,
     requiredAction: row.requiredAction ?? null,
@@ -686,8 +765,9 @@ export const searchMoveRecords = internalQuery({
           q.eq("moveId", args.moveId).eq("ownerUserId", policy.user._id),
         )
         .order("desc")
-        .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+        .filter(queueWorkFilter).take(MAX_SEARCH_CANDIDATES_PER_KIND);
       for (const row of rows) {
+        if (!queueIsWork(row)) continue;
         const haystack = [row.directive, row.summary, row.resultSummary, row.requiredAction]
           .filter(Boolean)
           .join(" ")
@@ -842,6 +922,8 @@ export const getMoveRecords = internalQuery({
         const queue = row as Doc<"queueItems">;
         if (queue.ownerUserId !== policy.user._id) {
           results.push({ ...reference, error: { code: "FORBIDDEN", message: "Queue item is not in this person's Queue." } });
+        } else if (!queueIsWork(queue)) {
+          results.push({...reference,error:{code:"NOT_ACTIONABLE",message:"Unaccepted or archived suggestions are not work. Read them through list_queue_suggestions."}});
         } else {
           results.push({ kind: "queue", ...shapeQueueSummary(queue), resultSummary: queue.resultSummary ?? null, resultRefs: queue.resultRefs ?? [] });
         }
@@ -1732,3 +1814,69 @@ export const cleanupExpiredOperations = aiMutation({
     return { deleted: rows.length, hasMore: rows.length === limit };
   },
 });
+
+/** Bounded brief summaries; both modern owner and legacy creator ranges stay personal. */
+async function readCaptureInputBrief(
+  ctx: import("./_generated/server").QueryCtx,
+  moveId: Id<"moves">,
+  userId: Id<"users">,
+) {
+  const rows = await Promise.all([
+    ctx.db
+      .query("ingestionQueueEntries")
+      .withIndex("by_move_owner_input", (q) =>
+        q.eq("moveId", moveId).eq("ownerUserId", userId).eq("needsInput", true),
+      )
+      .filter((q) =>
+        q.and(
+          q.neq(q.field("status"), "resolved"),
+          q.neq(q.field("status"), "discarded"),
+        ),
+      )
+      .take(11),
+    ctx.db
+      .query("ingestionQueueEntries")
+      .withIndex("by_move_creator_owner_input", (q) =>
+        q
+          .eq("moveId", moveId)
+          .eq("createdByUserId", userId)
+          .eq("ownerUserId", undefined)
+          .eq("needsInput", true),
+      )
+      .filter((q) =>
+        q.and(
+          q.neq(q.field("status"), "resolved"),
+          q.neq(q.field("status"), "discarded"),
+        ),
+      )
+      .take(11),
+    ...(["needsInput", "processed"] as const).flatMap((status) => [
+      ctx.db
+        .query("ingestionQueueEntries")
+        .withIndex("by_move_owner_status", (q) =>
+          q.eq("moveId", moveId).eq("ownerUserId", userId).eq("status", status),
+        )
+        .filter((q) => q.eq(q.field("needsInput"), undefined))
+        .take(11),
+      ctx.db
+        .query("ingestionQueueEntries")
+        .withIndex("by_move_creator_owner_status", (q) =>
+          q
+            .eq("moveId", moveId)
+            .eq("createdByUserId", userId)
+            .eq("ownerUserId", undefined)
+            .eq("status", status),
+        )
+        .filter((q) => q.eq(q.field("needsInput"), undefined))
+        .take(11),
+    ]),
+  ]);
+  return [
+    ...new Map(
+      rows
+        .flat()
+        .filter(captureNeedsInput)
+        .map((row) => [row._id, row]),
+    ).values(),
+  ].slice(0, 11);
+}

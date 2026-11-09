@@ -22,10 +22,10 @@ export const queueStateValidator = v.union(
 );
 
 export const queueStateLabels: Record<QueueState, string> = {
-  needsYou: "Needs You",
-  working: "Working",
-  waitingForAi: "Waiting for your AI",
-  done: "Done",
+  needsYou: "Needs your input",
+  working: "AI working",
+  waitingForAi: "Waiting on AI",
+  done: "Answered",
 };
 
 export const queuePriorities = ["normal", "urgent"] as const;
@@ -96,6 +96,9 @@ export const queueWaitingReasonValidator = v.union(
 
 export const queueActivityTypes = [
   "created",
+  "suggestionReviewed",
+  "archived",
+  "restored",
   "claimed",
   "released",
   "inputRequested",
@@ -110,6 +113,9 @@ export const queueActivityTypes = [
 export type QueueActivityType = (typeof queueActivityTypes)[number];
 export const queueActivityTypeValidator = v.union(
   v.literal("created"),
+  v.literal("suggestionReviewed"),
+  v.literal("archived"),
+  v.literal("restored"),
   v.literal("claimed"),
   v.literal("released"),
   v.literal("inputRequested"),
@@ -158,18 +164,26 @@ export function effectiveQueueState(
   item: { state: QueueState; claimExpiresAt?: number },
   now: number,
 ): QueueState {
+  if (item.state === "needsYou") return "waitingForAi"; // Legacy requests had released their claim.
   return queueClaimIsExpired(item, now) ? "waitingForAi" : item.state;
 }
 
 export function queueItemMatchesEffectiveState(
-  item: { state: QueueState; claimExpiresAt?: number },
+  item: QueueVisibility,
   requestedState: QueueState | undefined,
   now: number,
 ): boolean {
-  return requestedState === undefined || effectiveQueueState(item, now) === requestedState;
+  if (!queueIsWork(item)) return false;
+  if (requestedState === "needsYou") return queueNeedsInput(item);
+  return (
+    requestedState === undefined ||
+    effectiveQueueState(item, now) === requestedState
+  );
 }
 
 export type QueueStateInvariantInput = {
+  needsInput?: boolean;
+  waitingReason?: QueueWaitingReason;
   state: QueueState;
   requiredAction?: string;
   nextStep?: string;
@@ -187,8 +201,18 @@ export function queueStateInvariantError(
   if (input.state === "needsYou" && !input.requiredAction?.trim()) {
     return "Needs You requires the exact human decision or action.";
   }
+  if (input.needsInput && !input.requiredAction?.trim())
+    return "Needs your input requires the exact question.";
   if (input.state === "working") {
-    if (!input.nextStep?.trim()) return "Working requires the current next step.";
+    if (
+      input.waitingReason === "ready" &&
+      !input.claimExpiresAt &&
+      !input.claimedByUserId &&
+      !input.claimedByApiKeyId
+    )
+      return null;
+    if (!input.nextStep?.trim())
+      return "Working requires the current next step.";
     if (!input.claimExpiresAt) return "Working requires a bounded claim lease.";
     if (!input.claimedByUserId && !input.claimedByApiKeyId) {
       return "Working requires an attributable claimant.";
@@ -205,7 +229,7 @@ export function queueStateInvariantError(
     if (
       input.terminalReason === "completed" &&
       !input.resultSummary?.trim() &&
-      !(input.resultRefs?.length)
+      !input.resultRefs?.length
     ) {
       return "Completed work requires a readable result or result reference.";
     }
@@ -238,7 +262,13 @@ export function normalizeQueueText(
 
 /** Honest adapter for the existing capture pipeline; it does not rename storage. */
 export function ingestionStatusToQueueState(
-  status: "queued" | "claimed" | "processed" | "needsInput" | "resolved" | "discarded",
+  status:
+    | "queued"
+    | "claimed"
+    | "processed"
+    | "needsInput"
+    | "resolved"
+    | "discarded",
   claimExpiresAt: number | undefined,
   now: number,
 ): QueueState {
@@ -258,7 +288,8 @@ export function queueFailureTransition(input: {
   retryable: boolean;
 }) {
   const nextAttemptCount = input.attemptCount + 1;
-  const retryAvailable = input.retryable && nextAttemptCount < input.maxAttempts;
+  const retryAvailable =
+    input.retryable && nextAttemptCount < input.maxAttempts;
   return {
     nextAttemptCount,
     state: retryAvailable ? ("waitingForAi" as const) : ("needsYou" as const),
@@ -274,4 +305,71 @@ export function assertExpectedQueueVersion(actual: number, expected?: number) {
       `Queue item changed since it was read (expected version ${expected}, current version ${actual}). Refresh before retrying.`,
     );
   }
+}
+
+/** Persisted needsYou rows remain readable without rewriting historical data. */
+export type QueueVisibility = {
+  state: QueueState;
+  claimExpiresAt?: number;
+  addedBy?: string;
+  suggestionStatus?: string;
+  archivedAt?: number;
+  needsInput?: boolean;
+  requiredAction?: string;
+};
+export function queueNeedsInput(item: QueueVisibility) {
+  return item.needsInput ?? item.state === "needsYou";
+}
+export function queueIsWork(item: QueueVisibility) {
+  return (
+    item.archivedAt === undefined &&
+    !(item.addedBy === "ai_suggestion" && item.suggestionStatus !== "accepted")
+  );
+}
+export function queueIsActionable(item: QueueVisibility) {
+  return queueIsWork(item) && !queueNeedsInput(item);
+}
+
+/** Apply before pagination or reach accounting, not after a page has filled. */
+export function queueWorkFilter(
+  q: import("convex/server").FilterBuilder<
+    import("../_generated/dataModel").DataModel["queueItems"]
+  >,
+) {
+  return q.and(
+    q.eq(q.field("archivedAt"), undefined),
+    q.or(
+      q.neq(q.field("addedBy"), "ai_suggestion"),
+      q.eq(q.field("suggestionStatus"), "accepted"),
+    ),
+  );
+}
+export function captureNeedsInput(entry: {
+  needsInput?: boolean;
+  status: string;
+}) {
+  return (
+    entry.needsInput ??
+    (entry.status === "needsInput" || entry.status === "processed")
+  );
+}
+
+export function captureReachFilter(
+  q: import("convex/server").FilterBuilder<
+    import("../_generated/dataModel").DataModel["ingestionQueueEntries"]
+  >,
+  userId: import("../_generated/dataModel").Id<"users">,
+  delegates: import("../_generated/dataModel").Id<"users">[],
+) {
+  return q.or(
+    ...[userId, ...delegates].map((id) =>
+      q.or(
+        q.eq(q.field("ownerUserId"), id),
+        q.and(
+          q.eq(q.field("ownerUserId"), undefined),
+          q.eq(q.field("createdByUserId"), id),
+        ),
+      ),
+    ),
+  );
 }
