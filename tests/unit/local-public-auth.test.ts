@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { nativeWebsiteClaims } from "../helpers/website-session";
 import { generateKeyPair, SignJWT } from "jose";
 import { NextRequest } from "next/server";
 import { LOCAL_LIVE_ISSUER, LOCAL_SANDBOX_ISSUER, localSandboxEnabled, localLiveEnabled, localLiveProxy, verifyLocalSession } from "@/lib/localLiveAuth";
@@ -9,8 +10,8 @@ let publicKey: CryptoKey;
 beforeAll(async () => ({ privateKey, publicKey } = await generateKeyPair("RS256")));
 async function token(overrides: Record<string, unknown> = {}, key = privateKey) {
   const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({ sub: "user_synthetic", sid: "sess_synthetic", azp: "https://local.movingmanifest.com", iss: LOCAL_LIVE_ISSUER, iat: now, nbf: now - 1, exp: now + 60, ...overrides })
-    .setProtectedHeader({ alg: "RS256" }).sign(key);
+  return new SignJWT({ ...nativeWebsiteClaims("user_synthetic", LOCAL_LIVE_ISSUER), iat: now, nbf: now - 1, exp: now + 60, ...overrides })
+    .setProtectedHeader({ alg: "RS256", typ: "JWT" }).sign(key);
 }
 const keys = async () => publicKey;
 
@@ -25,6 +26,7 @@ describe("local production session boundary", () => {
     expect(await verifyLocalSession(await token({}, other.privateKey), keys)).toBeNull();
     for (const claims of [
       { exp: 1 }, { nbf: Math.floor(Date.now() / 1000) + 120 },
+      { client_id: "oauth-client" }, { scope: "" }, { scp: [] },
       { iss: "https://another-site.clerk.accounts.dev" }, { azp: "https://attacker.example" },
       { sts: "pending" }, { sub: "" }, { sid: "" }, { exp: undefined },
     ]) expect(await verifyLocalSession(await token(claims), keys)).toBeNull();
@@ -71,4 +73,45 @@ it("moves old Sandbox GET addresses to an isolated host without replaying writes
   const write=new NextRequest("http://localhost:3827/queue",{method:"POST",headers:{host:"localhost:3827"}});
   expect((await localLiveProxy(write)).status).toBe(421);
  } finally {vi.unstubAllEnvs();}
+});
+
+it("accepts the exact native Convex website claim shape without azp in both local modes", async () => {
+  const claims = nativeWebsiteClaims();
+  expect(Object.keys(claims).sort()).toEqual([
+    "aud",
+    "exp",
+    "fva",
+    "iat",
+    "iss",
+    "nbf",
+    "sid",
+    "sts",
+    "sub",
+    "v",
+  ]);
+  for (const mode of ["live", "sandbox"] as const) {
+    const iss = mode === "sandbox" ? LOCAL_SANDBOX_ISSUER : LOCAL_LIVE_ISSUER;
+    expect(
+      await verifyLocalSession(await token({ iss }), keys, mode),
+    ).not.toBeNull();
+    for (const overrides of [
+      { client_id: "oauth-client" },
+      { scope: "" },
+      { scp: [] },
+      { azp: "https://foreign.example" },
+    ])
+      expect(
+        await verifyLocalSession(
+          await token({ iss, ...overrides }),
+          keys,
+          mode,
+        ),
+      ).toBeNull();
+  }
+  const accessJwt = await new SignJWT(
+    nativeWebsiteClaims("user_synthetic", LOCAL_SANDBOX_ISSUER),
+  )
+    .setProtectedHeader({ alg: "RS256", typ: "at+jwt" })
+    .sign(privateKey);
+  expect(await verifyLocalSession(accessJwt, keys, "sandbox")).toBeNull();
 });

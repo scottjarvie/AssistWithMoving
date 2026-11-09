@@ -1,3 +1,4 @@
+import { nativeWebsiteIdentity } from "./website-session";
 import { convexTest } from "convex-test";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { api, internal } from "../../convex/_generated/api";
@@ -16,7 +17,7 @@ export async function accessFixture(subject = "awl-owner") {
     const moveId = await ctx.db.insert("moves", { householdId, title: "Private move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
     return { userId, householdId, membershipId, moveId };
   });
-  const person = t.withIdentity({ subject, sid: "sess_awl_owner" });
+  const person = t.withIdentity(nativeWebsiteIdentity(subject, undefined, "sess_awl_owner"));
   const root = () => t.run(ctx => ctx.db.query("aiAccessOwners").withIndex("by_owner", q => q.eq("ownerUserId", ids.userId)).unique());
   const connect = async (clientId = "ai-one", clientName?: string) => {
     await t.mutation(internal.aiGrants.touchLegacyConnection, { subject, clientId, clientName });

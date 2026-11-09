@@ -14,6 +14,10 @@ import {
 import { queueItemMatchesEffectiveState } from "../../convex/lib/queue";
 import { createMovingServer } from "../../convex/httpRoutes/mcp";
 import { hashApiKey, apiKeyPrefix } from "../../convex/lib/apiKeys";
+import {
+  nativeWebsiteClaims,
+  nativeWebsiteIdentity,
+} from "../helpers/website-session";
 import { movingScopes } from "../../convex/lib/aiGrants";
 const modules = import.meta.glob("../../convex/**/*.ts");
 const subject = "SYNTHETIC-AWL-0016";
@@ -105,7 +109,7 @@ async function fixture() {
     ai,
     principal,
     add,
-    person: t.withIdentity({ subject, sid: "sess_synthetic" }),
+    person: t.withIdentity(nativeWebsiteIdentity(subject, issuer)),
   };
 }
 describe("AWL-0016 Queue authority and lifecycle", () => {
@@ -808,10 +812,13 @@ it("keeps suggestions private from another household manager and validates From 
     });
     return userId;
   });
-  const manager = f.t.withIdentity({
-    subject: "SYNTHETIC-other-person",
-    sid: "sess_synthetic_manager",
-  });
+  const manager = f.t.withIdentity(
+    nativeWebsiteIdentity(
+      "SYNTHETIC-other-person",
+      issuer,
+      "sess_synthetic_manager",
+    ),
+  );
   expect(
     (
       await manager.query(api.queue.suggestionView, {
@@ -2021,6 +2028,13 @@ it("lesson 16: website Queue and capture operations require person-session proof
     ],
   ] as const;
   for (const identity of [
+    {
+      ...nativeWebsiteIdentity(subject, issuer),
+      azp: "https://foreign-ai.example.test/client.json",
+    },
+    { ...nativeWebsiteIdentity(subject, issuer), client_id: clientId },
+    { ...nativeWebsiteIdentity(subject, issuer), scope: "openid" },
+    { ...nativeWebsiteIdentity(subject, issuer), scp: ["openid"] },
     { subject },
     { subject, client_id: clientId, tokenType: "oauth" },
     {
@@ -2074,6 +2088,65 @@ it("lesson 16: website Queue and capture operations require person-session proof
         expectedVersion: idea.version,
         action: "accept",
         operationId: "real-person-accept",
+      })
+    ).suggestionStatus,
+  ).toBe("accepted");
+});
+
+it("lesson 17: exact native website claims without azp read and decide, but foreign azp and OAuth markers cannot", async () => {
+  const f = await fixture();
+  const idea = await f.add();
+  expect(Object.keys(nativeWebsiteClaims()).sort()).toEqual([
+    "aud",
+    "exp",
+    "fva",
+    "iat",
+    "iss",
+    "nbf",
+    "sid",
+    "sts",
+    "sub",
+    "v",
+  ]);
+  const base = { householdId: f.householdId, moveId: f.moveId };
+  expect((await f.person.query(api.queue.suggestionView, base)).count).toBe(1);
+  for (const markers of [
+    { client_id: "" },
+    { scope: "" },
+    { scp: [] },
+    { azp: "https://foreign.example/client.json" },
+    { azp: "opaque-oauth" },
+  ]) {
+    const actor = f.t.withIdentity({
+      ...nativeWebsiteIdentity(subject, issuer),
+      ...markers,
+    });
+    await expect(actor.query(api.queue.badges, base)).rejects.toThrow(
+      /only reduce/,
+    );
+    await expect(
+      actor.mutation(api.queue.reviewSuggestion, {
+        ...base,
+        queueItemId: idea.queueItemId,
+        action: "accept",
+        expectedVersion: idea.version,
+        operationId: "native-accept",
+      }),
+    ).rejects.toThrow(/only reduce/);
+  }
+  const sameSite = f.t.withIdentity({
+    ...nativeWebsiteIdentity(subject, issuer),
+    azp: "https://movingmanifest.com",
+  });
+  expect((await sameSite.query(api.queue.suggestionView, base)).count).toBe(1);
+  expect(
+    (
+      await f.person.mutation(api.queue.reviewSuggestion, {
+        ...base,
+        queueItemId: idea.queueItemId,
+        action: "accept",
+        expectedVersion: idea.version,
+        operationId: "native-accept",
       })
     ).suggestionStatus,
   ).toBe("accepted");

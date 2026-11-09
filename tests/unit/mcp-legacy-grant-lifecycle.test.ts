@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { nativeWebsiteIdentity } from "../helpers/website-session";
 /** Real pre-deploy rows, not new grants patched after bootstrap. The approved
  * one-time import replaces the old capped-history/independent-alias tests. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -108,9 +109,9 @@ describe("one-time complete indexed legacy bootstrap", () => {
 });
 
 describe("owner controls and privacy", () => {
-  it.each([{ client_id: "ai-one" }, { clientId: "ai-one" }, { azp: "opaque-ai" }, { scope: "openid" }, { scp: ["openid"] }, { tokenType: "oauth" }, { sid: undefined }, { sid: "" }, { sid: "sess_" }, { sts: "pending" }])("rejects non-person identity %j on controls and private history", async claims => {
+  it.each([{ client_id: "ai-one" }, { clientId: "ai-one" }, { azp: "opaque-ai" }, { azp: "https://foreign-ai.example.test/client.json" }, { scope: "openid" }, { scp: ["openid"] }, { tokenType: "oauth" }, { sid: undefined }, { sid: "" }, { sid: "sess_" }, { sts: "pending" }])("rejects non-person identity %j on controls and private history", async claims => {
     const f = await accessFixture(); await f.connect(); const id = (await f.connection())!._id;
-    const ai = f.t.withIdentity({ subject: "awl-owner", ...claims });
+    const ai = f.t.withIdentity({ ...nativeWebsiteIdentity("awl-owner"), ...claims });
     await expect(ai.query(api.connectionSettings.list, {})).rejects.toThrow(/only reduce/);
     await expect(ai.query(api.connectionSettings.history, { connectionId: id })).rejects.toThrow(/only reduce/);
     await expect(ai.mutation(api.connectionSettings.change, { connectionId: id, expectedVersion: 1, opId: "restore", action: "restore" })).rejects.toThrow(/only reduce/);
@@ -119,7 +120,7 @@ describe("owner controls and privacy", () => {
   it("keeps history private from other household administrators", async () => {
     const f = await accessFixture(); await f.connect();
     await f.t.run(async ctx => { const now = Date.now(); const id = await ctx.db.insert("users", { clerkUserId: "other", name: "Admin", appRole: "admin", status: "active", createdAt: now, updatedAt: now, lastSeenAt: now }); await ctx.db.insert("householdMemberships", { householdId: f.householdId, userId: id, role: "owner", status: "active", createdByUserId: f.userId, createdAt: now, updatedAt: now }); });
-    const other = f.t.withIdentity({ subject: "other", sid: "sess_other" });
+    const other = f.t.withIdentity(nativeWebsiteIdentity("other", undefined, "sess_other"));
     expect((await other.query(api.connectionSettings.list, {})).connections).toEqual([]);
     await expect(other.query(api.connectionSettings.history, { connectionId: (await f.connection())!._id })).rejects.toThrow(/unavailable/);
     await expect(other.mutation(api.connectionSettings.change, { connectionId: (await f.connection())!._id, opId: "foreign", expectedVersion: 1, action: "restore" })).rejects.toThrow(/unavailable/);
