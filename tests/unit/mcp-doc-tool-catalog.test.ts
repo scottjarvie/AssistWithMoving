@@ -47,7 +47,7 @@ const NUMBER_WORDS = [
 ] as const;
 
 function read(path: string) {
-  return readFileSync(resolve(process.cwd(), path), "utf8");
+  return readFileSync(resolve(process.cwd(), path), "utf8").replace(/\r\n/g, "\n");
 }
 
 /**
