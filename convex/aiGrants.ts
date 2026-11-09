@@ -9,22 +9,24 @@ import { describeGrantBoundary, movingScopes, MOVING_TOOL_SCOPES } from "./lib/a
 import { oauthClientIdFromClaims } from "./lib/mcpClientIdentity";
 import { LEGACY_GATEWAY_TOOL_SCOPES, UNIDENTIFIED_LEGACY_CLIENT } from "./lib/mcpLegacyGrantGate";
 import { reductionArgs, SETTINGS_REFUSAL, type Reduction } from "./lib/connectionReduction";
-import { ensureAccess, readAccess, readConnection, connectOAuth, oauthIdentity, oauthScopes, accessState, narrowConnection, changeByPerson, requireSubject, snapshot, SETTINGS_URL, type Access, type Connection } from "./lib/carriedAccess";
+import { connectionAccess, ensureAccess, readAccess, readConnection, connectOAuth, oauthIdentity, oauthScopes, accessState, narrowConnection, changeByPerson, requireSubject, snapshot, SETTINGS_URL, type Access, type Connection } from "./lib/carriedAccess";
 import { safeConnectionText } from "./lib/connectionHistory";
 export { listSourceHistory, listReceipts, listHouseholdChoices, listRecoveryHouseholds, listMoveChoices } from "./connectionChoices";
 
 type Ctx = QueryCtx | MutationCtx;
 export async function projectedGrant(ctx: Ctx, connection: Connection, knownAccess?: Access | null): Promise<Doc<"aiGrants"> | null> {
   if (!connection.grantId) return null;
-  const [grant, access] = await Promise.all([ctx.db.get(connection.grantId), knownAccess === undefined ? ctx.db.get(connection.accessOwnerId) : knownAccess]);
-  if (!grant || !access) return null;
+  const [grant, root] = await Promise.all([ctx.db.get(connection.grantId), knownAccess === undefined ? ctx.db.get(connection.accessOwnerId) : knownAccess]);
+  if (!grant || !root) return null;
+  const access = connectionAccess(root, connection);
   return { ...grant, scopes: oauthScopes(access), withheldScopes: movingScopes.filter(scope => access.withheldScopes.includes(scope)), scopeChoice: access.withheldScopes.some(scope => movingScopes.includes(scope as typeof movingScopes[number])) ? "chosen" : "full", status: access.revoked ? "revoked" : "active", pausedAt: access.pausedAt, expiresAt: access.endsAt, expiryChoice: access.endsAt === undefined ? "none" : "chosen", moveScope: access.moveIds === undefined ? "allMoves" : "selectedMoves", moveIds: access.moveIds, version: access.revision, narrowedBy: access.changedBy === "system" ? undefined : access.changedBy, narrowedAt: access.changedAt };
 }
 /** Every tool gate uses two indexed reads, never approval/activity history. */
 export async function activeGrantsForUser(ctx: Ctx, ownerUserId: Id<"users">, clientId: string | undefined, now: number) {
   if (!clientId) return [];
   const connection = await readConnection(ctx, ownerUserId, oauthIdentity(clientId));
-  const access = await readAccess(ctx, ownerUserId);
+  const root = await readAccess(ctx, ownerUserId);
+  const access = root && connection ? connectionAccess(root, connection) : root;
   if (!connection || accessState(access, connection, now) !== "active") return [];
   const grant = await projectedGrant(ctx, connection, access);
   return grant ? [grant] : [];
@@ -43,7 +45,8 @@ export const touchLegacyConnection = internalMutation({ args: { subject: v.strin
 export const grantsForPrincipal = internalQuery({ args: { subject: v.string(), clientId: v.optional(v.string()) }, handler: async (ctx, args) => {
   const user = await ctx.db.query("users").withIndex("by_clerk_user_id", q => q.eq("clerkUserId", args.subject)).unique();
   if (!user || user.status !== "active" || !args.clientId) return { grants: [], scopes: [], connectionState: { status: "noProfile", changedAt: null, expiresAt: null } };
-  const [access, connection] = await Promise.all([readAccess(ctx, user._id), readConnection(ctx, user._id, oauthIdentity(args.clientId))]);
+  const [root, connection] = await Promise.all([readAccess(ctx, user._id), readConnection(ctx, user._id, oauthIdentity(args.clientId))]);
+  const access = root && connection ? connectionAccess(root, connection) : root;
   const state = accessState(access, connection);
   const projected = state === "active" && connection ? await projectedGrant(ctx, connection, access) : null;
   const grants = projected ? [projected] : [];
@@ -51,7 +54,8 @@ export const grantsForPrincipal = internalQuery({ args: { subject: v.string(), c
 } });
 async function describe(ctx: Ctx, subject: string, clientId: string, legacy = false) {
   const user = await requireSubject(ctx, subject);
-  const [access, connection] = await Promise.all([readAccess(ctx, user._id), readConnection(ctx, user._id, oauthIdentity(clientId))]);
+  const [root, connection] = await Promise.all([readAccess(ctx, user._id), readConnection(ctx, user._id, oauthIdentity(clientId))]);
+  const access = root && connection ? connectionAccess(root, connection) : root;
   const status = accessState(access, connection);
   const scopes = access && connection && status === "active" ? oauthScopes(access) : [];
   const catalogue = Object.entries(legacy ? LEGACY_GATEWAY_TOOL_SCOPES : MOVING_TOOL_SCOPES).filter(([name]) => !["describe_connection", "reduce_connection"].includes(name));
@@ -106,11 +110,12 @@ export const describeBoundary = query({ args: {}, handler: () => describeGrantBo
 export const listMine = query({ args: { cursor: v.optional(v.string()) }, handler: async (ctx, args) => {
   await requirePersonConnectionManagement(ctx); const user = await requireCurrentUser(ctx);
   const access = await readAccess(ctx, user._id);
-  const page = await ctx.db.query("aiAccessConnections").withIndex("by_owner_generation", q => q.eq("ownerUserId", user._id).eq("generation", access?.currentGeneration ?? 0).eq("isCurrent", true)).paginate({ numItems: 25, cursor: args.cursor ?? null });
+  const page = await ctx.db.query("aiAccessConnections").withIndex("by_owner_current", q => q.eq("ownerUserId", user._id).eq("isCurrent", true)).paginate({ numItems: 25, cursor: args.cursor ?? null });
   const grants = [];
   for (const connection of page.page) if (connection.kind === "oauth") {
     const grant = await projectedGrant(ctx, connection, access);
-    if (grant) grants.push({ ...grant, grantId: grant._id, status: accessState(access, connection), expiresAt: access?.endsAt ?? null, effectiveAuthority: access ? { ...snapshot(access, connection), moveScope: access.moveIds === undefined ? "allMoves" : "selectedMoves", moveIds: access.moveIds ?? [] } : null });
+    const own = access ? connectionAccess(access, connection) : null;
+    if (grant) grants.push({ ...grant, grantId: grant._id, status: accessState(own, connection), expiresAt: own?.endsAt ?? null, effectiveAuthority: own ? { ...snapshot(own, connection), moveScope: own.moveIds === undefined ? "allMoves" : "selectedMoves", moveIds: own.moveIds ?? [] } : null });
   }
   return { ...describeGrantBoundary(), grants, nextCursor: page.isDone ? null : page.continueCursor, historyFingerprint: String(access?.revision ?? 0), recoveryFingerprint: String(access?.revision ?? 0), historyAtCapacity: false, historyOverflow: false, activeCount: grants.filter(row => row.status === "active").length, maxActive: null };
 } });
@@ -127,7 +132,7 @@ export const approve = mutation({ args: { householdId: v.id("households"), label
   if (!args.reconnectGrantId) throw new ConvexError("Your AI receives full access when it connects. Use the existing connection's controls to restore access.");
   const connection = await ctx.db.query("aiAccessConnections").withIndex("by_grant", q => q.eq("grantId", args.reconnectGrantId)).unique();
   if (!connection || connection.ownerUserId !== user._id || String(access.revision) !== (args.expectedRecoveryFingerprint ?? args.expectedHistoryFingerprint)) throw new ConvexError("This connection changed. Reload Settings.");
-  await changeByPerson(ctx, connection, { action: "restore", opId: `legacy-restore:${connection._id}:${access.revision}`, expectedVersion: access.revision });
+  await changeByPerson(ctx, connection, { action: "restore", opId: `legacy-restore:${connection._id}:${access.revision}`, expectedVersion: connectionAccess(access, connection).revision });
   return { grantId: args.reconnectGrantId };
 } });
 export const revoke = mutation({ args: { grantId: v.id("aiGrants"), expectedVersion: v.number(), expectedRecoveryFingerprint: v.optional(v.string()), reason: v.optional(v.string()) }, handler: async (ctx, args) => {

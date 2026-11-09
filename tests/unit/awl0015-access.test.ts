@@ -42,18 +42,16 @@ describe("AWL-0015 durable owner authority", () => {
     await expect(f.reduce({ opId: "bad-date", expiresAt })).rejects.toThrow(/only reduce/);
     expect((await f.root())!.revision).toBe(1);
   });
-  it("keeps pause through revoke, re-registration and person restore; resume is separate", async () => {
-    const f = await accessFixture(); await f.connect();
-    const end = Date.now() + 60000;
+  it("restores inherited limits without reviving the original paused/revoked client", async () => {
+    const f = await accessFixture(); await f.connect(); const end = Date.now() + 60000;
     await f.reduce({ opId: "pause", action: "pause", expiresAt: end, scopes: ["moving.context.read"] });
-    const paused = (await f.root())!.pausedAt;
     await f.reduce({ opId: "revoke", action: "revoke" });
-    expect(await f.connect("second", "Different name")).toMatchObject({ status: "revoked", pausedAt: paused, expiresAt: end });
+    expect(await f.connect("second")).toMatchObject({ status: "revoked", expiresAt: end });
     await f.change({ opId: "restore", action: "restore" }, "second");
-    expect(await f.connect("second")).toMatchObject({ status: "paused", pausedAt: paused, expiresAt: end, scopes: [] });
-    await f.change({ opId: "resume", action: "resume" }, "second");
-    expect(await f.connect("second")).toMatchObject({ status: "active", scopes: ["moving.context.read"], expiresAt: end });
-    expect(await f.connect()).toMatchObject({ status: "superseded", scopes: [] });
+    expect(await f.connect("second")).toMatchObject({ status: "active", scopes: [...movingScopes], expiresAt: null, pausedAt: null });
+    expect(await f.connect()).toMatchObject({ status: "revoked", expiresAt: end });
+    await f.change({ opId: "restore-original", action: "restore" });
+    expect(await f.connect()).toMatchObject({ status: "paused", expiresAt: end });
   });
   it("restores a revoked connection with its exact chosen date even after it passes", async () => {
     const f = await accessFixture(); await f.connect(); const endsAt = Date.now() + 1000;
@@ -72,12 +70,12 @@ describe("AWL-0015 durable owner authority", () => {
     const f = await accessFixture(); await f.connect(); await f.reduce({ opId: "revoke", action: "revoke" });
     await f.connect("second"); await f.change({ opId: "restore", action: "restore" }, "second");
     expect(await f.connect("third")).toMatchObject({ status: "active", scopes: [...movingScopes] });
-    const releasedRevision = (await f.root())!.revision;
+    const releasedRevision = (await f.connect()).version!;
     await f.reduce({ opId: "later", ...(kind === "narrow" ? { scopes: ["moving.context.read"] } : kind === "expiry" ? { expiresAt: Date.now() + 60000 } : { action: kind }) });
     expect((await f.root())!.entries).toEqual([expect.objectContaining({ sourceRevision: releasedRevision + 1 })]);
     const description = await f.connect("fourth");
-    expect(description.status).toBe(kind === "pause" ? "paused" : kind === "revoke" ? "revoked" : "active");
-    if (kind === "narrow") expect(description.scopes).toEqual(["moving.context.read"]);
+    expect(description.status).toBe("revoked");
+    if (kind === "narrow") expect((await f.root())!.withheldScopes).toContain("moving.work.write");
     if (kind === "expiry") expect(description.expiresAt).toBe(Date.now() + 60000);
   });
   it("same-millisecond release and later restriction order by revision", async () => {
@@ -86,14 +84,13 @@ describe("AWL-0015 durable owner authority", () => {
     await f.reduce({ opId: "new", action: "revoke" });
     expect(await f.connect("third")).toMatchObject({ status: "revoked" });
   });
-  it("all live members share one authority; revoking one stops every stale sibling token", async () => {
+  it("existing connections keep their own grants; only new connections inherit a revoke", async () => {
     const f = await accessFixture(); await f.connect(); await f.connect("second");
-    await f.reduce({ opId: "stop-all", action: "revoke" });
-    for (const id of ["ai-one", "second"]) {
-      expect(await f.t.query(internal.aiGrants.grantsForPrincipal, { subject: "awl-owner", clientId: id })).toMatchObject({ scopes: [], grants: [], connectionState: { status: "revoked" } });
-    }
+    await f.reduce({ opId: "stop-one", action: "revoke" });
+    expect(await f.connect()).toMatchObject({ status: "revoked" });
+    expect(await f.connect("second")).toMatchObject({ status: "active", scopes: [...movingScopes] });
     expect(await f.connect("third")).toMatchObject({ status: "revoked" });
-    expect(await f.connect("second")).toMatchObject({ status: "superseded" });
+    expect(await f.connect("second")).toMatchObject({ status: "active" });
   });
   it("uses only the durable record after bootstrap, even when connecting a new identity", async () => {
     const f = await accessFixture(); await f.connect(); await f.reduce({ opId: "stop", action: "revoke" });
@@ -115,10 +112,10 @@ describe("AWL-0015 durable owner authority", () => {
     do { const page = await f.person.query(api.connectionSettings.list, cursor ? { cursor } : {}); count += page.connections.length; cursor = page.nextCursor ?? undefined; } while (cursor);
     expect(count).toBe(57);
     await f.reduce({ opId: "revoke", action: "revoke" }, "ai-0"); await f.connect("successor");
-    expect((await f.person.query(api.connectionSettings.list, {})).connections).toHaveLength(1);
+    expect((await f.person.query(api.connectionSettings.list, {})).connections).toHaveLength(25);
     let oldCursor: string | undefined, oldCount = 0;
     do { const page = await f.person.query(api.connectionSettings.list, { superseded: true, ...(oldCursor ? { cursor: oldCursor } : {}) }); oldCount += page.connections.length; oldCursor = page.nextCursor ?? undefined; } while (oldCursor);
-    expect(oldCount).toBe(57);
+    expect(oldCount).toBe(0);
   });
   it("a narrowed grant receives future tools except explicitly withheld powers", () => {
     const scopes = movingScopes as unknown as string[]; scopes.push("moving.future.test");
@@ -135,8 +132,8 @@ describe("AWL-0015 durable owner authority", () => {
     const f = await accessFixture(); await f.connect(); await f.reduce({ opId: "read", scopes: ["moving.context.read"] });
     const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "New key" });
     expect(key.scopes).not.toContain("inventory/write");
-    const root = (await f.root())!;
-    expect((await f.request(key.rawKey, "POST", "me/access", { opId: "stop-key", expectedVersion: root.revision, action: "revoke" })).status).toBe(200);
+    const row = (await f.person.query(api.connectionSettings.list, {})).connections.find(row => row.kind === "key")!;
+    expect((await f.request(key.rawKey, "POST", "me/access", { opId: "stop-key", expectedVersion: row.version, action: "revoke" })).status).toBe(200);
     expect(await f.connect("yet-another")).toMatchObject({ status: "revoked" });
   });
   it("full API keys have all current powers and no default end date", async () => {

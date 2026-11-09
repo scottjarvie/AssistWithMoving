@@ -27,7 +27,7 @@ describe("API-key shared authority and rotation", () => {
     expect(stored.expiresAt).toBe(end); expect(JSON.stringify(stored)).not.toContain(rotated.rawKey);
     const old = (await f.t.run(ctx => ctx.db.get(key.apiKeyId)))!; expect(old.credentialRetiredAt).toBe(Date.now());
     const history = await f.person.query(api.connectionSettings.list, { superseded: true });
-    await expect(f.person.mutation(api.connectionSettings.change, { connectionId: history.connections[0].id, expectedVersion: (await f.root())!.revision, action: "restore", opId: "restore-retired" })).rejects.toThrow(/rotated credential stays retired/);
+    await expect(f.person.mutation(api.connectionSettings.change, { connectionId: history.connections[0].id, expectedVersion: history.connections[0].version, action: "restore", opId: "restore-retired" })).rejects.toThrow(/rotated credential stays retired/);
   });
   it("rotation checks the currently loaded revision", async () => {
     const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Key" });
@@ -56,9 +56,9 @@ describe("API-key shared authority and rotation", () => {
     const widen = await f.request(key.rawKey, "POST", "me/access", { expectedVersion: (await f.root())!.revision, opId: "restore", action: "restore" });
     expect(JSON.stringify(widen.body)).toContain("only reduce");
   });
-  it("every API-key door blocks invitations and share links even with the full catalog", async () => {
+  it("every API-key door blocks household invitations even with the full catalog", async () => {
     const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Key" });
-    for (const path of [`households/${f.householdId}/members`, `moves/${f.moveId}/share-links`]) {
+    for (const path of [`households/${f.householdId}/members`]) {
       const response = await f.request(key.rawKey, "POST", path, { email: "new@example.test", permission: "viewer" });
       expect(response.status).toBe(403); expect(JSON.stringify(response.body)).toContain("website-only");
     }

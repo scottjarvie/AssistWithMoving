@@ -7,7 +7,7 @@ import { requireCurrentUser } from "./lib/auth";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import { apiKeyScopes, normalizeApiKeyScopes, generateApiKeySecret, hashApiKey, apiKeyPrefix, apiKeyPreview } from "./lib/apiKeys";
 import { reductionArgs, type Reduction } from "./lib/connectionReduction";
-import { ensureAccess, readAccess, readConnection, connectKey, keyScopes, accessState, narrowConnection, changeByPerson, snapshot } from "./lib/carriedAccess";
+import { connectionAccess, ensureAccess, readAccess, readConnection, connectKey, keyScopes, accessState, narrowConnection, changeByPerson, snapshot } from "./lib/carriedAccess";
 import { connectionChange, safeConnectionText } from "./lib/connectionHistory";
 
 const scopeValidator = v.union(v.literal("moves/read"), v.literal("moves/write"), v.literal("inventory/read"), v.literal("inventory/write"), v.literal("queue/read"), v.literal("queue/write"), v.literal("plans/read"), v.literal("plans/write"), v.literal("photos/write"), v.literal("exports/read"), v.literal("exports/create"), v.literal("members/manage"));
@@ -15,10 +15,10 @@ export const settingsSummary = query({ args: { householdId: v.id("households") }
   await requirePersonConnectionManagement(ctx); const user = await requireCurrentUser(ctx);
   await requireHouseholdPermission(ctx, args.householdId, "api_keys:manage");
   const access = await readAccess(ctx, user._id);
-  if (accessState(access) !== "active") return { activeApiKeyCount: 0, activeApiKeyCountTruncated: false };
-  const rows = await ctx.db.query("aiAccessConnections").withIndex("by_owner_generation", q => q.eq("ownerUserId", user._id).eq("generation", access!.currentGeneration).eq("isCurrent", true)).collect();
+  if (!access?.bootstrapped) return { activeApiKeyCount: 0, activeApiKeyCountTruncated: false };
+  const rows = await ctx.db.query("aiAccessConnections").withIndex("by_owner_current", q => q.eq("ownerUserId", user._id).eq("isCurrent", true)).collect();
   let count = 0;
-  for (const row of rows) if (row.apiKeyId && (await ctx.db.get(row.apiKeyId))?.householdId === args.householdId) count++;
+  for (const row of rows) if (accessState(connectionAccess(access, row), row) === "active" && row.apiKeyId && (await ctx.db.get(row.apiKeyId))?.householdId === args.householdId) count++;
   return { activeApiKeyCount: count, activeApiKeyCountTruncated: false };
 } });
 export const listForHousehold = query({ args: { householdId: v.id("households"), cursor: v.optional(v.string()) }, handler: async (ctx, args) => {
@@ -28,8 +28,9 @@ export const listForHousehold = query({ args: { householdId: v.id("households"),
   const page = await ctx.db.query("apiKeys").withIndex("by_household_created", q => q.eq("householdId", args.householdId)).order("desc").paginate({ numItems: 50, cursor: args.cursor ?? null });
   const keys = await Promise.all(page.page.filter(key => key.createdByUserId === user._id).map(async key => {
     const connection = await readConnection(ctx, user._id, `key:${key._id}`);
-    return { apiKeyId: key._id, householdId: key.householdId, moveId: access?.moveIds?.length === 1 ? access.moveIds[0] : undefined, name: key.name, tokenPreview: key.tokenPreview,
-      scopes: access ? keyScopes(access) : [], version: access?.revision ?? 0, status: accessState(access, connection), expiresAt: access?.endsAt, revokedAt: access?.revokedAt, lastUsedAt: connection?.lastUsedAt, lastUsedAction: connection?.lastToolName, createdAt: key.createdAt };
+    const own = access && connection ? connectionAccess(access, connection) : access;
+    return { apiKeyId: key._id, householdId: key.householdId, moveId: own?.moveIds?.length === 1 ? own.moveIds[0] : undefined, name: key.name, tokenPreview: key.tokenPreview,
+      scopes: own ? keyScopes(own) : [], version: own?.revision ?? 0, status: accessState(own, connection), expiresAt: own?.endsAt, revokedAt: own?.revokedAt, lastUsedAt: connection?.lastUsedAt, lastUsedAction: connection?.lastToolName, createdAt: key.createdAt };
   }));
   return { keys, nextCursor: page.isDone ? null : page.continueCursor };
 } });

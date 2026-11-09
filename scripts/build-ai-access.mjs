@@ -56,7 +56,7 @@ children(tools, node => {
   children(config, n => {
     if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && functions.has(n.expression.text)) for (const scope of powers(n.expression.text)) scopes.add(scope);
   });
-  catalog[name] = { scopes: ["get_api_context", "get_api_capabilities", "reduce_connection"].includes(name) ? [] : [...scopes].sort(), websiteOnly: ["add_household_member", "create_share_link"].includes(name) };
+  catalog[name] = { scopes: ["get_api_context", "get_api_capabilities", "reduce_connection"].includes(name) ? [] : [...scopes].sort(), websiteOnly: ["add_household_member"].includes(name) };
 });
 const unscoped = Object.entries(catalog).filter(([name, access]) => !["get_api_context", "get_api_capabilities", "reduce_connection"].includes(name) && access.scopes.length === 0);
 if (unscoped.length) throw new Error(`Undecided tool powers: ${unscoped.map(([name]) => name).join(", ")}`);

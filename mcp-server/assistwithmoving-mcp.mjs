@@ -2697,7 +2697,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "create_share_link", {
     title: "Create share link",
     description:
-      "Create a scoped documentation share link. The raw token is returned only once in the create response; store it carefully.",
+      "Publish a scoped documentation share link. Remove secrets and the person’s own private contact details first. Business contact details are expected. The site returns one summary with counts; send acknowledgeContactDetails: {emails, phones, addresses} covering the whole batch, including on the first call. Secrets always refuse. The raw token is returned only once in the create response; store it carefully.",
     inputSchema: {
       moveId: z.string(),
       documentationProfileId: z.string().optional(),
@@ -2719,6 +2719,7 @@ export function registerTools(target, apiConfig, options = {}) {
         )
         .optional(),
       expiresAt: z.number().optional(),
+      acknowledgeContactDetails: z.object({ emails: z.number().int().nonnegative(), phones: z.number().int().nonnegative(), addresses: z.number().int().nonnegative() }).optional(),
       dryRun: z.boolean().optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -2749,13 +2750,13 @@ function registerTool(target, name, config) {
     name,
     {
       title: config.title,
-      description: apiToolAccess[name]?.websiteOnly ? "Website-only. API keys cannot create invitations or share links. The person must use https://movingmanifest.com/settings/ai." : config.description,
+      description: apiToolAccess[name]?.websiteOnly ? "Website-only. Household invitations stay website-only. The person must use https://movingmanifest.com/settings/ai." : config.description,
       inputSchema: config.inputSchema,
       annotations: config.annotations,
     },
     async (input) => {
       try {
-        if (apiToolAccess[name]?.websiteOnly) throw new Error("Invitations and new share links are website-only. The person must use https://movingmanifest.com/settings/ai.");
+        if (apiToolAccess[name]?.websiteOnly) throw new Error("Household invitations are website-only. The person must use https://movingmanifest.com/settings/ai.");
         const result = await config.handler(input);
         // Most tools return plain data we wrap as a text block. Tools that need
         // to emit native content blocks (e.g. inline images) set rawResult and

@@ -37,7 +37,7 @@ function ConnectionCard({ row }: { row: Row }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  async function apply(action: "pause" | "resume" | "revoke" | "restore" | "full" | "limits", scopes?: string[], expiresAt?: number | null, moveIds?: null) {
+  async function apply(action: "pause" | "resume" | "revoke" | "restore" | "full" | "limits" | "forget", scopes?: string[], expiresAt?: number | null, moveIds?: null) {
     setBusy(true); setError("");
     try { await change({ connectionId: row.id, expectedVersion: row.version, opId: crypto.randomUUID(), action, scopes, expiresAt, moveIds }); }
     catch (err) { setError(err instanceof Error ? err.message : "Could not change this connection."); }
@@ -48,6 +48,9 @@ function ConnectionCard({ row }: { row: Row }) {
     <p>{row.retired ? "Retired key" : row.status.charAt(0).toUpperCase() + row.status.slice(1)} · {row.kind === "oauth" ? "OAuth" : "API key"}</p>
     <p className="text-sm">Last used: {moment(row.lastUsedAt)}</p>
     {row.narrowedBy === "ai" && <p>Narrowed by your AI on {moment(row.narrowedAt)}</p>}
+    {row.inherited && <p>Started with the limits of your most limited AI</p>}
+    {row.inherited && !row.retired && <button className="min-h-11 rounded border px-3" disabled={busy} onClick={() => void apply("restore")}>Restore</button>}
+    {row.status === "revoked" && <button className="min-h-11 rounded border px-3" disabled={busy} onClick={() => void apply("forget")}>Forget</button>}
     {error && <p role="alert">{error}</p>}
     {row.isCurrent && !row.retired && <>
       <fieldset disabled={busy}><legend className="font-medium">What it can do</legend>
@@ -81,7 +84,7 @@ export function AiConnectionManager() {
   useEffect(() => { if (needsInitialization) void initialize({}).catch(err => setError(err instanceof Error ? err.message : "Could not check earlier connections.")); }, [needsInitialization, initialize]);
   return <div className="space-y-6">
     <p className="text-base leading-7">{policy.settings}</p>
-    <p className="text-sm text-muted-foreground">Connect your AI to https://movingmanifest.com/mcp and sign in. Earlier registrations stay stopped when you restore this connection. Invitations and new share links stay on the website.</p>
+    <p className="text-sm text-muted-foreground">Connect your AI to https://movingmanifest.com/mcp and sign in. New connections start with your most limited AI’s limits. Invitations stay on the website; your AI can create share links after checking for sensitive information.</p>
     {error && <p role="alert">{error}</p>}
     {!data?.ready ? <p>Checking earlier connection limits… Access stays stopped until the check is complete.</p> : <>
       {!data.connections.length ? <p>No AI has connected yet. New connections get full access with no end date; any earlier limits are retained.</p> : data.connections.map(row => <ConnectionCard key={row.id} row={row} />)}

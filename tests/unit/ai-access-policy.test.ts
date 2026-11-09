@@ -9,7 +9,7 @@ it("derives every API tool's access decision from current handlers and backend r
   registerTools({ registerTool: (name: string) => { names.push(name); } }, { baseUrl: "https://example.test/api/v1", apiKey: "synthetic-not-a-credential" });
   expect(Object.keys(catalogue).sort()).toEqual(names.sort());
   expect(catalogue.upsert_sale_listing.scopes).toEqual(["inventory/write"]);
-  expect(catalogue.create_share_link.websiteOnly).toBe(true);
+  expect(catalogue.create_share_link.websiteOnly).toBe(false);
   expect(catalogue.add_household_member.websiteOnly).toBe(true);
   expect(execFileSync(process.execPath, ["scripts/build-ai-access.mjs", "--check"], { encoding: "utf8" })).toContain("verified");
 });

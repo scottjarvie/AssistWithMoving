@@ -1,3 +1,6 @@
+import { readAccess, readConnection, connectionAccess, accessState, keyScopes } from "./lib/carriedAccess";
+import { previewPublicPacket } from "./publicPackets";
+import { checkPublishing } from "./lib/publishingCheck";
 import apiToolAccess from "../shared/api-tool-access.json";
 import { apiKeyScopes } from "./lib/apiKeys";
 import { anyApi, type FunctionReference } from "convex/server";
@@ -6095,6 +6098,15 @@ async function routeShareLinks(
       | undefined;
     const expiresAt =
       optionalNumber(body.expiresAt) ?? Date.now() + 30 * 24 * 60 * 60 * 1000;
+    const outgoing = await previewPublicPacket(ctx, { shareLinkId: "pending" as Id<"shareLinks">, householdId: auth.householdId, moveId, documentationProfileId, scope: parseShareLinkScope(body.scope) ?? (documentationProfileId ? "profile" : "move"), role: parseShareLinkRole(body.role) ?? "guest", allowedActions: parseShareLinkActions(body.allowedActions) ?? ["view", "download"], expiresAt, label: normalizeOptionalText(asString(body.label)) });
+    checkPublishing(outgoing, body.acknowledgeContactDetails);
+    // Read current power again beside the visibility write. These reads and
+    // the stored packet version participate in this Convex transaction's OCC.
+    const ownerFloor = await readAccess(ctx, auth.createdByUserId);
+    const callingConnection = await readConnection(ctx, auth.createdByUserId, `key:${auth.apiKeyId}`);
+    const current = ownerFloor && callingConnection ? connectionAccess(ownerFloor, callingConnection) : null;
+    const callingKey = await ctx.db.get(auth.apiKeyId);
+    if (!current || !callingConnection || callingKey?.credentialRetiredAt !== undefined || accessState(current, callingConnection) !== "active" || !keyScopes(current).includes("exports/create") || current.revision !== auth.version) throw new Error("Missing power exports/create: this connection changed or publishing is stopped. Only the person can restore it at https://movingmanifest.com/settings/ai.");
     const result = await createGeneratedShareLink(
       ctx,
       {

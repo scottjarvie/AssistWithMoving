@@ -580,7 +580,7 @@
     "scopes": [
       "exports/create"
     ],
-    "websiteOnly": true
+    "websiteOnly": false
   },
   "revoke_share_link": {
     "scopes": [

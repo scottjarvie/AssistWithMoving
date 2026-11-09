@@ -14,7 +14,7 @@ describe("REST/OpenAPI/MCP contract drift", () => {
   });
 
   it("keeps the guardrail scoped to route and enum drift only", () => {
-    expect(restRouteManifest).toHaveLength(30);
+    expect(restRouteManifest).toHaveLength(32);
     expect(Object.keys(openApiEnumManifest).sort()).toEqual([
       "confidence",
       "itemDisposition",

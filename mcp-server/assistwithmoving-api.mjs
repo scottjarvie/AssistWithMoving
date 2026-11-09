@@ -2549,6 +2549,7 @@ export async function createShareLink(config, input) {
       documentationProfileId: input.documentationProfileId,
       scope: input.scope,
       label: input.label,
+      acknowledgeContactDetails: input.acknowledgeContactDetails,
       role: input.role,
       allowedActions: input.allowedActions,
       expiresAt: input.expiresAt,

@@ -65,7 +65,7 @@
             "description": "Website-only operation; API key refused."
           }
         },
-        "description": "Website-only. API keys cannot create invitations or new share links. The person must use the signed-in website."
+        "description": "Website-only. Household invitations stay website-only; API keys may create checked share links. The person must use the signed-in website."
       }
     },
     "/moves": {
@@ -1079,6 +1079,107 @@
           },
           "403": {
             "description": "Connection power or current move access missing"
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/share-links": {
+      "post": {
+        "summary": "Publish a scoped share link",
+        "description": "Check the actual outgoing packet. Secrets refuse with category and location. Contact details produce one counted summary. Acknowledge counts covering the whole batch, including on the first call. Business contact details are expected; remove the person’s own private details.",
+        "parameters": [
+          {
+            "name": "moveId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentationProfileId": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "scope": {
+                    "enum": [
+                      "move",
+                      "profile"
+                    ]
+                  },
+                  "acknowledgeContactDetails": {
+                    "type": "object",
+                    "required": [
+                      "emails",
+                      "phones",
+                      "addresses"
+                    ],
+                    "properties": {
+                      "emails": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "phones": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "addresses": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "AI-attributed link; raw token returned once"
+          },
+          "400": {
+            "description": "Secret refusal or one contact-count summary"
+          },
+          "403": {
+            "description": "Missing power or current move access"
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/share-links/{shareLinkId}/revoke": {
+      "post": {
+        "summary": "Unpublish a share link",
+        "parameters": [
+          {
+            "name": "moveId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "shareLinkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Link revoked with attributed history"
           }
         }
       }

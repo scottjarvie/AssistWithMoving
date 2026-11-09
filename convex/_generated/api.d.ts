@@ -111,6 +111,7 @@ import type * as lib_publicPackets from "../lib/publicPackets.js";
 import type * as lib_publicPlanView from "../lib/publicPlanView.js";
 import type * as lib_publicShareComments from "../lib/publicShareComments.js";
 import type * as lib_publicShareStatus from "../lib/publicShareStatus.js";
+import type * as lib_publishingCheck from "../lib/publishingCheck.js";
 import type * as lib_queue from "../lib/queue.js";
 import type * as lib_queueAccess from "../lib/queueAccess.js";
 import type * as lib_queuePhotoAttach from "../lib/queuePhotoAttach.js";
@@ -274,6 +275,7 @@ declare const fullApi: ApiFromModules<{
   "lib/publicPlanView": typeof lib_publicPlanView;
   "lib/publicShareComments": typeof lib_publicShareComments;
   "lib/publicShareStatus": typeof lib_publicShareStatus;
+  "lib/publishingCheck": typeof lib_publishingCheck;
   "lib/queue": typeof lib_queue;
   "lib/queueAccess": typeof lib_queueAccess;
   "lib/queuePhotoAttach": typeof lib_queuePhotoAttach;

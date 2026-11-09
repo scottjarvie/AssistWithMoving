@@ -16,7 +16,7 @@ export async function authenticateApiKey(ctx: MutationCtx, {
   const prefix = apiKeyPrefix(rawKey);
   const key = await ctx.db.query("apiKeys").withIndex("by_prefix", q => q.eq("prefix", prefix)).unique();
   if (!key || !await verifyApiKeyHash({ rawKey, expectedHash: key.secretHash })) throw new Error("Invalid API key.");
-  if (/^POST .*\/households\/[^/]+\/members$/.test(action) || /^POST .*\/share-links$/.test(action)) throw new Error(`Invitations and new share links are website-only. The person must use ${SETTINGS_URL}.`);
+  if (/^POST .*\/households\/[^/]+\/members$/.test(action)) throw new Error(`Household invitations are website-only. The person must use ${SETTINGS_URL}.`);
   const { access, connection } = await ctx.runMutation(makeFunctionReference<"mutation", { apiKeyId: Id<"apiKeys"> }, { access: Access; connection: Connection }>("apiKeys:connectCallingKey"), { apiKeyId: key._id });
   let state = key.credentialRetiredAt !== undefined ? "superseded" : accessState(access, connection);
   const scopes = keyScopes(access);

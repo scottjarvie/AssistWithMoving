@@ -53,7 +53,7 @@ API keys can include these scopes:
 | `plans/write` | Apply Layout Studio op batches and create pending plan proposals. |
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
 | `exports/read` | List profiles, exports, share-link metadata, and read unexpired export artifacts. |
-| `exports/create` | Create export jobs and revoke existing share links; new links stay website-only. |
+| `exports/create` | Create export jobs, create checked share links, and revoke links. |
 | `members/manage` | Read existing household members; invitations stay website-only. |
 
 Keys may also be restricted to a single move. A move-restricted key should use
@@ -1735,8 +1735,22 @@ curl https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
-New share links are website-only. POST /moves/{id}/share-links is refused for
-all API keys. Existing link metadata and revocation remain available.
+AI share-link creation is allowed: POST /moves/{id}/share-links checks the
+actual outgoing packet. Secrets refuse with a category and field path, never
+the secret value. The current publishing power is rechecked beside the visibility
+write in the same Convex transaction; stored packet reads participate in its
+version/conflict checks. Moving publishes stored packet text and inline plan SVG,
+not file-backed text bodies. Opaque body bytes or body-file references refuse
+until readable content is available; acknowledgement cannot waive this. Existing
+live packet reads also refuse secrets added after publication. JSON-quoted
+secrets are detected, and contact matches never cross line boundaries.
+Emails, phones and street addresses produce one counted
+summary. Supply `acknowledgeContactDetails: { emails: 12, phones: 30, addresses: 8 }`
+with counts at least what was found for the whole batch. It is accepted on the
+first call too. Business contact details are expected; remove only the person's
+own private details. The AI or person can revoke the link to unpublish, with
+attributed history. The HTTP/stdio `create_share_link` and `revoke_share_link`
+tools expose this existing publication path; OAuth catalogs remain unchanged.
 
 List recent public-recipient comments for all share links on a move:
 
@@ -2049,7 +2063,7 @@ names, and known launch blockers.
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
 | `reduce_connection` | Reduce only this bearer key’s scopes, one selected move, or expiry; pause or revoke. Requires expectedVersion from get_api_context and returns a durable receipt/version. |
 | `list_household_members` | List real household login access for the API key household. |
-| `add_household_member` | Add an existing user or create a pending household invitation by email, with `dryRun` support. |
+| `add_household_member` | Website-only; AI calls, including dry-run, are refused. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `setup_move` | Create or update a move, room lists, transport resources/zones, and starter inventory in one setup call. |
@@ -2221,38 +2235,29 @@ under a new path such as `/api/v2`. Additive response fields may be added within
 All four doors (`/mcp`, `/mcp/connect`, API-key HTTP `/api/mcp`, and stdio)
 start with every entitled current and future power and no end date. Connecting
 needs no product approval. Only removed powers stay withheld when new tools
-arrive. Archive and restore are included; permanent delete, invitations and new
-share links remain website-only. Live household roles, move participation,
+arrive. Archive and restore are included; permanent delete, invitations remain off. Household invitations stay website-only. Live household roles, move participation,
 private-record visibility and agent-access switches still apply to every call.
 
-### One authority and durable carried restrictions
+### Per-connection policy and durable floor (revised 9 November)
 
-`aiAccessOwners`, indexed uniquely by person, is the single authority for that
-person's AI connections. `aiAccessConnections`, indexed by person and verified
-client ID, links each credential to it. Both OAuth doors normalize verified
-client IDs alike; HTTP and stdio resolve the authenticated API-key ID. Arguments,
-client names, user agents, URL-shaped IDs and per-request `clientInfo` never
-prove that an AI is independent. No door currently excludes a predecessor on
-such evidence. The conservative consequence is that restrictions are shared
-across this person's AI connections, including OAuth and API keys.
+Each OAuth client and API key has its own revisioned policy in
+`aiAccessConnections`. Existing client IDs keep that policy exactly on sign-in;
+restricting one connection does not revoke, supersede or change another.
+`aiAccessOwners` holds the floor across every restricted, unreleased connection
+and key: union of withheld powers, any revoke/pause, earliest chosen date and
+intersected move limits. New connections inherit that floor regardless of name,
+host, CIMD or registration method. No identity matching decides inheritance.
 
-Every reduction writes an entry with source ID, current revision, withheld
-powers, pause, revoke, chosen date and move selection in the durable owner
-record. Connect and tool gates read that record rather than grant history.
-New registrations inherit the combined narrowest limits. A generation index
-stops superseded tokens without traversing or rewriting historical credentials.
-A later reduction through any lineage member updates the common authority and
-stops sibling tokens immediately. Coarser API categories project conservatively
-onto OAuth powers, and removed OAuth powers also block their API aliases.
-
-Only a signed-in person can release the exact source revisions they override.
-There is no permanent predecessor ignore-list. A later restriction writes a new
-revision and governs again, even if both actions have the same timestamp.
-Restore after revoke keeps powers, pause, move selection and the exact chosen
-end date, including a date that has already passed. Resume, Restore full powers,
-Remove end date and Restore access to all my moves are separate explicit
-website controls. Restoring a registration leaves superseded tokens stopped.
-Rotated API secrets stay retired even if the person restores the lineage.
+Every restriction updates its source ID/revision entry atomically with the
+connection policy and private receipt. Person Restore/Resume/widening releases
+inherited entries and that connection's entry only at the revisions overridden.
+Later source restrictions count again. Inherited connections display “Started
+with the limits of your most limited AI” with Restore; revoked connections offer
+Forget. Forget removes their floor contribution without reviving the token.
+Restore of an ordinary revoked connection preserves chosen powers, pause and
+end date, including a past date. Inherited Restore releases inherited limits
+while retaining choices made on that connection itself. No runtime history scan
+or record-count cap decides access.
 
 ### One-time lazy bootstrap; no migration
 
@@ -2296,7 +2301,7 @@ history, actor, date and opId. Secret-shaped names and text are redacted.
 Mutation and receipt commit together. Shared household events and admin
 observability do not expose private connection history. Settings requires a
 signed Clerk person-session `sid`, refuses OAuth identities, paginates every
-current connection, and separately paginates earlier registrations and lineage
+current connection, and separately paginates earlier registrations and connection
 history. No arbitrary connection cap or historical scan decides authority.
 
 Both OAuth HTTP doors validate a required CIMD document through the protected,
@@ -2328,8 +2333,12 @@ cleanup does not delete user move data.
 `/ai`, `/ai.txt`, and `llms*.txt`. `node scripts/build-ai-access.mjs` regenerates
 the public policy prefix and API tool-to-power catalogue from handlers and
 backend route requirements; `--check` verifies parity and rejects undecided
-tools. Both API-key registries also refuse invitation/share-link tools locally,
-including dry-run, and the backend independently blocks their write routes.
+tools. Both API-key registries refuse household invitation tools locally, including
+dry-run, and the backend blocks that write route. Share-link creation scans the
+actual public packet: obvious keys/tokens/passwords are refused; email addresses,
+phones and street addresses require removal or acknowledgeContactDetails with counts covering the whole batch.
+Both person and AI may revoke links; creation/revocation retain AI attribution
+and audit history. Scrub shared content before publishing.
 
 Deploy the Convex schema, indexes and functions before the website. No production
 deployment or data mutation is part of the draft-PR build stage. Backend tests

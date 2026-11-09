@@ -801,6 +801,8 @@ const exportJobType = v.union(
   v.literal("floorPlan")
 );
 
+const connectionPolicy = v.object({ withheldScopes: v.array(v.string()), revoked: v.boolean(), revokedAt: v.optional(v.number()), pausedAt: v.optional(v.number()), endsAt: v.optional(v.number()), moveIds: v.optional(v.array(v.id("moves"))), revision: v.number(), changedBy: v.union(v.literal("person"), v.literal("ai"), v.literal("system")), changedAt: v.number() });
+
 // Shared validator keeps immutable owner history identical to the original source.
 const aiGrantFields = {
     ownerUserId: v.id("users"),
@@ -1570,10 +1572,10 @@ export default defineSchema({
    * Metadata stays per verified client. Unproven app independence shares the
    * owner's durable carried authority. These rows contain no credentials.
    */
-  // One authoritative carried-restrictions record for identities whose
-  // independence has not been established. Regular gates never scan history.
+  // One floor for all new connections. Existing policies remain independent.
+  // Regular gates never scan history or compare identities for inheritance.
   aiAccessOwners: defineTable({
-    ownerUserId: v.id("users"), bootstrapped: v.boolean(),
+    ownerUserId: v.id("users"), bootstrapSources: v.optional(v.array(v.object({ sourceGrantId: v.string(), sourceRevision: v.number() }))), bootstrapFloor: v.optional(connectionPolicy), bootstrapped: v.boolean(),
     grantsDone: v.boolean(), keysDone: v.boolean(),
     grantCursor: v.union(v.string(), v.null()), keyCursor: v.union(v.string(), v.null()),
     revision: v.number(), currentGeneration: v.number(), connectionCount: v.number(), latestRegistrationId: v.optional(v.id("aiAccessConnections")),
@@ -1592,6 +1594,7 @@ export default defineSchema({
     ownerUserId: v.id("users"), accessOwnerId: v.id("aiAccessOwners"),
     verifiedClientId: v.string(), kind: v.union(v.literal("oauth"), v.literal("key")),
     grantId: v.optional(v.id("aiGrants")), apiKeyId: v.optional(v.id("apiKeys")),
+    policy: v.optional(connectionPolicy), ownBaseline: v.optional(connectionPolicy), pendingFloor: v.optional(v.boolean()), inherited: v.optional(v.boolean()), inheritedSources: v.optional(v.array(v.object({ sourceGrantId: v.string(), sourceRevision: v.number() }))), forgottenAt: v.optional(v.number()),
     label: v.string(), isCurrent: v.boolean(), generation: v.number(), createdAt: v.number(),
     supersededAt: v.optional(v.number()), lastUsedAt: v.optional(v.number()), lastToolName: v.optional(v.string()),
   }).index("by_owner_client", ["ownerUserId", "verifiedClientId"])

@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { checkPublishing } from "./lib/publishingCheck";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
@@ -56,6 +57,16 @@ export const getForShareLink = internalQuery({
     label: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const packet = await previewPublicPacket(ctx, args);
+    // Live packets can change after link creation. Secrets must never leave
+    // through an already published link; contact acknowledgement stays batched
+    // at publishing and does not prompt public recipients.
+    checkPublishing(packet, { emails: Number.MAX_SAFE_INTEGER, phones: Number.MAX_SAFE_INTEGER, addresses: Number.MAX_SAFE_INTEGER });
+    return packet;
+  },
+});
+
+export async function previewPublicPacket(ctx: QueryCtx, args: Parameters<typeof publicShareLinkMetadata>[0] & { householdId: Id<"households">; moveId: Id<"moves">; documentationProfileId?: Id<"documentationProfiles"> }) {
     const shareLink = publicShareLinkMetadata(args);
     const publicPlan = args.allowedActions.includes("viewPlan")
       ? await buildPublicPlanView(ctx, args)
@@ -130,8 +141,8 @@ export const getForShareLink = internalQuery({
         packetKind,
       }),
     };
-  },
-});
+}
+
 
 async function buildPublicDocumentationPacket(
   ctx: QueryCtx,

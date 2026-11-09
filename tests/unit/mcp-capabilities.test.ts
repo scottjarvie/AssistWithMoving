@@ -915,7 +915,8 @@ describe("Bring Your AI documentation truth", () => {
 
       expect(text, `${path} permanent delete`).toMatch(/permanently delete/i);
       expect(text, `${path} whole-move archive`).toMatch(/archive a whole move/i);
-      expect(text, `${path} sharing`).toMatch(/publish|share link/i);
+      // Revised decision 5 permits publishing; invitations remain prohibited.
+      expect(text, `${path} invitations`).toMatch(/invit(?:e|ation)/i);
       expect(text, `${path} household access`).toMatch(/household/i);
       expect(text, `${path} outside action`).toMatch(
         /book,?\s*(or\s+)?buy,?\s*(or\s+)?sign,?\s*(or\s+)?pay/i,

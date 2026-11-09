@@ -139,7 +139,7 @@ const safetyRules = [
 const neverPermitted = [
   "Permanently delete anything, or delete your account. Archive is the destructive default and it is reversible.",
   "Archive a whole move. That stays a signed-in action you take yourself.",
-  "Publish, share, create a share link, or export your move.",
+  "Invite household members, permanently delete data, spend money or message people.",
   "Invite, remove, or change the access of anyone in your household.",
   "Contact a mover, marketplace, employer, insurer, or government office; book, buy, sign, pay, or message on your behalf.",
   "Grant itself authority, widen its own grant, or inherit another connection's grant.",
