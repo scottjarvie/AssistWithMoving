@@ -34,3 +34,10 @@ it("an archived profile is unavailable for its own reason, never mislabeled as a
   expect(result).toMatchObject({ status: "unavailable", reason: expect.stringContaining("profile is unavailable or archived") });
   expect(JSON.stringify(result)).not.toContain("publishing check");
 });
+it("an unavailable response never echoes a link label containing the refused credential", async () => {
+  const f = await accessFixture(); const label = "sk-ant-synthetic_label_secret";
+  const shareLinkId = await f.t.run(ctx => ctx.db.insert("shareLinks", { householdId: f.householdId, moveId: f.moveId, scope: "move", label, tokenHash: "synthetic", tokenPreview: "synthetic", role: "guest", status: "active", allowedActions: ["view"], expiresAt: Date.now() + 60000, accessCount: 0, createdByUserId: f.userId, createdAt: Date.now(), updatedAt: Date.now() }));
+  const result = await f.t.query(internal.publicPackets.getForShareLink, { shareLinkId, householdId: f.householdId, moveId: f.moveId, scope: "move", label, role: "guest", allowedActions: ["view"], expiresAt: Date.now() + 60000 });
+  expect(result).toMatchObject({ status: "unavailable", reason: expect.stringContaining("publishing check") });
+  expect(JSON.stringify(result)).not.toContain(label);
+});
