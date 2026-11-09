@@ -2697,7 +2697,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "create_share_link", {
     title: "Create share link",
     description:
-      "Publish a scoped documentation share link. Remove secrets and the person’s own private contact details first. Business contact details are expected. The site returns one summary with counts; send acknowledgeContactDetails: {emails, phones, addresses} covering the whole batch, including on the first call. Secrets always refuse. The raw token is returned only once in the create response; store it carefully.",
+      "Publish a scoped documentation share link. Remove secrets and the person’s own private contact details first. Business contact details are expected. The site returns one summary with counts; send acknowledgeContactDetails: {emails, phones, addresses} exactly matching the whole batch, including on the first call. Secrets always refuse. The raw token is returned only once in the create response; store it carefully.",
     inputSchema: {
       moveId: z.string(),
       documentationProfileId: z.string().optional(),
@@ -2729,7 +2729,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "revoke_share_link", {
     title: "Revoke share link",
     description:
-      "Revoke a documentation share link so the public token can no longer be used.",
+      "Revoke a documentation share link so the public token can no longer be used. Requires an active connection, even with zero powers; publish power is not required.",
     inputSchema: {
       moveId: z.string(),
       shareLinkId: z.string(),

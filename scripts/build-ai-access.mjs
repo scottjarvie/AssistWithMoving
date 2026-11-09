@@ -15,7 +15,8 @@ for (const file of ["public/ai.txt", "public/llms.txt", "public/llms-full.txt"])
 function source(path) { return ts.createSourceFile(path, fs.readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS); }
 const rest = source("convex/lib/restApi.ts");
 const routeNode = rest.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "requiredScopesForRestRoute");
-const routeJs = ts.transpileModule(routeNode.getText(rest).replace(/^export /, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const helperNode = rest.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "isShareLinkUnpublish");
+const routeJs = ts.transpileModule([helperNode, routeNode].map(node => node.getText(rest).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const routeScopes = new Function(routeJs + "; return requiredScopesForRestRoute;")();
 const api = source("mcp-server/assistwithmoving-api.mjs");
 const functions = new Map(api.statements.filter(ts.isFunctionDeclaration).filter(n => n.name).map(n => [n.name.text, n]));
@@ -58,7 +59,7 @@ children(tools, node => {
   });
   catalog[name] = { scopes: ["get_api_context", "get_api_capabilities", "reduce_connection"].includes(name) ? [] : [...scopes].sort(), websiteOnly: ["add_household_member"].includes(name) };
 });
-const unscoped = Object.entries(catalog).filter(([name, access]) => !["get_api_context", "get_api_capabilities", "reduce_connection"].includes(name) && access.scopes.length === 0);
+const unscoped = Object.entries(catalog).filter(([name, access]) => !["get_api_context", "get_api_capabilities", "reduce_connection", "revoke_share_link"].includes(name) && access.scopes.length === 0);
 if (unscoped.length) throw new Error(`Undecided tool powers: ${unscoped.map(([name]) => name).join(", ")}`);
 output("shared/api-tool-access.json", JSON.stringify(catalog, null, 2) + "\n");
 console.log(`AI policy and ${Object.keys(catalog).length} API tools ${check ? "verified" : "generated"}`);

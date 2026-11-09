@@ -583,9 +583,7 @@
     "websiteOnly": false
   },
   "revoke_share_link": {
-    "scopes": [
-      "exports/create"
-    ],
+    "scopes": [],
     "websiteOnly": false
   }
 }

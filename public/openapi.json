@@ -1086,7 +1086,7 @@
     "/moves/{moveId}/share-links": {
       "post": {
         "summary": "Publish a scoped share link",
-        "description": "Check the actual outgoing packet. Secrets refuse with category and location. Contact details produce one counted summary. Acknowledge counts covering the whole batch, including on the first call. Business contact details are expected; remove the person’s own private details.",
+        "description": "Check the actual outgoing packet. Secrets refuse with category and location. Contact details produce one counted summary. Acknowledge counts exactly matching the whole batch, including on the first call. Business contact details are expected; remove the person’s own private details.",
         "parameters": [
           {
             "name": "moveId",
@@ -1181,7 +1181,8 @@
           "200": {
             "description": "Link revoked with attributed history"
           }
-        }
+        },
+        "description": "Requires an active connection and current move access, even with zero powers. Does not require the publish power."
       }
     }
   },

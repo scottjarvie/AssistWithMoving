@@ -47,12 +47,13 @@ it("an inherited restricted successor counts until the person releases it", asyn
 it.each(["mmk_abcdef123456", "sk_live_abcdef123456", "Bearer abc123", "password=supersecret", "-----BEGIN PRIVATE KEY-----\nprivate"])("publishing refuses secrets even with acknowledgement: %s", secret => {
   expect(() => checkPublishing({ items: [{ description: secret }] }, { emails: 100, phones: 100, addresses: 100 })).toThrow(/Publishing refused:.*at \$public.items\[0\].description/);
 });
-it("summarizes contacts once for the whole batch and accepts sufficient counts on the first call", () => {
+it("summarizes contacts once for the whole batch and accepts exact counts on the first call", () => {
   const batch = [{ name: "Store", email: "shop@example.test", phone: "503-555-1212", address: "123 Main Street" }, { email: "business@example.test", address: "42 South Main Road" }];
   expect(() => checkPublishing(batch)).toThrow(/This contains 2 email addresses, 1 phone numbers and 2 street addresses/);
   expect(() => checkPublishing(batch, { emails: 1, phones: 1, addresses: 2 })).toThrow(/whole batch/);
   expect(checkPublishing(batch, { emails: 2, phones: 1, addresses: 2 })).toEqual({ emails: 2, phones: 1, addresses: 2 });
-  expect(checkPublishing(batch, { emails: 3, phones: 2, addresses: 3 })).toEqual({ emails: 2, phones: 1, addresses: 2 });
+  expect(() => checkPublishing(batch, { emails: 3, phones: 2, addresses: 3 })).toThrow(/exact counts/);
+  expect(() => checkPublishing(batch, { emails: 999, phones: 999, addresses: 999 })).toThrow(/2 email addresses, 1 phone numbers and 2 street addresses/);
 });
 it("publishes and unpublishes through the actual API with one acknowledgement and AI history", async () => {
   const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Publisher" });
@@ -151,4 +152,40 @@ it("rechecks publish power after inspecting stored content, in the visibility-wr
   const result = await f.request(key.rawKey, "POST", `moves/${f.moveId}/share-links`, {});
   expect(result.status).toBe(403); expect(JSON.stringify(result.body)).toContain("Missing power exports/create");
   expect(await f.t.run(ctx => ctx.db.query("shareLinks").collect())).toHaveLength(0);
+});
+it.each(["POST", "DELETE"] as const)("an active zero-power connection can unpublish using %s", async method => {
+  const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Unpublisher" });
+  const path = `moves/${f.moveId}/share-links`;
+  expect((await f.request(key.rawKey, "POST", path, {})).status).toBe(201);
+  const link = (await f.t.run(ctx => ctx.db.query("shareLinks").collect()))[0];
+  expect((await f.request(key.rawKey, "POST", "me/access", { opId: "zero", expectedVersion: 1, scopes: [] })).status).toBe(200);
+  const context = await f.request(key.rawKey, "GET", "me");
+  expect(context.body).toMatchObject({ data: { apiKey: { tools: expect.arrayContaining(["revoke_share_link"]), heldBack: expect.arrayContaining([expect.objectContaining({ tool: "create_share_link" })]) } } });
+  const response = await f.request(key.rawKey, method, `${path}/${link._id}${method === "POST" ? "/revoke" : ""}`);
+  expect(response.status).toBe(200);
+  expect((await f.t.run(ctx => ctx.db.get(link._id)))!.status).toBe("revoked");
+  expect((await f.request(key.rawKey, "POST", path, {})).status).toBe(403);
+});
+it.each(["pause", "revoke", "expire"])("unpublishing still refuses an inactive grant: %s", async action => {
+  const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Inactive" });
+  const path = `moves/${f.moveId}/share-links`;
+  await f.request(key.rawKey, "POST", path, {});
+  const link = (await f.t.run(ctx => ctx.db.query("shareLinks").collect()))[0];
+  await f.request(key.rawKey, "POST", "me/access", { opId: "stop", expectedVersion: 1, ...(action === "expire" ? { expiresAt: Date.now() - 1 } : { action }) });
+  const response = await f.request(key.rawKey, "POST", `${path}/${link._id}/revoke`);
+  expect(response.status).toBe(403);
+  expect((await f.t.run(ctx => ctx.db.get(link._id)))!.status).toBe("active");
+  const context = await f.request(key.rawKey, "GET", "me");
+  expect(context.body).toMatchObject({ data: { apiKey: { heldBack: expect.arrayContaining([expect.objectContaining({ tool: "revoke_share_link", missingPower: "active connection" })]) } } });
+});
+it("a blanket acknowledgement refuses in the real publish route, while an exact first-call count succeeds", async () => {
+  const f = await accessFixture(); const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Counter" });
+  const path = `moves/${f.moveId}/share-links`;
+  const excessive = await f.request(key.rawKey, "POST", path, { label: "shop@example.test", acknowledgeContactDetails: { emails: 999, phones: 999, addresses: 999 } });
+  expect(excessive.status).toBe(400); expect(JSON.stringify(excessive.body)).toContain("1 email addresses, 0 phone numbers and 0 street addresses");
+  expect(await f.t.run(ctx => ctx.db.query("shareLinks").collect())).toHaveLength(0);
+  const exact = await f.request(key.rawKey, "POST", path, { label: "shop@example.test", acknowledgeContactDetails: { emails: 1, phones: 0, addresses: 0 } });
+  expect(exact.status).toBe(201);
+  const link = (await f.t.run(ctx => ctx.db.query("shareLinks").collect()))[0];
+  expect(await f.t.query(internal.publicPackets.getForShareLink, { shareLinkId: link._id, householdId: f.householdId, moveId: f.moveId, scope: "move", role: "guest", allowedActions: ["view", "download"], expiresAt: link.expiresAt, label: link.label })).toBeTruthy();
 });

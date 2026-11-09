@@ -53,7 +53,7 @@ API keys can include these scopes:
 | `plans/write` | Apply Layout Studio op batches and create pending plan proposals. |
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
 | `exports/read` | List profiles, exports, share-link metadata, and read unexpired export artifacts. |
-| `exports/create` | Create export jobs, create checked share links, and revoke links. |
+| `exports/create` | Create export jobs and checked share links. Revoking links requires only active access, with no powers. |
 | `members/manage` | Read existing household members; invitations stay website-only. |
 
 Keys may also be restricted to a single move. A move-restricted key should use
@@ -1746,9 +1746,10 @@ live packet reads also refuse secrets added after publication. JSON-quoted
 secrets are detected, and contact matches never cross line boundaries.
 Emails, phones and street addresses produce one counted
 summary. Supply `acknowledgeContactDetails: { emails: 12, phones: 30, addresses: 8 }`
-with counts at least what was found for the whole batch. It is accepted on the
+with counts exactly equal to what was found for the whole batch. It is accepted on the
 first call too. Business contact details are expected; remove only the person's
-own private details. The AI or person can revoke the link to unpublish, with
+own private details. Unpublishing needs only an active grant and current move access, even with zero
+powers; it never requires exports/create. The AI or person can revoke the link to unpublish, with
 attributed history. The HTTP/stdio `create_share_link` and `revoke_share_link`
 tools expose this existing publication path; OAuth catalogs remain unchanged.
 
@@ -2336,7 +2337,7 @@ backend route requirements; `--check` verifies parity and rejects undecided
 tools. Both API-key registries refuse household invitation tools locally, including
 dry-run, and the backend blocks that write route. Share-link creation scans the
 actual public packet: obvious keys/tokens/passwords are refused; email addresses,
-phones and street addresses require removal or acknowledgeContactDetails with counts covering the whole batch.
+phones and street addresses require removal or acknowledgeContactDetails with counts exactly matching the whole batch.
 Both person and AI may revoke links; creation/revocation retain AI attribution
 and audit history. Scrub shared content before publishing.
 

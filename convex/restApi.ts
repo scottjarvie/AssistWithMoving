@@ -151,6 +151,7 @@ import {
   parseRestPath,
   requestHashInput,
   requiredScopesForRestRoute,
+  isShareLinkUnpublish,
   restError,
   restOk,
   restApiRateLimit,
@@ -278,7 +279,8 @@ export const handle = internalMutation({
     });
     const selfContext = segments.join("/") === "me" && args.method === "GET";
     const selfReduction = segments.join("/") === "me/access" && args.method === "POST";
-    if (!requiredScopes.length && !selfReduction && !selfContext) {
+    const unpublish = isShareLinkUnpublish({ method: args.method, segments });
+    if (!requiredScopes.length && !selfReduction && !selfContext && !unpublish) {
       return restError({
         status: 404,
         code: "not_found",
@@ -1559,8 +1561,8 @@ async function routeMe(
         revokedAt: auth.revokedAt ?? null,
         pausedAt: auth.pausedAt ?? null,
         settings: "https://movingmanifest.com/settings/ai",
-        tools: Object.entries(apiToolAccess).filter(([, tool]) => !tool.websiteOnly && (tool.scopes.length === 0 || (auth.status === "active" && tool.scopes.every(scope => auth.scopes.includes(scope as typeof apiKeyScopes[number]))))).map(([name]) => name),
-        heldBack: Object.entries(apiToolAccess).filter(([, tool]) => tool.websiteOnly || (tool.scopes.length > 0 && (auth.status !== "active" || tool.scopes.some(scope => !auth.scopes.includes(scope as typeof apiKeyScopes[number]))))).map(([tool, access]) => ({ tool, missingPower: access.websiteOnly ? "website-only" : access.scopes.filter(scope => !auth.scopes.includes(scope as typeof apiKeyScopes[number])).join(", ") || access.scopes.join(", "), reason: access.websiteOnly ? "Invitations and new share links stay website-only" : auth.status === "active" ? "Power removed" : auth.status })),
+        tools: Object.entries(apiToolAccess).filter(([name, tool]) => !tool.websiteOnly && (["get_api_context", "get_api_capabilities", "reduce_connection"].includes(name) || (auth.status === "active" && tool.scopes.every(scope => auth.scopes.includes(scope as typeof apiKeyScopes[number]))))).map(([name]) => name),
+        heldBack: Object.entries(apiToolAccess).filter(([name, tool]) => tool.websiteOnly || (!["get_api_context", "get_api_capabilities", "reduce_connection"].includes(name) && (auth.status !== "active" || tool.scopes.some(scope => !auth.scopes.includes(scope as typeof apiKeyScopes[number]))))).map(([tool, access]) => ({ tool, missingPower: access.websiteOnly ? "website-only" : access.scopes.length === 0 ? "active connection" : access.scopes.filter(scope => !auth.scopes.includes(scope as typeof apiKeyScopes[number])).join(", ") || access.scopes.join(", "), reason: access.websiteOnly ? "Household invitations stay website-only" : auth.status === "active" ? "Power removed" : auth.status })),
         expiresAt: auth.expiresAt ?? null,
         scopes: auth.scopes,
         moveRestricted: auth.moveRestricted,

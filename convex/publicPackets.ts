@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { checkPublishing } from "./lib/publishingCheck";
+import { checkPublishedSecrets } from "./lib/publishingCheck";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
@@ -61,7 +61,7 @@ export const getForShareLink = internalQuery({
     // Live packets can change after link creation. Secrets must never leave
     // through an already published link; contact acknowledgement stays batched
     // at publishing and does not prompt public recipients.
-    checkPublishing(packet, { emails: Number.MAX_SAFE_INTEGER, phones: Number.MAX_SAFE_INTEGER, addresses: Number.MAX_SAFE_INTEGER });
+    checkPublishedSecrets(packet);
     return packet;
   },
 });

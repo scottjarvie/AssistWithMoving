@@ -1,6 +1,6 @@
 export type ContactCounts = { emails: number; phones: number; addresses: number };
 /** One light check and one acknowledgement for the entire outgoing batch. */
-export function checkPublishing(content: unknown, acknowledgement?: unknown): ContactCounts {
+export function checkPublishedSecrets(content: unknown): ContactCounts {
   const counts: ContactCounts = { emails: 0, phones: 0, addresses: 0 };
   const secrets = [
     [/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i, "private key"],
@@ -19,8 +19,13 @@ export function checkPublishing(content: unknown, acknowledgement?: unknown): Co
     counts.addresses += [...value.matchAll(/\b\d{1,6}[ \t]+(?:[A-Za-z]+[ \t]+){1,5}(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd|Court|Ct)\b/gi)].length;
   }
   visit(content, "$public");
+  return counts;
+}
+
+export function checkPublishing(content: unknown, acknowledgement?: unknown): ContactCounts {
+  const counts = checkPublishedSecrets(content);
   const ack = acknowledgement && typeof acknowledgement === "object" ? acknowledgement as Record<string, unknown> : {};
-  const covered = (Object.keys(counts) as Array<keyof ContactCounts>).every(key => typeof ack[key] === "number" && Number.isSafeInteger(ack[key]) && (ack[key] as number) >= counts[key]);
-  if (Object.values(counts).some(Boolean) && !covered) throw new Error(`This contains ${counts.emails} email addresses, ${counts.phones} phone numbers and ${counts.addresses} street addresses. Publish anyway? Send acknowledgeContactDetails: ${JSON.stringify(counts)} for the whole batch (also accepted on the first call). Business contact details are expected; remove only the person's own private details.`);
+  const covered = (Object.keys(counts) as Array<keyof ContactCounts>).every(key => typeof ack[key] === "number" && Number.isSafeInteger(ack[key]) && ack[key] === counts[key]);
+  if ((Object.values(counts).some(Boolean) || acknowledgement !== undefined) && !covered) throw new Error(`This contains ${counts.emails} email addresses, ${counts.phones} phone numbers and ${counts.addresses} street addresses. Publish anyway? Send acknowledgeContactDetails: ${JSON.stringify(counts)} with the exact counts for the whole batch (also accepted on the first call). Business contact details are expected; remove only the person's own private details.`);
   return counts;
 }
