@@ -1,0 +1,589 @@
+{
+  "get_api_capabilities": {
+    "scopes": [],
+    "websiteOnly": false
+  },
+  "reduce_connection": {
+    "scopes": [],
+    "websiteOnly": false
+  },
+  "get_api_context": {
+    "scopes": [],
+    "websiteOnly": false
+  },
+  "list_household_members": {
+    "scopes": [
+      "members/manage"
+    ],
+    "websiteOnly": false
+  },
+  "add_household_member": {
+    "scopes": [
+      "members/manage"
+    ],
+    "websiteOnly": true
+  },
+  "list_moves": {
+    "scopes": [
+      "moves/read"
+    ],
+    "websiteOnly": false
+  },
+  "create_move": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "setup_move": {
+    "scopes": [
+      "inventory/write",
+      "moves/read",
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "update_move": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "get_move_summary": {
+    "scopes": [
+      "exports/read",
+      "inventory/read",
+      "moves/read"
+    ],
+    "websiteOnly": false
+  },
+  "get_agent_context": {
+    "scopes": [
+      "inventory/read",
+      "moves/read",
+      "plans/read"
+    ],
+    "websiteOnly": false
+  },
+  "get_move_questions": {
+    "scopes": [
+      "inventory/read",
+      "moves/read"
+    ],
+    "websiteOnly": false
+  },
+  "get_move_day_checklist": {
+    "scopes": [
+      "inventory/read",
+      "moves/read"
+    ],
+    "websiteOnly": false
+  },
+  "plans_list": {
+    "scopes": [
+      "plans/read"
+    ],
+    "websiteOnly": false
+  },
+  "plan_get": {
+    "scopes": [
+      "plans/read"
+    ],
+    "websiteOnly": false
+  },
+  "plan_summary": {
+    "scopes": [
+      "plans/read"
+    ],
+    "websiteOnly": false
+  },
+  "plan_apply_ops": {
+    "scopes": [
+      "plans/write"
+    ],
+    "websiteOnly": false
+  },
+  "plan_propose_ops": {
+    "scopes": [
+      "plans/write"
+    ],
+    "websiteOnly": false
+  },
+  "plan_snapshot": {
+    "scopes": [
+      "plans/read"
+    ],
+    "websiteOnly": false
+  },
+  "search_inventory": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "create_item": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "create_item_with_images": {
+    "scopes": [
+      "inventory/write",
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "add_item_from_photo": {
+    "scopes": [
+      "inventory/write",
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "batch_upsert_items": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "update_item": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "delete_item": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "archive_item": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "convert_item_to_box": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "list_move_spaces": {
+    "scopes": [
+      "moves/read"
+    ],
+    "websiteOnly": false
+  },
+  "create_move_space": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "upsert_sale_listing": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "list_planned_items": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "create_planned_item": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "update_planned_item": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "convert_planned_item": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "archive_planned_item": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "create_box": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "save_box_intake": {
+    "scopes": [
+      "inventory/write",
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "add_items_to_box": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "list_archived_box_assignments": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "restore_box_assignment": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "remove_item_from_box": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "suggest_assignments": {
+    "scopes": [
+      "inventory/read",
+      "moves/read"
+    ],
+    "websiteOnly": false
+  },
+  "apply_assignments": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "list_planning_suggestions": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "list_ai_jobs": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "list_queue_items": {
+    "scopes": [
+      "queue/read"
+    ],
+    "websiteOnly": false
+  },
+  "get_queue_item": {
+    "scopes": [
+      "queue/read"
+    ],
+    "websiteOnly": false
+  },
+  "claim_queue_item": {
+    "scopes": [
+      "queue/write"
+    ],
+    "websiteOnly": false
+  },
+  "release_queue_item": {
+    "scopes": [
+      "queue/write"
+    ],
+    "websiteOnly": false
+  },
+  "request_queue_input": {
+    "scopes": [
+      "queue/write"
+    ],
+    "websiteOnly": false
+  },
+  "complete_queue_item": {
+    "scopes": [
+      "queue/write"
+    ],
+    "websiteOnly": false
+  },
+  "report_queue_failure": {
+    "scopes": [
+      "queue/write"
+    ],
+    "websiteOnly": false
+  },
+  "get_ai_provider_status": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "list_ai_text_suggestions": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "list_ai_photo_suggestions": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "generate_ai_text_suggestions": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "generate_ai_photo_suggestions": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "approve_ai_text_suggestions": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "reject_ai_text_suggestions": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "approve_ai_photo_suggestions": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "reject_ai_photo_suggestions": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "generate_planning_suggestions": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "approve_planning_suggestions": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "reject_planning_suggestions": {
+    "scopes": [
+      "inventory/write"
+    ],
+    "websiteOnly": false
+  },
+  "get_images": {
+    "scopes": [
+      "inventory/read"
+    ],
+    "websiteOnly": false
+  },
+  "start_photo_upload": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "upload_evidence_file": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "upload_evidence_image": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "upload_evidence_images": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "upload_photo": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "upload_image": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "upload_photos": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "upload_images": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "finalize_photo_upload": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "attach_photo": {
+    "scopes": [
+      "photos/write"
+    ],
+    "websiteOnly": false
+  },
+  "list_transport_resources": {
+    "scopes": [
+      "moves/read"
+    ],
+    "websiteOnly": false
+  },
+  "list_move_people": {
+    "scopes": [
+      "moves/read"
+    ],
+    "websiteOnly": false
+  },
+  "create_move_person": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "update_move_person": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "archive_move_person": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "create_transport_resource": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "update_transport_resource": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "create_transport_zone": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "update_transport_zone": {
+    "scopes": [
+      "moves/write"
+    ],
+    "websiteOnly": false
+  },
+  "get_capacity_report": {
+    "scopes": [
+      "inventory/read",
+      "moves/read"
+    ],
+    "websiteOnly": false
+  },
+  "list_documentation_profiles": {
+    "scopes": [
+      "exports/read"
+    ],
+    "websiteOnly": false
+  },
+  "create_documentation_profile": {
+    "scopes": [
+      "exports/create"
+    ],
+    "websiteOnly": false
+  },
+  "update_documentation_profile": {
+    "scopes": [
+      "exports/create"
+    ],
+    "websiteOnly": false
+  },
+  "archive_documentation_profile": {
+    "scopes": [
+      "exports/create"
+    ],
+    "websiteOnly": false
+  },
+  "create_export": {
+    "scopes": [
+      "exports/create"
+    ],
+    "websiteOnly": false
+  },
+  "list_exports": {
+    "scopes": [
+      "exports/read"
+    ],
+    "websiteOnly": false
+  },
+  "download_export": {
+    "scopes": [
+      "exports/read"
+    ],
+    "websiteOnly": false
+  },
+  "list_share_links": {
+    "scopes": [
+      "exports/read"
+    ],
+    "websiteOnly": false
+  },
+  "list_share_link_comments": {
+    "scopes": [
+      "exports/read"
+    ],
+    "websiteOnly": false
+  },
+  "create_share_link": {
+    "scopes": [
+      "exports/create"
+    ],
+    "websiteOnly": false
+  },
+  "revoke_share_link": {
+    "scopes": [],
+    "websiteOnly": false
+  }
+}

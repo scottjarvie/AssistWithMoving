@@ -9,16 +9,17 @@
  * Nothing in this module trusts a token scope. Clerk currently issues
  * identity-only scopes (`openid profile email`), and even if it issued more,
  * the product ceiling below is what applies. A broader token never widens a
- * grant; an omitted scope always denies.
+ * chosen grant; full-access grants follow the current catalog.
  */
 import { ConvexError } from "convex/values";
+import { isSupportedConnectionExpiry } from "./connectionReduction";
 
 /**
  * Bumped whenever the consent text, scope meanings, or ceiling lists change.
  * Stored on each grant so a person can later see exactly what they approved,
  * rather than today's rendering of it.
  */
-export const GRANT_BOUNDARY_VERSION = "2026-08-16";
+export const GRANT_BOUNDARY_VERSION = "2026-10-23";
 
 export const movingScopes = [
   "moving.context.read",
@@ -27,6 +28,68 @@ export const movingScopes = [
   "moving.queue.work",
   "moving.archive",
 ] as const;
+
+/** Explicit consent protocol; old forms must reload rather than guess intent. */
+export const GRANT_CONSENT_POLICY = "explicit-intent-v1";
+export function grantCatalogFingerprint(scopes: readonly string[] = movingScopes) {
+  return JSON.stringify([GRANT_BOUNDARY_VERSION, [...scopes].sort()]);
+}
+export function requireCurrentConsent(policy?: string, fingerprint?: string) {
+  if (policy !== GRANT_CONSENT_POLICY || fingerprint !== grantCatalogFingerprint()) {
+    throw new ConvexError("AI connection choices have changed. Reload Settings → AI connections, review the current permissions and end date, then try again.");
+  }
+}
+export function explicitScopes(scopes: readonly MovingScope[], intent?: "full" | "chosen") {
+  if (intent !== "full" && intent !== "chosen") {
+    throw new ConvexError("Reload AI connections and explicitly choose full access or chosen permissions.");
+  }
+  const selected = [...new Set(scopes)];
+  if (!selected.length || selected.some(scope => !movingScopes.includes(scope))) {
+    throw new ConvexError("Choose at least one current Assist With Moving permission.");
+  }
+  if (intent === "full" && (selected.length !== movingScopes.length || movingScopes.some(scope => !selected.includes(scope)))) {
+    throw new ConvexError("Full access must include the current permission catalog. Reload and review your choices.");
+  }
+  return intent === "full" ? [...movingScopes] : selected;
+}
+export function explicitExpiry(intent: "none" | "chosen" | undefined, days: number | null | undefined, now: number) {
+  if (intent === "none" && (days === undefined || days === null)) return undefined;
+  if (intent === "chosen" && typeof days === "number") return chosenExpiry(days, now);
+  throw new ConvexError("Reload AI connections and explicitly choose an end date or no end date.");
+}
+
+/** Frozen legacy baseline: never extend this when adding new scopes. */
+export const LEGACY_FULL_SCOPE_BASELINE = [
+  "moving.context.read", "moving.evidence.read", "moving.work.write",
+  "moving.queue.work", "moving.archive",
+] as const;
+
+type ScopeGrant = { scopes: readonly string[]; scopeChoice?: "full" | "chosen"; withheldScopes?: readonly string[] };
+export function effectiveScopeChoice(grant: ScopeGrant): "full" | "chosen" {
+  return grant.withheldScopes !== undefined ? (grant.withheldScopes.length ? "chosen" : "full") : grant.scopeChoice ?? "chosen";
+}
+
+/** Full connections include future catalog additions; chosen ones never widen. */
+export function effectiveScopes(grant: ScopeGrant): readonly string[] {
+  return movingScopes.filter(scope => !(grant.withheldScopes ?? (grant.scopeChoice === "full" ? [] : LEGACY_FULL_SCOPE_BASELINE.filter(scope => !grant.scopes.includes(scope)))).includes(scope));
+}
+
+export function effectiveExpiry(grant: {
+  expiresAt?: number; expiryChoice?: "none" | "chosen" | "automatic";
+}) {
+  return grant.expiresAt;
+}
+
+/** Validate a duration only after the caller has established explicit intent. */
+export function chosenExpiry(days: number | undefined, now: number) {
+  if (days === undefined) return undefined;
+  if (!Number.isFinite(days) || days < 1 || !Number.isInteger(days)) {
+    throw new ConvexError("Choose a whole number of days of at least 1.");
+  }
+  const expiresAt = now + days * 86_400_000;
+  if (!isSupportedConnectionExpiry(expiresAt)) throw new ConvexError("Choose an end date within the supported date range.");
+  return expiresAt;
+}
 
 export type MovingScope = (typeof movingScopes)[number];
 
@@ -62,7 +125,7 @@ export const MOVING_SCOPES: readonly MovingScopeInfo[] = [
     grants:
       "The private move evidence needed for the approved work, returned as protected content through Moving rather than a storage link.",
     doesNotImply:
-      "It does not allow uploading, sharing, publishing, exporting, or reaching evidence outside the moves you selected. Reading context does not include this — it is a separate approval.",
+      "It does not allow uploading, sharing, publishing, exporting, or reaching evidence outside the moves you selected. Reading context does not include this — it is a separate permission you can turn off.",
     writes: false,
   },
   {
@@ -158,33 +221,33 @@ export const GRANT_ERRORS = {
   noGrant: {
     code: "GRANT_REQUIRED",
     message:
-      "No active Assist With Moving grant covers this connection yet. Signing in proved who you are; it did not decide what your AI may do.",
+      "This connection is stopped or has not finished its first access check. Call describe_connection for its actual state.",
     recovery:
-      "Open Assist With Moving, go to Settings → AI connections, and approve a grant for the moves and operations you want.",
+      "Only the person can restore access at https://movingmanifest.com/settings/ai.",
   },
   revoked: {
     code: "GRANT_REVOKED",
     message: "That grant was revoked in Assist With Moving.",
     recovery:
-      "Ask the person who owns this move to approve a new grant, then reconnect.",
+      "Only the person can restore this connection at https://movingmanifest.com/settings/ai.",
   },
   expired: {
     code: "GRANT_EXPIRED",
     message: "That grant has expired.",
     recovery:
-      "Approve a new grant in Settings → AI connections, then reconnect.",
+      "Only the person can clear or extend the end date at https://movingmanifest.com/settings/ai.",
   },
   outOfScope: {
     code: "GRANT_SCOPE_MISSING",
     message: "This grant does not include the operation you asked for.",
     recovery:
-      "Ask for the smallest additional authority in Settings → AI connections, or do the part the grant already covers.",
+      "Only the person can restore this power at https://movingmanifest.com/settings/ai.",
   },
   outOfMoveScope: {
     code: "GRANT_MOVE_MISSING",
     message: "This grant does not cover that move.",
     recovery:
-      "Use a move this connection was approved for, or add it in Settings → AI connections.",
+      "Only the person can restore access to this move at https://movingmanifest.com/settings/ai.",
   },
   unknownTool: {
     code: "GRANT_SCOPE_MISSING",
@@ -205,9 +268,13 @@ export function grantError(key: GrantErrorKey): never {
 /** The shape the enforcement path needs. Deliberately narrower than the row. */
 export type GrantDecisionInput = {
   scopes: readonly string[];
+  scopeChoice?: "full" | "chosen";
+  expiryChoice?: "none" | "chosen" | "automatic";
   moveScope: "allMoves" | "selectedMoves";
   moveIds: readonly string[];
   status: "active" | "revoked";
+  pausedAt?: number;
+  withheldScopes?: readonly string[];
   expiresAt?: number;
 };
 
@@ -227,9 +294,10 @@ export function findPermittingGrant<T extends GrantDecisionInput>(
   now: number,
 ): T | null {
   for (const grant of grants) {
-    if (grant.status !== "active") continue;
-    if (grant.expiresAt !== undefined && grant.expiresAt <= now) continue;
-    if (!grant.scopes.includes(scope)) continue;
+    if (grant.status !== "active" || grant.pausedAt !== undefined) continue;
+    const expiry = effectiveExpiry(grant);
+    if (expiry !== undefined && expiry <= now) continue;
+    if (!effectiveScopes(grant).includes(scope)) continue;
     if (grant.moveScope === "selectedMoves") {
       if (!moveId || !grant.moveIds.includes(moveId)) continue;
     }
@@ -267,6 +335,8 @@ export function buildConsentSnapshot(
 export function describeGrantBoundary() {
   return {
     boundaryVersion: GRANT_BOUNDARY_VERSION,
+    consentPolicyVersion: GRANT_CONSENT_POLICY,
+    catalogFingerprint: grantCatalogFingerprint(),
     scopes: MOVING_SCOPES.map((info) => ({ ...info })),
     neverExposed: [...NEVER_EXPOSED],
     neverPermitted: [...NEVER_PERMITTED],

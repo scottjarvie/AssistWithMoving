@@ -1,3 +1,6 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+const publicationInput = new AsyncLocalStorage();
+export function withPublicationInput(input, work) { return publicationInput.run({ acknowledgeContactDetails: input?.acknowledgeContactDetails, restorePrivately: input?.restorePrivately }, work); }
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 
@@ -70,6 +73,7 @@ export async function assistWithMovingRequest(
   config,
   { method = "GET", path, query, body, idempotencyKey }
 ) {
+  if (method !== "GET" && publicationInput.getStore()) body = { ...body, ...removeUndefined(publicationInput.getStore()) };
   const url = new URL(`${config.baseUrl}/${path.replace(/^\/+/g, "")}`);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== null && value !== "") {
@@ -291,6 +295,14 @@ export function toolErrorResult(error) {
       },
     ],
   };
+}
+
+export async function reduceConnection(config, input) {
+  return await assistWithMovingRequest(config, {
+    path: "/me/access",
+    method: "POST",
+    body: input,
+  });
 }
 
 export async function getApiContext(config) {
@@ -2541,6 +2553,7 @@ export async function createShareLink(config, input) {
       documentationProfileId: input.documentationProfileId,
       scope: input.scope,
       label: input.label,
+      acknowledgeContactDetails: input.acknowledgeContactDetails,
       role: input.role,
       allowedActions: input.allowedActions,
       expiresAt: input.expiresAt,
@@ -2613,4 +2626,12 @@ function removeUndefined(value) {
       .filter(([, entry]) => entry !== undefined)
       .map(([key, entry]) => [key, removeUndefined(entry)])
   );
+}
+
+export async function listArchivedAssignments(config, input) {
+  return assistWithMovingRequest(config, { path: `/moves/${input.moveId}/assignments`, query: { archived: "true", cursor: input.cursor } });
+}
+export async function restoreArchivedAssignment(config, input) {
+  if (input.dryRun) return { dryRun: true, archiveId: input.archiveId };
+  return assistWithMovingRequest(config, { method: "POST", path: `/moves/${input.moveId}/assignments/${input.archiveId}/restore` });
 }

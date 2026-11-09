@@ -11,15 +11,22 @@ const apiMock = vi.hoisted(() => ({
     summaryStats: "households.summaryStats",
   },
   apiKeys: {
+    settingsSummary: "apiKeys.settingsSummary",
     listForHousehold: "apiKeys.listForHousehold",
     create: "apiKeys.create",
     revoke: "apiKeys.revoke",
     rotate: "apiKeys.rotate",
   },
+  aiGrants: { listHouseholdChoices: "aiGrants.listHouseholdChoices", listMoveChoices: "aiGrants.listMoveChoices" },
 }));
 
 const apiKeyManagerData = vi.hoisted(() => ({
   mutation: vi.fn(),
+  historyMode: false,
+  movePaging: false,
+  memberPaging: false,
+  memberFinalEmpty: false,
+  queryCalls: vi.fn(),
   households: [
     {
       household: {
@@ -48,6 +55,7 @@ const apiKeyManagerData = vi.hoisted(() => ({
   keys: [
     {
       apiKeyId: "api_key_123" as Id<"apiKeys">,
+      version: 1,
       name: "Photo helper key",
       tokenPreview: "mmk_photo...1234",
       scopes: ["moves/read", "inventory/read", "photos/write"] as ApiKeyScope[],
@@ -66,14 +74,21 @@ vi.mock("../../convex/_generated/api", () => ({
 
 vi.mock("convex/react", () => ({
   useMutation: () => apiKeyManagerData.mutation,
-  useQuery: (query: string) => {
+  useQuery: (query: string, args: { cursor?: string }) => {
+    apiKeyManagerData.queryCalls(query, args);
     switch (query) {
       case apiMock.households.listMine:
         return apiKeyManagerData.households;
+      case apiMock.aiGrants.listHouseholdChoices:
+        return { households: apiKeyManagerData.memberPaging && args?.cursor ? (apiKeyManagerData.memberFinalEmpty ? [] : [{ household: { _id: "member_later", name: "Later member household" }, role: "owner" }]) : apiKeyManagerData.households, nextCursor: apiKeyManagerData.memberPaging && !args?.cursor ? "later-members" : null };
+      case apiMock.aiGrants.listMoveChoices:
+        return { moves: apiKeyManagerData.movePaging && args?.cursor ? [{ ...apiKeyManagerData.stats.moves[0], moveId: "move_later", title: "Later key move" }] : apiKeyManagerData.stats.moves, nextCursor: apiKeyManagerData.movePaging && !args?.cursor ? "later-moves" : null };
+      case apiMock.apiKeys.settingsSummary:
+        return apiKeyManagerData.stats;
       case apiMock.households.summaryStats:
         return apiKeyManagerData.stats;
       case apiMock.apiKeys.listForHousehold:
-        return apiKeyManagerData.keys;
+        return apiKeyManagerData.historyMode ? { keys: args?.cursor ? [{ ...apiKeyManagerData.keys[0], apiKeyId: "old_key" as Id<"apiKeys">, name: "Older archived key", status: "revoked" }]: apiKeyManagerData.keys, nextCursor: args?.cursor ? null : "older-keys" } : apiKeyManagerData.keys;
       default:
         return undefined;
     }
@@ -83,6 +98,21 @@ vi.mock("convex/react", () => ({
 import { ApiKeyManager } from "@/components/api-key-manager";
 
 describe("ApiKeyManager task tabs", () => {
+  it("starts and resets new keys to all permissions and no end date", async () => {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
+    expect(screen.getByLabelText("End date (optional days)")).toHaveValue("");
+    const checks = screen.getAllByRole("checkbox");
+    expect(checks).toHaveLength(12);
+    checks.forEach(check => expect(check).toBeChecked());
+    await user.click(checks[0]);
+    await user.type(screen.getByLabelText("End date (optional days)"), "7");
+    await user.click(screen.getByRole("button", { name: "Reset new connection" }));
+    screen.getAllByRole("checkbox").forEach(check => expect(check).toBeChecked());
+    expect(screen.getByLabelText("End date (optional days)")).toHaveValue("");
+  });
+
   it("opens on key creation and separates connections, overview, and advanced settings", async () => {
     const user = userEvent.setup();
 
@@ -137,12 +167,12 @@ describe("ApiKeyManager task tabs", () => {
 
     expect(
       screen.getByText(
-        "Check household, move, item, member, and AI connection counts before changing access.",
+        "Review the selected household, available moves, and AI connections before changing access.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Simple setup for an AI assistant")).toBeInTheDocument();
-    expect(screen.getByText("Households")).toBeInTheDocument();
-    expect(screen.getByText("Items")).toBeInTheDocument();
+    expect(screen.getByText("Households on this page")).toBeInTheDocument();
+    expect(screen.getByText("Moves on this page")).toBeInTheDocument();
     expect(screen.queryByText("Photo helper key")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Advanced" }));
@@ -236,4 +266,82 @@ describe("ApiKeyManager task tabs", () => {
       apiKeyManagerData.stats.activeApiKeyCount = originalCount;
     }
   });
+});
+
+
+it("pages older API keys and returns to recent keys", async () => {
+  apiKeyManagerData.historyMode = true;
+  apiKeyManagerData.queryCalls.mockClear();
+  try {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    await user.click(screen.getByRole("tab", { name: "Connections" }));
+    await user.click(screen.getByRole("button", { name: "Older API keys" }));
+    expect(apiKeyManagerData.queryCalls).toHaveBeenCalledWith(apiMock.apiKeys.listForHousehold, { householdId: "household_123", cursor: "older-keys" });
+    expect(screen.getByText("Older archived key")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Recent API keys" }));
+    expect(screen.getByText("Photo helper key")).toBeInTheDocument();
+  } finally { apiKeyManagerData.historyMode = false; }
+});
+
+it("uses bounded member/key/move queries and preserves a move restriction across pages", async () => {
+  apiKeyManagerData.memberPaging = true;
+  apiKeyManagerData.movePaging = true;
+  apiKeyManagerData.queryCalls.mockClear();
+  try {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    const move = screen.getByLabelText("Where can it work?");
+    await user.selectOptions(move, "move_123");
+    await user.click(screen.getByRole("button", { name: "More key move choices" }));
+    expect(move).toHaveValue("move_123");
+    await user.selectOptions(move, "move_later");
+    await user.click(screen.getByRole("button", { name: "First key move choices" }));
+    expect(move).toHaveValue("move_later");
+    await user.click(screen.getByRole("button", { name: "More member households" }));
+    const household = screen.getByLabelText("Household");
+    expect(household).toHaveValue("household_123");
+    await user.selectOptions(household, "member_later");
+    expect(move).toHaveValue("all");
+    expect(apiKeyManagerData.queryCalls).not.toHaveBeenCalledWith(apiMock.households.listMine, expect.anything());
+    expect(apiKeyManagerData.queryCalls).not.toHaveBeenCalledWith(apiMock.households.summaryStats, expect.anything());
+    expect(apiKeyManagerData.queryCalls).toHaveBeenCalledWith(apiMock.apiKeys.settingsSummary, { householdId: "household_123" });
+  } finally { apiKeyManagerData.memberPaging = false; apiKeyManagerData.movePaging = false; }
+});
+
+it("can pass an empty filtered membership page to reach a later active household", async () => {
+  const original = apiKeyManagerData.households;
+  apiKeyManagerData.households = [];
+  apiKeyManagerData.memberPaging = true;
+  try {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    await user.click(screen.getByRole("button", { name: "More member households" }));
+    expect(screen.getByLabelText("Household")).toHaveValue("member_later");
+    expect(screen.getByRole("button", { name: "Create key" })).toBeInTheDocument();
+  } finally { apiKeyManagerData.households = original; apiKeyManagerData.memberPaging = false; }
+});
+
+it("returns from an empty final member page without reloading", async () => {
+  const original = apiKeyManagerData.households;
+  apiKeyManagerData.households = [];
+  apiKeyManagerData.memberPaging = true;
+  apiKeyManagerData.memberFinalEmpty = true;
+  try {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    await user.click(screen.getByRole("button", { name: "More member households" }));
+    expect(screen.queryByRole("button", { name: "More member households" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "First member households" }));
+    expect(screen.getByRole("button", { name: "More member households" })).toBeInTheDocument();
+  } finally { apiKeyManagerData.households = original; apiKeyManagerData.memberPaging = false; apiKeyManagerData.memberFinalEmpty = false; }
+});
+
+it("submits the displayed key revision when the person revokes it", async () => {
+  apiKeyManagerData.mutation.mockClear();
+  const user = userEvent.setup();
+  render(<ApiKeyManager enabled />);
+  await user.click(screen.getByRole("tab", { name: "Connections" }));
+  await user.click(screen.getByRole("button", { name: "Revoke Photo helper key" }));
+  expect(apiKeyManagerData.mutation).toHaveBeenCalledWith({ householdId: "household_123", apiKeyId: "api_key_123", expectedVersion: 1 });
 });

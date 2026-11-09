@@ -1,3 +1,4 @@
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 // OAuth MCP gateway tools for MOVE SETUP & CONFIG:
 //   update_move      → move basics: dates, start/end locations, distance, status
 //   list_transport   → the move's transportation (vehicles/PODs/trailers) + zones
@@ -20,7 +21,6 @@ import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
-  internalMutation,
   internalQuery,
   type MutationCtx,
   type QueryCtx,
@@ -178,6 +178,7 @@ async function resolveTransportZoneId(
 
 // ---- update_move -----------------------------------------------------------
 export const updateMoveArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -197,7 +198,7 @@ export const updateMoveArgs = {
   ),
   moveLevelWeightAllowanceLb: v.optional(v.union(v.number(), v.null())),
 };
-export const updateMove = internalMutation({
+export const updateMove = aiMutation({
   args: updateMoveArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -278,6 +279,7 @@ export const updateMove = internalMutation({
 
 // ---- list_transport --------------------------------------------------------
 export const listTransportArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -358,12 +360,13 @@ const transportDraftValidator = v.object({
   archive: v.optional(v.boolean()),
 });
 export const upsertTransportArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
   transports: v.array(transportDraftValidator),
 };
-export const upsertTransport = internalMutation({
+export const upsertTransport = aiMutation({
   args: upsertTransportArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -587,6 +590,7 @@ export const upsertTransport = internalMutation({
 
 // ---- place_box -------------------------------------------------------------
 export const placeBoxArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -605,7 +609,7 @@ export const placeBoxArgs = {
   destinationRoom: v.optional(v.string()),
   destinationRoomId: v.optional(v.id("moveSpaces")),
 };
-export const placeBox = internalMutation({
+export const placeBox = aiMutation({
   args: placeBoxArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -721,6 +725,7 @@ export const placeBox = internalMutation({
 // exported loadAssignmentValidation/assertResourceAndZone so that logic stays
 // single-sourced.
 export const updateBoxArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -766,7 +771,7 @@ export const updateBoxArgs = {
   assignmentOverrideReason: v.optional(v.string()),
   dryRun: v.optional(v.boolean()),
 };
-export const updateBox = internalMutation({
+export const updateBox = aiMutation({
   args: updateBoxArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -1060,6 +1065,7 @@ export const updateBox = internalMutation({
 // identify the item by itemId only (agents get itemIds from list_items,
 // search_inventory, or get_item).
 export const updateItemArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -1103,7 +1109,7 @@ export const updateItemArgs = {
   assignmentOverrideReason: v.optional(v.string()),
   dryRun: v.optional(v.boolean()),
 };
-export const updateItem = internalMutation({
+export const updateItem = aiMutation({
   args: updateItemArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -1411,6 +1417,7 @@ export const updateItem = internalMutation({
 // and can only grant a role up to their own — no privilege escalation via the
 // agent. Pending email invites auto-activate when the invitee signs up.
 export const addMoveParticipantArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -1436,7 +1443,7 @@ export const addMoveParticipantArgs = {
   ),
   canRunMyQueue: v.optional(v.boolean()),
 };
-export const addMoveParticipant = internalMutation({
+export const addMoveParticipant = aiMutation({
   args: addMoveParticipantArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -1472,13 +1479,14 @@ export const addMoveParticipant = internalMutation({
 
 // ---- convert_item_to_box ---------------------------------------------------
 export const convertItemToBoxArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
   itemId: v.id("items"),
   containerType: v.optional(boxContainerType),
 };
-export const convertItemToBox = internalMutation({
+export const convertItemToBox = aiMutation({
   args: convertItemToBoxArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -1509,12 +1517,13 @@ export const convertItemToBox = internalMutation({
 
 // ---- archive_item ----------------------------------------------------------
 export const archiveItemArgs = {
+  ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
   moveId: v.id("moves"),
   itemId: v.id("items"),
 };
-export const archiveItem = internalMutation({
+export const archiveItem = aiMutation({
   args: archiveItemArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(

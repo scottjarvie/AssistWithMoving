@@ -28,11 +28,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { internal } from "../../convex/_generated/api";
+import { api, internal } from "../../convex/_generated/api";
 import { createMovingServer } from "../../convex/httpRoutes/mcp";
 import {
   GRANT_BOUNDARY_VERSION,
-  buildConsentSnapshot,
   movingScopes,
 } from "../../convex/lib/aiGrants";
 import schema from "../../convex/schema";
@@ -244,27 +243,18 @@ async function approveGrant(
   fixture: Awaited<ReturnType<typeof seedLifecycle>>,
   clientId: string | undefined,
 ) {
-  return fixture.t.run(async (ctx) => {
-    const now = Date.now();
-    return ctx.db.insert("aiGrants", {
-      ownerUserId: fixture.owner.userId,
-      householdId: fixture.owner.householdId,
-      label: `${SYNTHETIC_MARKER} connection`,
-      clientId,
-      scopes: [...movingScopes],
-      moveScope: "selectedMoves",
-      moveIds: [fixture.owner.moveId],
-      status: "active",
-      consentBoundaryVersion: GRANT_BOUNDARY_VERSION,
-      consentSnapshot: buildConsentSnapshot([...movingScopes]),
-      expiresAt: now + 30 * 24 * 60 * 60 * 1_000,
-      approvedAt: now,
-      useCount: 0,
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-  });
+  const client = clientId ?? CLIENT_A;
+  await fixture.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: OWNER_SUBJECT, clientId: client });
+  const current = await fixture.t.query(internal.aiGrants.describeConnection, { subject: OWNER_SUBJECT, clientId: client });
+  if (current.status === "revoked") {
+    const owner = fixture.t.withIdentity({ subject: OWNER_SUBJECT, sid: "sess_harness" });
+    const rows = await owner.query(api.connectionSettings.list, {});
+    const row = rows.connections[0];
+    await owner.mutation(api.connectionSettings.change, { connectionId: row.id, expectedVersion: row.version, opId: `restore:${row.version}`, action: "restore" });
+  }
+  const state = await fixture.t.query(internal.aiGrants.describeConnection, { subject: OWNER_SUBJECT, clientId: client });
+  await fixture.t.mutation(internal.aiGrants.reduceConnection, { subject: OWNER_SUBJECT, clientId: client, expectedVersion: state.version!, opId: `select:${state.version}`, moveIds: [fixture.owner.moveId] });
+  return (await fixture.t.run(ctx => ctx.db.query("aiGrants").withIndex("by_owner_client_status", q => q.eq("ownerUserId", fixture.owner.userId).eq("clientId", client)).first()))!._id;
 }
 
 function handlerFor(
@@ -328,12 +318,12 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
     const handler = handlerFor(fixture, OWNER_SUBJECT, CLIENT_A, []);
     const listed = await handler.fetch(modernRequest("tools/list"));
     const names = ((await listed.json()) as any).result.tools.map((t: any) => t.name);
-    expect(names).toEqual(["describe_connection"]);
+    expect(names).toEqual(["describe_connection", "reduce_connection"]);
     await handler.close();
     record(
       "1. Discover without authority",
       "Refused",
-      "Signing in lists no product tools; only the self-describing tool appears",
+      "Signing in lists no product tools; only connection description and own-access reduction appear",
     );
   });
 
@@ -530,7 +520,7 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
     );
   });
 
-  it("8. refuses the next call after revocation, and recovers on reconnect", async () => {
+  it("8. refuses the next call after revocation, and recovers only through the person", async () => {
     const fixture = await seedLifecycle();
     const grantId = await approveGrant(fixture, CLIENT_A);
     const before = handlerFor(fixture, OWNER_SUBJECT, CLIENT_A);
@@ -539,9 +529,7 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
     });
     expect(worked.isError).toBeFalsy();
 
-    await fixture.t.run(async (ctx) => {
-      await ctx.db.patch(grantId, { status: "revoked", revokedAt: Date.now() });
-    });
+    await fixture.t.mutation(internal.aiGrants.reduceConnection, { subject: OWNER_SUBJECT, clientId: CLIENT_A, expectedVersion: (await fixture.t.query(internal.aiGrants.describeConnection, { subject: OWNER_SUBJECT, clientId: CLIENT_A })).version!, opId: "revoke", action: "revoke" });
 
     // Same live connection, same still-valid token, next call.
     const afterRevoke = await callTool(before, "get_move_brief", {
@@ -551,10 +539,10 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
     expect(afterRevoke.structuredContent.error.code).toBe("GRANT_REQUIRED");
     await before.close();
 
-    // Reconnecting after a deployment: a fresh handler with a fresh grant
-    // rebuilds the catalog, which is how a stale tool list recovers.
+    // Only an explicit person restoration recovers access. Reconnecting alone
+    // cannot clear the shared authority's revoke.
     const newGrantId = await approveGrant(fixture, CLIENT_A);
-    expect(newGrantId).not.toBe(grantId);
+    expect(newGrantId).toBe(grantId);
     const reconnected = handlerFor(fixture, OWNER_SUBJECT, CLIENT_A);
     const listed = await reconnected.fetch(modernRequest("tools/list"));
     const names = ((await listed.json()) as any).result.tools.map((t: any) => t.name);
@@ -576,7 +564,7 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
     record(
       "8. Revoke and reconnect",
       "Immediate",
-      "The next call fails on a valid token; reconnecting rebuilds the catalog; past activity stays readable",
+      "The next call fails on a valid token; the person restores access; past activity stays readable",
     );
   });
 
@@ -615,6 +603,9 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
         "mcpOperations",
         "aiGrantActivities",
         "aiGrants",
+        "aiAccessConnections",
+        "aiAccessOwners",
+        "aiConnectionChanges",
         "moves",
         "householdMemberships",
         "households",

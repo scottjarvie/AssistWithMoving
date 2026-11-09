@@ -1,10 +1,17 @@
-import { anyApi, type FunctionReference } from "convex/server";
+import { withSharedPublishing } from "./lib/sharedPublishing";
+import { readAccess, readConnection, connectionAccess, accessState, keyScopes } from "./lib/carriedAccess";
+import { previewPublicPacket } from "./publicPackets";
+import { checkPublishing } from "./lib/publishingCheck";
+import apiToolAccess from "../shared/api-tool-access.json";
+import { apiKeyScopes } from "./lib/apiKeys";
+import { anyApi, makeFunctionReference, type FunctionReference } from "convex/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
+import { SETTINGS_REFUSAL } from "./lib/connectionReduction";
 import { hashApiKey } from "./lib/apiKeys";
 import { getAiProviderStatus } from "./lib/aiProvider";
 import {
@@ -145,6 +152,7 @@ import {
   parseRestPath,
   requestHashInput,
   requiredScopesForRestRoute,
+  isShareLinkUnpublish,
   restError,
   restOk,
   restApiRateLimit,
@@ -230,6 +238,7 @@ const restMovePersonRoles = [
 const maxBatchUpsertItems = 100;
 
 const internalFunctions = anyApi as unknown as {
+  apiKeys: { reduceCallingKey: FunctionReference<"mutation", "internal", { apiKeyId: Id<"apiKeys"> } & import("./lib/connectionReduction").Reduction, { version: number; receipt: Id<"aiConnectionChanges">; settings: string }> };
   planOps: {
     applyApiOps: FunctionReference<
       "mutation",
@@ -242,6 +251,8 @@ const internalFunctions = anyApi as unknown as {
         ops: unknown[];
         apiKeyId: Id<"apiKeys">;
         agentLabel?: string;
+        acknowledgeContactDetails?: unknown;
+        restorePrivately?: boolean;
       },
       unknown
     >;
@@ -269,7 +280,10 @@ export const handle = internalMutation({
       method: args.method,
       segments,
     });
-    if (!requiredScopes.length) {
+    const selfContext = segments.join("/") === "me" && args.method === "GET";
+    const selfReduction = segments.join("/") === "me/access" && args.method === "POST";
+    const unpublish = isShareLinkUnpublish({ method: args.method, segments });
+    if (!requiredScopes.length && !selfReduction && !selfContext && !unpublish) {
       return restError({
         status: 404,
         code: "not_found",
@@ -295,7 +309,9 @@ export const handle = internalMutation({
       const action = `${args.method} /api/v1/${segments.join("/")}`;
       const auth = await authenticateApiKey(ctx, {
         rawKey,
-        requiredScopes,
+        requiredScopes: selfReduction || selfContext ? [] : requiredScopes,
+        recordUse: !selfReduction,
+        inspectConnection: selfContext || selfReduction,
         moveId,
         action,
         allowRestrictedKeyWithoutMoveId:
@@ -312,9 +328,12 @@ export const handle = internalMutation({
         return restRateLimited(rateLimit);
       }
 
-      const response = await withIdempotency(ctx, args, auth, async () =>
-        routeRequest(ctx, args, segments, auth)
-      );
+      if (selfReduction) {
+        const body = args.body;
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(name => !["opId", "expectedVersion", "scopes", "moveIds", "expiresAt", "action"].includes(name)) || typeof body.expectedVersion !== "number" || (body.scopes !== undefined && (!Array.isArray(body.scopes) || body.scopes.some((s: unknown) => typeof s !== "string"))) || (body.moveIds !== undefined && (!Array.isArray(body.moveIds) || body.moveIds.some((s: unknown) => typeof s !== "string"))) || (body.expiresAt !== undefined && body.expiresAt !== null && typeof body.expiresAt !== "number") || (body.action !== undefined && typeof body.action !== "string")) throw new Error(SETTINGS_REFUSAL);
+        return withRestRateLimitHeaders(restOk({ data: await ctx.runMutation(internalFunctions.apiKeys.reduceCallingKey, { ...body, apiKeyId: auth.apiKeyId }) }), rateLimit);
+      }
+      const response = await ctx.runMutation(makeFunctionReference<"mutation", { request: RestRequestInput; auth: Awaited<ReturnType<typeof authenticateApiKey>> }, RestResponse>("restApi:commitRequest"), { request: args, auth });
       return withRestRateLimitHeaders(response, rateLimit);
     } catch (error) {
       return restError({
@@ -323,6 +342,15 @@ export const handle = internalMutation({
         message: error instanceof Error ? error.message : "Request failed.",
       });
     }
+  },
+});
+
+/** Isolated child transaction: the outer HTTP error response cannot commit a refused publication. */
+export const commitRequest = internalMutation({
+  args: { request: v.any(), auth: v.any() },
+  handler: async (ctx, { request, auth }): Promise<RestResponse> => {
+    const args = request as RestRequestInput;
+    return withSharedPublishing(ctx, { ownerUserId: auth.createdByUserId, verifiedClientId: `key:${auth.apiKeyId}` }, bodyObject(args.body), checked => withIdempotency(checked, args, auth, () => routeRequest(checked, args, parseRestPath(args.path), auth)));
   },
 });
 
@@ -592,7 +620,7 @@ async function routeRequest(
     return restOk(
       paginate(
         moves
-          .filter((move) => move.status !== "archived")
+          .filter((move) => move.status !== "archived" && (auth.allowedMoveIds === undefined || auth.allowedMoveIds.includes(move._id)))
           .map((move) => safeMove(move)),
         args.query
       )
@@ -690,7 +718,7 @@ async function routeRequest(
     return await routeBoxes(ctx, args, auth, moveId, nestedId);
   }
   if (nested === "assignments") {
-    return await routeAssignments(ctx, args, auth, moveId, nestedId);
+    return await routeAssignments(ctx, args, auth, moveId, nestedId, segments[4]);
   }
   if (nested === "planning-suggestions") {
     return await routePlanningSuggestions(
@@ -1243,6 +1271,8 @@ async function routePlanOps(
       ops,
       apiKeyId: auth.apiKeyId,
       agentLabel,
+      acknowledgeContactDetails: body.acknowledgeContactDetails,
+      restorePrivately: body.restorePrivately as boolean | undefined,
     });
     return restOk({ data: result }, 201);
   } catch (error) {
@@ -1523,8 +1553,8 @@ async function routeMe(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>
 ) {
   const [household, restrictedMove] = await Promise.all([
-    ctx.db.get(auth.householdId),
-    auth.moveId ? ctx.db.get(auth.moveId) : Promise.resolve(null),
+    auth.scopes.includes("moves/read") && auth.householdVisible ? ctx.db.get(auth.householdId) : Promise.resolve(null),
+    auth.moveId && auth.scopes.includes("moves/read") ? ctx.db.get(auth.moveId) : Promise.resolve(null),
   ]);
   return restOk({
     data: {
@@ -1534,12 +1564,21 @@ async function routeMe(
             name: household.name,
             slug: household.slug,
           }
-        : { householdId: auth.householdId },
+        : null,
       apiKey: {
         apiKeyId: auth.apiKeyId,
+        version: auth.version,
+        status: auth.status,
+        changedAt: auth.changedAt ?? null,
+        revokedAt: auth.revokedAt ?? null,
+        pausedAt: auth.pausedAt ?? null,
+        settings: "https://movingmanifest.com/settings/ai",
+        tools: Object.entries(apiToolAccess).filter(([name, tool]) => !tool.websiteOnly && (["get_api_context", "get_api_capabilities", "reduce_connection"].includes(name) || (auth.status === "active" && tool.scopes.every(scope => auth.scopes.includes(scope as typeof apiKeyScopes[number]))))).map(([name]) => name),
+        heldBack: Object.entries(apiToolAccess).filter(([name, tool]) => tool.websiteOnly || (!["get_api_context", "get_api_capabilities", "reduce_connection"].includes(name) && (auth.status !== "active" || tool.scopes.some(scope => !auth.scopes.includes(scope as typeof apiKeyScopes[number]))))).map(([tool, access]) => ({ tool, missingPower: access.websiteOnly ? "website-only" : access.scopes.length === 0 ? "active connection" : access.scopes.filter(scope => !auth.scopes.includes(scope as typeof apiKeyScopes[number])).join(", ") || access.scopes.join(", "), reason: access.websiteOnly ? "Household invitations stay website-only" : auth.status === "active" ? "Power removed" : auth.status })),
+        expiresAt: auth.expiresAt ?? null,
         scopes: auth.scopes,
-        moveRestricted: Boolean(auth.moveId),
-        moveId: auth.moveId,
+        moveRestricted: auth.moveRestricted,
+        moveId: auth.scopes.includes("moves/read") ? auth.moveId : undefined,
         createdByUserId: auth.createdByUserId,
       },
       restrictedMove:
@@ -1664,7 +1703,7 @@ async function routeCreateMove(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>
 ) {
-  if (auth.moveId) {
+  if (auth.moveRestricted) {
     return restError({
       status: 403,
       code: "move_restricted_key",
@@ -1750,7 +1789,7 @@ async function routeSetupMove(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>
 ) {
-  if (auth.moveId) {
+  if (auth.moveRestricted) {
     return restError({
       status: 403,
       code: "move_restricted_key",
@@ -4039,13 +4078,41 @@ async function routeBoxes(
   return restError({ status: 404, code: "not_found", message: "Box route not found." });
 }
 
+async function archiveApiAssignment(ctx: MutationCtx, auth: Awaited<ReturnType<typeof authenticateApiKey>>, assignment: Doc<"boxItems">) {
+  const { _id, _creationTime, ...source } = assignment; void _creationTime;
+  const archiveId = await ctx.db.insert("archivedBoxAssignments", { householdId: assignment.householdId, moveId: assignment.moveId, originalAssignmentId: _id, source, archivedAt: Date.now(), archivedByUserId: auth.createdByUserId, archivedByApiKeyId: auth.apiKeyId });
+  // The full source has moved into durable Archive, including notes and quantity.
+  await ctx.db.delete(_id);
+  return archiveId;
+}
+
 async function routeAssignments(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  assignmentIdSegment?: string
+  assignmentIdSegment?: string,
+  actionSegment?: string
 ) {
+  if (args.method === "GET" && args.query.archived === "true") {
+    const page = await ctx.db.query("archivedBoxAssignments").withIndex("by_move_archived", q => q.eq("moveId", moveId)).order("desc").paginate({ numItems: 25, cursor: args.query.cursor ?? null });
+    return restOk({ data: page.page.filter(row => row.householdId === auth.householdId).map(row => ({ archiveId: row._id, originalAssignmentId: row.originalAssignmentId, ...row.source, archivedAt: row.archivedAt, actor: "Your AI", restoredAt: row.restoredAt ?? null })), nextCursor: page.isDone ? null : page.continueCursor });
+  }
+  if (args.method === "POST" && assignmentIdSegment && actionSegment === "restore") {
+    const id = ctx.db.normalizeId("archivedBoxAssignments", assignmentIdSegment);
+    const archived = id ? await ctx.db.get(id) : null;
+    if (!archived || archived.householdId !== auth.householdId || archived.moveId !== moveId) throw new Error("Archived assignment not found.");
+    if (archived.restoredAssignmentId) return restOk({ data: { assignmentId: archived.restoredAssignmentId, restored: true } });
+    await requireApiBox(ctx, auth.householdId, moveId, archived.source.boxId);
+    await requireApiItem(ctx, auth.householdId, moveId, archived.source.itemId);
+    const existing = await ctx.db.query("boxItems").withIndex("by_item", q => q.eq("itemId", archived.source.itemId)).collect();
+    if (existing.some(row => row.moveId === moveId)) throw new Error("An assignment already exists. Review it before restoring this archived assignment.");
+    const assignmentId = await ctx.db.insert("boxItems", { ...archived.source, updatedAt: Date.now() });
+    await ctx.db.patch(archived._id, { restoredAssignmentId: assignmentId, restoredAt: Date.now() });
+    await auditApiWrite(ctx, auth, moveId, "assignment.api_restored", "boxItems", assignmentId, { archiveId: archived._id });
+    return restOk({ data: { assignmentId, restored: true } });
+  }
+
   if (args.method === "POST" && assignmentIdSegment === "suggest") {
     return await routeAssignmentSuggestions(ctx, args, auth, moveId);
   }
@@ -4126,16 +4193,16 @@ async function routeAssignments(
     ) {
       throw new Error("Assignment not found.");
     }
-    await ctx.db.delete(assignmentId);
+    const archiveId = await archiveApiAssignment(ctx, auth, assignment);
     await auditApiWrite(
       ctx,
       auth,
       moveId,
-      "assignment.api_deleted",
+      "assignment.api_archived",
       "boxItems",
       assignmentId
     );
-    return restOk({ data: { deleted: true } });
+    return restOk({ data: { deleted: true, archived: true, archiveId } });
   }
 
   return restError({
@@ -6045,6 +6112,15 @@ async function routeShareLinks(
       | undefined;
     const expiresAt =
       optionalNumber(body.expiresAt) ?? Date.now() + 30 * 24 * 60 * 60 * 1000;
+    const outgoing = await previewPublicPacket(ctx, { shareLinkId: "pending" as Id<"shareLinks">, householdId: auth.householdId, moveId, documentationProfileId, scope: parseShareLinkScope(body.scope) ?? (documentationProfileId ? "profile" : "move"), role: parseShareLinkRole(body.role) ?? "guest", allowedActions: parseShareLinkActions(body.allowedActions) ?? ["view", "download"], expiresAt, label: normalizeOptionalText(asString(body.label)) });
+    checkPublishing(outgoing, body.acknowledgeContactDetails);
+    // Read current power again beside the visibility write. These reads and
+    // the stored packet version participate in this Convex transaction's OCC.
+    const ownerFloor = await readAccess(ctx, auth.createdByUserId);
+    const callingConnection = await readConnection(ctx, auth.createdByUserId, `key:${auth.apiKeyId}`);
+    const current = ownerFloor && callingConnection ? connectionAccess(ownerFloor, callingConnection) : null;
+    const callingKey = await ctx.db.get(auth.apiKeyId);
+    if (!current || !callingConnection || callingKey?.credentialRetiredAt !== undefined || accessState(current, callingConnection) !== "active" || !keyScopes(current).includes("exports/create") || current.revision !== auth.version) throw new Error("Missing power exports/create: this connection changed or publishing is stopped. Only the person can restore it at https://movingmanifest.com/settings/ai.");
     const result = await createGeneratedShareLink(
       ctx,
       {
@@ -6334,17 +6410,17 @@ async function routeTopLevelBoxItems(
       throw new Error("Assignment not found.");
     }
 
-    await ctx.db.delete(assignment._id);
+    const archiveId = await archiveApiAssignment(ctx, auth, assignment);
     await auditApiWrite(
       ctx,
       auth,
       box.moveId,
-      "assignment.api_deleted",
+      "assignment.api_archived",
       "boxItems",
       assignment._id,
       { route: "top_level_box", boxId: box._id, itemId: item._id }
     );
-    return restOk({ data: { deleted: true, assignmentId: assignment._id } });
+    return restOk({ data: { deleted: true, archived: true, archiveId, assignmentId: assignment._id } });
   }
 
   return restError({
@@ -9849,6 +9925,9 @@ export function errorStatus(error: unknown) {
   if (message.includes("invalid api key") || message.includes("bearer")) return 401;
   if (
     message.includes("not allowed") ||
+    message.includes("website-only") ||
+    message.includes("only the person can restore") ||
+    message.includes("still being checked") ||
     message.includes("scope") ||
     message.includes("not authorized") ||
     message.includes("cannot view") ||

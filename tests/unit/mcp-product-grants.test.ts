@@ -22,6 +22,7 @@ import {
 } from "../../convex/httpRoutes/mcp";
 import {
   GRANT_BOUNDARY_VERSION,
+  GRANT_ERRORS,
   MOVING_SCOPES,
   MOVING_TOOL_SCOPES,
   NEVER_EXPOSED,
@@ -221,7 +222,7 @@ async function seedWorkspace(grant?: GrantOptions) {
         ownerUserId: userId,
         householdId,
         label: "Synthetic connection",
-        clientId: grant.clientId,
+        clientId: grant.clientId ?? CLIENT_ID,
         scopes: grant.scopes ?? [...movingScopes],
         moveScope: grant.moveScope ?? "allMoves",
         moveIds:
@@ -232,6 +233,7 @@ async function seedWorkspace(grant?: GrantOptions) {
         consentBoundaryVersion: GRANT_BOUNDARY_VERSION,
         consentSnapshot: buildConsentSnapshot(grant.scopes ?? [...movingScopes]),
         expiresAt: grant.expiresAt,
+        expiryChoice: grant.expiresAt === undefined ? "none" : "chosen",
         approvedAt: now,
         useCount: 0,
         version: 1,
@@ -242,6 +244,10 @@ async function seedWorkspace(grant?: GrantOptions) {
     }
     return { userId, householdId, moveId, otherMoveId, itemId, queueItemId, grantId };
   });
+  if (grant) {
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: grant.clientId ?? CLIENT_ID });
+    while (!(await t.run(ctx => ctx.db.query("aiAccessOwners").first()))!.bootstrapped) await t.mutation(internal.aiGrants.continueBootstrap, { ownerUserId: ids.userId });
+  }
   return { t, ...ids };
 }
 
@@ -273,7 +279,7 @@ describe("the scope catalog", () => {
     // ever consulted permissively; a scope with no tool is copy promising an
     // authority nothing can exercise.
     for (const name of STATELESS_MOVING_TOOL_NAMES) {
-      if (name === "describe_connection") continue;
+      if (["describe_connection", "reduce_connection"].includes(name)) continue;
       expect(scopeForTool(name), `${name} has no scope`).not.toBeNull();
     }
     const used = new Set(Object.values(MOVING_TOOL_SCOPES));
@@ -281,7 +287,7 @@ describe("the scope catalog", () => {
       expect([...used], `${scope} is published but unreachable`).toContain(scope);
     }
     expect(Object.keys(MOVING_TOOL_SCOPES).sort()).toEqual(
-      STATELESS_MOVING_TOOL_NAMES.filter((n) => n !== "describe_connection")
+      STATELESS_MOVING_TOOL_NAMES.filter((n) => !["describe_connection", "reduce_connection"].includes(n))
         .slice()
         .sort(),
     );
@@ -481,7 +487,7 @@ describe("enforcement on every call", () => {
     );
     const listed = await handler.fetch(modernRequest("tools/list"));
     const names = ((await listed.json()) as any).result.tools.map((t: any) => t.name);
-    expect(names).toEqual(["describe_connection"]);
+    expect(names).toEqual(["describe_connection", "reduce_connection"]);
     await handler.close();
   });
 
@@ -597,9 +603,7 @@ describe("enforcement on every call", () => {
       principal: PRINCIPAL,
       moveId: fixture.moveId,
     });
-    await fixture.t.run(async (ctx) => {
-      await ctx.db.patch(fixture.grantId, { status: "revoked", revokedAt: Date.now() });
-    });
+    await fixture.t.mutation(internal.aiGrants.reduceConnection, { subject: SUBJECT, clientId: CLIENT_ID, action: "revoke", opId: "revoke", expectedVersion: (await fixture.t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId: CLIENT_ID })).version! });
     const refusal = await refusalOf(
       fixture.t.query(mcp.getMoveBrief, {
         principal: PRINCIPAL,
@@ -843,4 +847,15 @@ describe("what the person can see afterwards", () => {
     expect(types).toContain("scopeUsed");
     expect(activity.every((row) => row.message.length > 0)).toBe(true);
   });
+});
+
+describe("canonical grant limit recovery", () => {
+  it.each(["outOfScope", "outOfMoveScope"] as const)(
+    "gives the person the exact settings URL for %s",
+    (reason) => {
+      expect(GRANT_ERRORS[reason].recovery).toContain(
+        "https://movingmanifest.com/settings/ai",
+      );
+    },
+  );
 });

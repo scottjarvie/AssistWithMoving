@@ -264,6 +264,8 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
           })),
           expiresAt,
           apiActor: {
+            acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined,
+            restorePrivately: body.restorePrivately as boolean | undefined,
             apiKeyId: String(auth.apiKeyId),
             createdByUserId: auth.createdByUserId,
           },
@@ -360,6 +362,8 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
       });
       const expiresAt = Date.now() + uploadSessionTtlMs;
       const apiActor = {
+        acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined,
+        restorePrivately: body.restorePrivately as boolean | undefined,
         apiKeyId: String(auth.apiKeyId),
         createdByUserId: auth.createdByUserId,
       };
@@ -504,6 +508,8 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
           moveId,
           uploadSessionId,
           apiActor: {
+            acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined,
+            restorePrivately: body.restorePrivately as boolean | undefined,
             apiKeyId: String(auth.apiKeyId),
             createdByUserId: auth.createdByUserId,
           },
@@ -581,6 +587,8 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         moveId,
         uploadSessionId,
         apiActor: {
+            acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined,
+            restorePrivately: body.restorePrivately as boolean | undefined,
           apiKeyId: String(auth.apiKeyId),
           createdByUserId: auth.createdByUserId,
         },
@@ -614,6 +622,8 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         verificationStatus: optionalVerificationStatus(body.verificationStatus),
         capturedAt: optionalNumber(body.capturedAt),
         apiActor: {
+            acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined,
+            restorePrivately: body.restorePrivately as boolean | undefined,
           apiKeyId: String(auth.apiKeyId),
           createdByUserId: auth.createdByUserId,
         },
@@ -635,6 +645,8 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
             photoId,
             derivativeRefs: generated.derivativeRefs,
             apiActor: {
+            acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined,
+            restorePrivately: body.restorePrivately as boolean | undefined,
               apiKeyId: String(auth.apiKeyId),
               createdByUserId: auth.createdByUserId,
             },
@@ -649,6 +661,8 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
             photoId,
             derivativeError,
             apiActor: {
+            acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined,
+            restorePrivately: body.restorePrivately as boolean | undefined,
               apiKeyId: String(auth.apiKeyId),
               createdByUserId: auth.createdByUserId,
             },
@@ -702,6 +716,8 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         moveId,
         uploadSessionId,
         apiActor: {
+            acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined,
+            restorePrivately: body.restorePrivately as boolean | undefined,
           apiKeyId: String(auth.apiKeyId),
           createdByUserId: auth.createdByUserId,
         },

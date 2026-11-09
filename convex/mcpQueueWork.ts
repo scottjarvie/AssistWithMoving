@@ -1,3 +1,4 @@
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 /**
  * Canonical Queue workflow for a connected AI.
  *
@@ -23,7 +24,6 @@ import { ConvexError, v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import {
-  internalMutation,
   internalQuery,
   type MutationCtx,
   type QueryCtx,
@@ -224,7 +224,7 @@ export const listQueueWork = internalQuery({
   },
 });
 
-export const claimQueueWork = internalMutation({
+export const claimQueueWork = aiMutation({
   args: { ...commandArgs, nextStep: v.string() },
   handler: async (ctx, args) => {
     const { actor, householdId, grantId } = await queueActorFor(
@@ -249,7 +249,7 @@ export const claimQueueWork = internalMutation({
   },
 });
 
-export const releaseQueueWork = internalMutation({
+export const releaseQueueWork = aiMutation({
   args: { ...commandArgs, reason: v.string() },
   handler: async (ctx, args) => {
     const { actor, householdId, grantId } = await queueActorFor(
@@ -281,7 +281,7 @@ export const releaseQueueWork = internalMutation({
  * you with one specific thing to answer, rather than saving a result built on
  * an assumption nobody agreed to.
  */
-export const askQueueQuestion = internalMutation({
+export const askQueueQuestion = aiMutation({
   args: { ...commandArgs, question: v.string() },
   handler: async (ctx, args) => {
     const { actor, householdId, grantId } = await queueActorFor(
@@ -306,8 +306,9 @@ export const askQueueQuestion = internalMutation({
   },
 });
 
-export const completeQueueWork = internalMutation({
+export const completeQueueWork = aiMutation({
   args: {
+    ...publicationArgs,
     ...commandArgs,
     resultSummary: v.optional(v.string()),
     resultRefs: v.optional(v.array(queueResultRefValidator)),

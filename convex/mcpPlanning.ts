@@ -1,8 +1,9 @@
+import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
+import { effectiveScopes } from "./lib/aiGrants";
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
-  internalMutation,
   internalQuery,
   query,
   type MutationCtx,
@@ -293,7 +294,7 @@ async function listAccessibleMoves(ctx: QueryCtx, principal: McpPrincipal) {
   const now = Date.now();
   const grants = (
     await activeGrantsForUser(ctx, user._id, principal.clientId, now)
-  ).filter((grant) => grant.scopes.includes("moving.context.read"));
+  ).filter((grant) => effectiveScopes(grant).includes("moving.context.read"));
   if (grants.length === 0) {
     grantError(
       (await activeGrantsForUser(ctx, user._id, principal.clientId, now)).length
@@ -1377,8 +1378,9 @@ async function saveItems(
   return results;
 }
 
-export const saveMoveContext = internalMutation({
+export const saveMoveContext = aiMutation({
   args: {
+    ...publicationArgs,
     principal: mcpPrincipalValidator,
     moveId: v.id("moves"),
     operationId: v.string(),
@@ -1437,8 +1439,9 @@ export const saveMoveContext = internalMutation({
   },
 });
 
-export const saveInventory = internalMutation({
+export const saveInventory = aiMutation({
   args: {
+    ...publicationArgs,
     principal: mcpPrincipalValidator,
     moveId: v.id("moves"),
     operationId: v.string(),
@@ -1468,8 +1471,9 @@ export const saveInventory = internalMutation({
   },
 });
 
-export const savePlanningRecord = internalMutation({
+export const savePlanningRecord = aiMutation({
   args: {
+    ...publicationArgs,
     principal: mcpPrincipalValidator,
     moveId: v.id("moves"),
     operationId: v.string(),
@@ -1500,8 +1504,9 @@ export const savePlanningRecord = internalMutation({
   },
 });
 
-export const saveCompleteResult = internalMutation({
+export const saveCompleteResult = aiMutation({
   args: {
+    ...publicationArgs,
     principal: mcpPrincipalValidator,
     moveId: v.id("moves"),
     operationId: v.string(),
@@ -1714,7 +1719,7 @@ export const listForMove = query({
 
 // Cleanup is deliberately internal and bounded; it supports synthetic proof and
 // normal expiry maintenance without exposing deletion as an MCP tool.
-export const cleanupExpiredOperations = internalMutation({
+export const cleanupExpiredOperations = aiMutation({
   args: { now: v.optional(v.number()), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const now = args.now ?? Date.now();

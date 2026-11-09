@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useMemberHouseholdChoices } from "./connection-household-choices";
 import {
   Activity,
   Bot,
@@ -12,7 +13,6 @@ import {
   FileImage,
   Home,
   KeyRound,
-  Package,
   RefreshCw,
   RotateCw,
   Settings2,
@@ -46,27 +46,9 @@ import {
 } from "@/lib/api-keys";
 import { describeMutationError } from "@/lib/mutation-error";
 
-type HouseholdEntry = {
-  household: {
-    _id: Id<"households">;
-    name: string;
-  };
-  role: string;
-};
-
-type HouseholdStats = {
-  moves: MoveSummary[];
-  moveCount: number;
-  archivedMoveCount: number;
-  itemCount: number;
-  boxCount: number;
-  activeApiKeyCount: number;
-  activeMemberCount: number;
-  pendingInvitationCount: number;
-};
-
 type ApiKeySummary = {
   apiKeyId: Id<"apiKeys">;
+  version: number;
   name: string;
   moveId?: Id<"moves">;
   tokenPreview: string;
@@ -94,20 +76,7 @@ type HelperPreset = {
   recommended?: boolean;
 };
 
-const fullTrustedAccessScopes: ApiKeyScope[] = [
-  "moves/read",
-  "moves/write",
-  "inventory/read",
-  "inventory/write",
-  "queue/read",
-  "queue/write",
-  "plans/read",
-  "plans/write",
-  "photos/write",
-  "exports/read",
-  "exports/create",
-  "members/manage",
-];
+const fullTrustedAccessScopes: ApiKeyScope[] = apiKeyScopeOptions.map(([scope]) => scope);
 
 const readOnlyScopes: ApiKeyScope[] = [
   "moves/read",
@@ -136,7 +105,7 @@ const helperPresets: HelperPreset[] = [
     id: "full",
     title: "Full trusted helper",
     description:
-      "Best when your assistant is actively helping set up the household, move, inventory, photos, exports, and collaborators.",
+      "Best when your assistant is actively helping set up the household, move, inventory, photos, exports, and existing household context. Invitations stay website-only.",
     name: "Full trusted AI helper key",
     scopes: fullTrustedAccessScopes,
     recommended: true,
@@ -153,7 +122,7 @@ const helperPresets: HelperPreset[] = [
     id: "setup",
     title: "Set up move and members",
     description:
-      "Lets an assistant create move structure and invite household collaborators without changing inventory.",
+      "Lets an assistant create move structure and read household members without changing inventory. Invitations stay website-only.",
     name: "Set up move and members key",
     scopes: setupMoveAndMembersScopes,
   },
@@ -167,9 +136,9 @@ const helperPresets: HelperPreset[] = [
   },
   {
     id: "members",
-    title: "Invite collaborators",
+    title: "Read household members",
     description:
-      "A narrow key for adding people to the household when that is the only job.",
+      "A narrow key for reading the existing household member list. Invitations stay website-only.",
     name: "Member manager key",
     scopes: memberManagerScopes,
   },
@@ -192,7 +161,7 @@ const aiConnectionTasks = [
     value: "overview",
     label: "Overview",
     description:
-      "Check household, move, item, member, and AI connection counts before changing access.",
+      "Review the selected household, available moves, and AI connections before changing access.",
   },
   {
     value: "advanced",
@@ -218,7 +187,7 @@ function summarizeScopes(scopes: ApiKeyScope[]) {
   if (sameScopes(scopes, addItemsOnlyScopes)) return "Add items and photos";
   if (sameScopes(scopes, setupMoveAndMembersScopes)) return "Set up move";
   if (sameScopes(scopes, readOnlyScopes)) return "Read only";
-  if (sameScopes(scopes, memberManagerScopes)) return "Member invites";
+  if (sameScopes(scopes, memberManagerScopes)) return "Member list";
   return `${scopes.length} custom permissions`;
 }
 
@@ -236,27 +205,33 @@ export function ApiKeyManager({
   mode?: "settings" | "setup";
 }) {
   const setupMode = mode === "setup";
-  const households = useQuery(api.households.listMine, enabled ? {} : "skip") as
-    | HouseholdEntry[]
-    | undefined;
+  const memberChoices = useMemberHouseholdChoices(enabled);
+  const households = memberChoices.households;
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
   const effectiveHouseholdId =
     selectedHouseholdId ?? households?.[0]?.household._id ?? null;
   const stats = useQuery(
-    api.households.summaryStats,
+    api.apiKeys.settingsSummary,
     effectiveHouseholdId ? { householdId: effectiveHouseholdId } : "skip",
-  ) as HouseholdStats | undefined;
-  const keys = useQuery(
+  ) as { activeApiKeyCount: number; activeApiKeyCountTruncated?: boolean } | undefined;
+  const [movePage, setMovePage] = useState<{ householdId: Id<"households">; cursor: string } | null>(null);
+  const moveCursor = movePage?.householdId === effectiveHouseholdId ? movePage.cursor : undefined;
+  const moveChoices = useQuery(api.aiGrants.listMoveChoices, effectiveHouseholdId ? { householdId: effectiveHouseholdId, ...(moveCursor ? { cursor: moveCursor } : {}) } : "skip") as { moves: MoveSummary[]; nextCursor?: string | null } | undefined;
+  const [historyPage, setHistoryPage] = useState<{ householdId: Id<"households">; cursor: string } | null>(null);
+  const historyCursor = historyPage?.householdId === effectiveHouseholdId ? historyPage.cursor : undefined;
+  const keysResult = useQuery(
     api.apiKeys.listForHousehold,
-    effectiveHouseholdId ? { householdId: effectiveHouseholdId } : "skip",
-  ) as ApiKeySummary[] | undefined;
+    effectiveHouseholdId ? { householdId: effectiveHouseholdId, ...(historyCursor ? { cursor: historyCursor } : {}) } : "skip",
+  ) as { keys: ApiKeySummary[]; nextCursor: string | null } | ApiKeySummary[] | undefined;
+  const keys = Array.isArray(keysResult) ? keysResult : keysResult?.keys;
+  const nextCursor = Array.isArray(keysResult) ? null : keysResult?.nextCursor;
   const createKey = useMutation(api.apiKeys.create);
   const revokeKey = useMutation(api.apiKeys.revoke);
   const rotateKey = useMutation(api.apiKeys.rotate);
 
   const [name, setName] = useState("Full trusted AI helper key");
-  const [expiresInDays, setExpiresInDays] = useState("90");
+  const [expiresInDays, setExpiresInDays] = useState("");
   const [selectedMoveRestrictionId, setSelectedMoveRestrictionId] = useState<
     Id<"moves"> | "all"
   >("all");
@@ -277,22 +252,19 @@ export function ApiKeyManager({
   );
   const selectedHousehold = selectedHouseholdEntry?.household;
   const activeMoves = useMemo(
-    () => stats?.moves ?? [],
-    [stats],
+    () => moveChoices?.moves ?? [],
+    [moveChoices],
   );
   const moveTitleById = useMemo(
     () => new Map(activeMoves.map((move) => [move.moveId, move.title])),
     [activeMoves],
   );
-  const moveRestrictionId =
-    selectedMoveRestrictionId !== "all" &&
-    activeMoves.some((move) => move.moveId === selectedMoveRestrictionId)
-      ? selectedMoveRestrictionId
-      : "all";
+  const moveRestrictionId = selectedMoveRestrictionId;
   const selectedPresetId =
     helperPresets.find((preset) => sameScopes(scopes, preset.scopes))?.id ??
     "custom";
   const activeKeys = keys?.filter((key) => key.status === "active") ?? [];
+  const totalActiveKeys = Array.isArray(keysResult) ? activeKeys.length : stats?.activeApiKeyCount ?? activeKeys.length;
   const revokedKeys = keys?.filter((key) => key.status !== "active") ?? [];
   const lastUsedKey = activeKeys
     .filter((key) => typeof key.lastUsedAt === "number")
@@ -326,13 +298,14 @@ export function ApiKeyManager({
       const days = Number(expiresInDays);
       const expiresAt =
         Number.isFinite(days) && days > 0
-          ? Date.now() + Math.min(days, 3660) * 24 * 60 * 60 * 1000
+          ? Date.now() + days * 24 * 60 * 60 * 1000
           : undefined;
       const result = await createKey({
         householdId: effectiveHouseholdId,
         moveId: moveRestrictionId === "all" ? undefined : moveRestrictionId,
         name,
         scopes,
+        scopeChoice: sameScopes(scopes, fullTrustedAccessScopes) ? "full" : "chosen",
         expiresAt,
       });
       setOneTimeSecret(result.rawKey);
@@ -358,12 +331,12 @@ export function ApiKeyManager({
     }
   }
 
-  async function handleRevokeKey(apiKeyId: Id<"apiKeys">) {
+  async function handleRevokeKey(apiKeyId: Id<"apiKeys">, expectedVersion: number) {
     if (!effectiveHouseholdId) return;
     setBusy(`revoke-${apiKeyId}`);
     setMessage(null);
     try {
-      await revokeKey({ householdId: effectiveHouseholdId, apiKeyId });
+      await revokeKey({ householdId: effectiveHouseholdId, apiKeyId, expectedVersion });
       setMessage("AI connection revoked.");
     } catch (error) {
       setMessage(
@@ -379,6 +352,8 @@ export function ApiKeyManager({
 
   async function handleRotateKey(apiKeyId: Id<"apiKeys">) {
     if (!effectiveHouseholdId) return;
+    const current = keys?.find(key => key.apiKeyId === apiKeyId);
+    if (!current) { setMessage("Reload Settings before rotating this connection."); return; }
     setBusy(`rotate-${apiKeyId}`);
     setMessage(null);
     setOneTimeSecret(null);
@@ -386,6 +361,7 @@ export function ApiKeyManager({
       const result = await rotateKey({
         householdId: effectiveHouseholdId,
         apiKeyId,
+        expectedVersion: current.version,
       });
       setOneTimeSecret(result.rawKey);
       setMessage("AI connection rotated. The previous key was revoked.");
@@ -420,6 +396,14 @@ export function ApiKeyManager({
     }
   }
 
+  function resetNewConnection() {
+    setScopes(fullTrustedAccessScopes);
+    setExpiresInDays("");
+    setSelectedMoveRestrictionId("all");
+    setName("Full trusted helper");
+    setMessage(null);
+  }
+
   function toggleScope(scope: ApiKeyScope) {
     setScopes((current) =>
       current.includes(scope)
@@ -445,7 +429,7 @@ export function ApiKeyManager({
               household.
             </p>
           </div>
-          <Badge variant="outline">{activeKeys.length} active</Badge>
+          <Badge variant="outline">{totalActiveKeys}{stats?.activeApiKeyCountTruncated ? "+" : ""} active</Badge>
         </div>
 
         {keys === undefined && effectiveHouseholdId ? (
@@ -468,7 +452,7 @@ export function ApiKeyManager({
           </div>
         ) : (
           <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-            No active AI connections yet.
+            No active AI connections on this page.
           </p>
         )}
 
@@ -491,6 +475,8 @@ export function ApiKeyManager({
             </div>
           </details>
         ) : null}
+        {nextCursor && effectiveHouseholdId ? <Button type="button" variant="outline" onClick={() => setHistoryPage({ householdId: effectiveHouseholdId, cursor: nextCursor })}>Older API keys</Button> : null}
+        {historyCursor ? <Button type="button" variant="outline" onClick={() => setHistoryPage(null)}>Recent API keys</Button> : null}
       </div>
     );
   }
@@ -501,7 +487,7 @@ export function ApiKeyManager({
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatusTile
             icon={Home}
-            label="Households"
+            label="Households on this page"
             value={formatStat(households?.length)}
             note={
               selectedHousehold
@@ -511,28 +497,14 @@ export function ApiKeyManager({
           />
           <StatusTile
             icon={Truck}
-            label="Moves"
-            value={formatStat(stats?.moveCount ?? activeMoves.length)}
-            note={
-              stats?.archivedMoveCount
-                ? `${stats.archivedMoveCount} archived`
-                : "Active move workspaces"
-            }
-          />
-          <StatusTile
-            icon={Package}
-            label="Items"
-            value={formatStat(stats?.itemCount)}
-            note={
-              stats
-                ? `${formatStat(stats.boxCount)} boxes tracked`
-                : "Inventory count"
-            }
+            label="Moves on this page"
+            value={formatStat(activeMoves.length)}
+            note="Use the move picker to see more choices"
           />
           <StatusTile
             icon={Activity}
             label="AI connections"
-            value={formatStat(activeKeys.length)}
+            value={`${formatStat(totalActiveKeys)}${stats?.activeApiKeyCountTruncated ? "+" : ""}`}
             note={
               lastUsedKey
                 ? `Last used ${formatApiKeyDate(lastUsedKey.lastUsedAt)}`
@@ -566,10 +538,7 @@ export function ApiKeyManager({
                   People
                 </p>
                 <p className="mt-1 text-sm">
-                  {formatStat(stats?.activeMemberCount)} active
-                  {stats?.pendingInvitationCount
-                    ? `, ${stats.pendingInvitationCount} invited`
-                    : ""}
+                  Manage household people from the move workspace.
                 </p>
               </div>
               <Users className="size-5 text-primary" aria-hidden="true" />
@@ -609,7 +578,7 @@ export function ApiKeyManager({
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                   This is the normal choice when your assistant is helping set
                   up a move, add inventory, upload photos, export packets, or
-                  invite household collaborators.
+                  read existing household members. Invitations stay website-only.
                 </p>
               </div>
               <Badge variant="secondary">{summarizeScopes(scopes)}</Badge>
@@ -759,6 +728,10 @@ export function ApiKeyManager({
                 </option>
               ))}
             </select>
+            <div className="flex flex-wrap gap-2">
+              {memberChoices.nextCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(effectiveHouseholdId); memberChoices.next(effectiveHouseholdId); }}>More member households</Button> : null}
+              {memberChoices.cursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(effectiveHouseholdId); memberChoices.first(effectiveHouseholdId); }}>First member households</Button> : null}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -774,15 +747,20 @@ export function ApiKeyManager({
                   event.target.value as Id<"moves"> | "all",
                 )
               }
-              disabled={!effectiveHouseholdId || stats === undefined}
+              disabled={!effectiveHouseholdId || moveChoices === undefined}
             >
               <option value="all">All moves in this household</option>
+              {moveRestrictionId !== "all" && !activeMoves.some(move => move.moveId === moveRestrictionId) ? <option value={moveRestrictionId}>Selected move</option> : null}
               {activeMoves.map((move) => (
                 <option key={move.moveId} value={move.moveId}>
                   {move.title}
                 </option>
               ))}
             </select>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {moveChoices?.nextCursor && effectiveHouseholdId ? <Button type="button" variant="outline" onClick={() => setMovePage({ householdId: effectiveHouseholdId, cursor: moveChoices.nextCursor! })}>More key move choices</Button> : null}
+              {moveCursor ? <Button type="button" variant="outline" onClick={() => setMovePage(null)}>First key move choices</Button> : null}
+            </div>
             <p className="text-xs text-muted-foreground">
               {moveRestrictionId === "all"
                 ? "Good for trusted setup work across the household."
@@ -847,20 +825,21 @@ export function ApiKeyManager({
           </div>
           <div className="space-y-2">
             <label htmlFor="api-key-expiration" className="text-sm font-medium">
-              Expires in days
+              End date (optional days)
             </label>
             <Input
               id="api-key-expiration"
               value={expiresInDays}
               onChange={(event) => setExpiresInDays(event.target.value)}
               inputMode="numeric"
-              placeholder="90"
+              placeholder="No end date"
             />
           </div>
         </div>
 
         <div>
-          <p className="text-sm font-medium">Exact permissions</p>
+          <Button type="button" size="sm" variant="outline" onClick={resetNewConnection}>Reset new connection</Button>
+          <p className="mt-3 text-sm font-medium">Exact permissions</p>
           <p className="mt-1 text-xs text-muted-foreground">
             These are the technical scopes used by API and MCP clients.
           </p>
@@ -905,7 +884,7 @@ export function ApiKeyManager({
             <CardDescription className="mt-2 max-w-3xl leading-6">
               {setupMode
                 ? "You are signed in. Create one key, copy it, and paste it into the AI assistant you trust."
-                : "Give a trusted assistant a key so it can help with your household, moves, inventory, photos, and collaborators. You can revoke access any time."}
+                : "Give a trusted assistant a key so it can help with your household, moves, inventory, photos, and existing household context. Invitations stay website-only. You can revoke access any time."}
             </CardDescription>
           </div>
           <Badge variant="outline">
@@ -914,6 +893,8 @@ export function ApiKeyManager({
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {enabled && households?.length === 0 && memberChoices.nextCursor ? <Button type="button" variant="outline" onClick={() => memberChoices.next(null)}>More member households</Button> : null}
+        {enabled && households?.length === 0 && memberChoices.cursor ? <Button type="button" variant="outline" onClick={() => memberChoices.first(null)}>First member households</Button> : null}
         {!enabled || households === undefined ? (
           <div
             className={
@@ -1077,7 +1058,7 @@ function ConnectionRow({
   moveTitleById: Map<Id<"moves">, string>;
   busy: string | null;
   onRotate: (apiKeyId: Id<"apiKeys">) => Promise<void>;
-  onRevoke: (apiKeyId: Id<"apiKeys">) => Promise<void>;
+  onRevoke: (apiKeyId: Id<"apiKeys">, expectedVersion: number) => Promise<void>;
 }) {
   const active = apiKey.status === "active";
   return (
@@ -1132,7 +1113,7 @@ function ConnectionRow({
             variant="outline"
             aria-label={`Revoke ${apiKey.name}`}
             disabled={!active || busy === `revoke-${apiKey.apiKeyId}`}
-            onClick={() => void onRevoke(apiKey.apiKeyId)}
+            onClick={() => void onRevoke(apiKey.apiKeyId, apiKey.version)}
           >
             {busy === `revoke-${apiKey.apiKeyId}` ? (
               <RefreshCw className="animate-spin" aria-hidden="true" />

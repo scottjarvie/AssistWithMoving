@@ -1,8 +1,10 @@
+New AI connections get all current and future powers with no end date unless earlier restricted, unreleased OAuth connections set a floor: every new connection starts with the limits of your most limited AI. Existing client ids keep their own limits. API keys use the limits deliberately chosen by the person; keys and OAuth AIs never feed each other’s floor. Call describe_connection (or get_api_context for API keys) to inspect the actual state, reason, end date and revision. Use reduce_connection with opId and expectedVersion to remove powers, shorten an end date, pause or revoke only your own connection. You can never widen or restore access. Only the person can restore it at https://movingmanifest.com/settings/ai. Reconnecting never removes a limit. Archive and restore are allowed. Your AI may publish or create share links: scrub secrets first; obvious secrets are refused, and contact details get one summary with counts. Send acknowledgeContactDetails: {emails, phones, addresses} with counts exactly equal to what was found for the whole batch, including on the first call. Business contact details are expected; remove only the person’s own private details. Edits, additions, moves, duplicates and restores reachable by a share link also count as publishing and are checked before commit. A refused restore can use restorePrivately:true to revoke affected links. The person and AI can unpublish with any active grant. Household invitations stay website-only; money, messaging and permanent deletion stay off.
+
 # Assist With Moving agent guide
 
 Canonical MCP endpoint: https://movingmanifest.com/mcp
 Authentication: OAuth browser sign-in with the person's Assist With Moving account
-Authority: a product grant the person approves inside Assist With Moving
+Authority: connecting creates a full-access product grant with no end date by default
 Human setup: https://movingmanifest.com/ai/start
 Human support: https://assistwithlife.com/support?v=1&source=assist-with-moving
   (the central Assist With Life support desk — the only support path). Check
@@ -19,17 +21,17 @@ actions.
 
 Capability status: Partial. The endpoint, the grant boundary, the tool catalog,
 and immediate revocation are implemented. No AI product has completed a full
-connect → consent → grant → read → evidence → save → revoke → reconnect
+connect → full access → read → evidence → save → revoke → person restores
 lifecycle against it, and the provider-side metadata-document configuration is
 not yet in place. Requirement, not endorsement: any AI that speaks remote
 Streamable HTTP MCP with compatible OAuth may attempt this connection.
 
-Signing in is not permission:
+New AI connections start with full access and no end date unless restricted, unreleased OAuth connections set a narrower floor. API keys keep their own chosen limits:
 
 - OAuth proves who is calling. It does not decide what may be done.
 - A separate product grant decides the moves, the data, and the operations.
-- Until the person approves a grant, tools/list returns only
-  describe_connection. Nothing else exists to call.
+- Connecting includes future scopes, minus withheld powers. Earlier restricted,
+  unreleased OAuth connections set the starting limits; only the person can release them.
 - Call describe_connection first when no other tools appear. It reports the
   granted scopes, what this connection can never do, and the exact sentence to
   tell the person.
@@ -43,10 +45,10 @@ looks like a metadata document but fails validation is refused outright, never
 downgraded to the fallback. The registration method is recorded as a fact, never
 treated as a claim about which product is calling.
 
-Where the person approves it: https://movingmanifest.com/settings/ai — the
+Where the person reviews, narrows, or revokes it: https://movingmanifest.com/settings/ai — the
 canonical grant screen, and the same URL describe_connection reports as its
-grantManager. It is where they choose the moves and the operations, see the
-consent summary, review active connections with their registration method and
+grantManager. It is where they review or limit the moves and operations, see the
+current access and history, review current connections with their registration method and
 recent use, revoke, and copy a manual Queue brief. The older
 /settings/ai-connections path redirects there.
 
@@ -54,6 +56,7 @@ Exact canonical tools (tools/list never contains anything outside this list,
 and shows only the ones the person's grant covers):
 
 - describe_connection — no scope; always available
+- reduce_connection — no scope; reduce only the verified calling connection with expectedVersion, durable audit receipt and version. Only the person in Settings can widen or restore access.
 - get_move_brief — moving.context.read
 - search_move_records — moving.context.read
 - get_move_records — moving.context.read
@@ -105,16 +108,16 @@ question instead of assuming.
 Retries: every write takes an operationId. Reusing the same operationId on a
 retry corrects the earlier attempt instead of duplicating it.
 
-Stale tools after a deployment: if a tool that used to exist now fails or a new
-one never appears, the client is holding an old catalog. Disconnect and
-reconnect the connection. Saved move work is unaffected.
+If a tool fails or is missing, call describe_connection for the current state
+and refresh tools/list. Only the person restores withheld access at
+https://movingmanifest.com/settings/ai. Reconnecting does not remove limits.
 
 This connection can never:
 
 - Permanently delete anything, or delete an account. Archive is the destructive
   default and it is reversible.
 - Archive a whole move. That stays a signed-in action the person takes.
-- Publish, share, create a share link, or export a move.
+- Permanently delete data, spend money, message people, or invite household members.
 - Invite, remove, or change the access of anyone in a household.
 - Contact a mover, marketplace, employer, insurer, or government office; book,
   buy, sign, pay, or message on the person's behalf.
@@ -126,7 +129,7 @@ Four doors exist and they are not equivalent. Only the first is this guide's
 subject:
 
 1. https://movingmanifest.com/mcp — canonical. OAuth sign-in plus a product
-   grant. The 15 tools listed above.
+   grant. The 16 tools listed above.
 2. https://movingmanifest.com/mcp/connect — legacy compatibility for clients
    that connected through the older persisted OAuth gateway. A different and
    larger catalog, governed by that older gateway rather than by product
@@ -144,3 +147,15 @@ No connection at all: the person can still hand work over manually. They open
 the Queue item in Assist With Moving, copy its bounded brief into any AI, and
 paste the result back into the same Queue item. The handoff completes without
 MCP, OAuth, or a key.
+
+AI connection limits: https://movingmanifest.com/settings/ai
+Connections do not expire by default. You may choose fewer permissions or an end
+date, change or remove that date later, and revoke access at any time. A date you
+choose is recorded as your choice and never removed automatically. Legacy grants
+with uncertain scope or expiry history keep their recorded limits.
+
+New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Person-set and AI-set limits remain exact; proven old automatic defaults are lifted when checked. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.
+
+Editing, adding, moving, duplicating or restoring content reachable by a share link
+is publishing too. The same check runs before commit. Retry a refused restore with
+restorePrivately:true to revoke affected links and keep the restored content private.

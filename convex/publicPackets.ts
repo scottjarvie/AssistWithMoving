@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { checkPublishedSecrets } from "./lib/publishingCheck";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
@@ -56,6 +57,30 @@ export const getForShareLink = internalQuery({
     label: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    let packet: Awaited<ReturnType<typeof previewPublicPacket>>;
+    try {
+      packet = await previewPublicPacket(ctx, args);
+    } catch (error) {
+      return {
+        status: "unavailable" as const,
+        reason: error instanceof Error && error.message === "Documentation profile not found."
+          ? "This shared packet’s documentation profile is unavailable or archived. Ask the owner to restore it or unpublish this link."
+          : "This shared packet could not be loaded. Please try again later or ask the owner to check its move and profile.",
+        shareLink: publicShareLinkMetadata(args),
+      };
+    }
+    // Live packets can change after link creation. Only a failure of the actual
+    // check should be described as a publishing-check failure to recipients.
+    try {
+      checkPublishedSecrets(packet);
+    } catch {
+      return { status: "unavailable" as const, reason: "This shared packet is unavailable because its current content could not pass the publishing check. Ask the owner to remove private information or unpublish it.", shareLink: publicShareLinkMetadata(args) };
+    }
+    return packet;
+  },
+});
+
+export async function previewPublicPacket(ctx: QueryCtx, args: Parameters<typeof publicShareLinkMetadata>[0] & { householdId: Id<"households">; moveId: Id<"moves">; documentationProfileId?: Id<"documentationProfiles"> }) {
     const shareLink = publicShareLinkMetadata(args);
     const publicPlan = args.allowedActions.includes("viewPlan")
       ? await buildPublicPlanView(ctx, args)
@@ -130,8 +155,8 @@ export const getForShareLink = internalQuery({
         packetKind,
       }),
     };
-  },
-});
+}
+
 
 async function buildPublicDocumentationPacket(
   ctx: QueryCtx,

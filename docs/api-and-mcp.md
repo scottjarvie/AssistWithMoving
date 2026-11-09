@@ -53,8 +53,8 @@ API keys can include these scopes:
 | `plans/write` | Apply Layout Studio op batches and create pending plan proposals. |
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
 | `exports/read` | List profiles, exports, share-link metadata, and read unexpired export artifacts. |
-| `exports/create` | Create export jobs and create/revoke documentation share links. |
-| `members/manage` | List household members and add or invite collaborators by email. |
+| `exports/create` | Create export jobs and checked share links. Revoking links requires only active access, with no powers. |
+| `members/manage` | Read existing household members; invitations stay website-only. |
 
 Keys may also be restricted to a single move. A move-restricted key should use
 move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
@@ -215,9 +215,12 @@ curl https://movingmanifest.com/api/v1/me \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
-The context response includes the household id/name, key scopes, whether the
-key is move-restricted, and the restricted move when applicable. This endpoint
-does not return the raw key or secret hash.
+The context response includes the key's version, status, expiry (null for no
+end date), scopes and whether it is move-restricted. With `moves/read`, it also
+includes the authorized household id/name and restricted move when applicable.
+Without that scope it returns credential metadata only, without household or
+move identifiers or content. This endpoint does not return the raw key or
+secret hash. Paused, revoked and expired keys can still inspect this credential metadata; domain calls remain refused.
 
 ## Queue handoffs
 
@@ -283,39 +286,8 @@ curl https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
   -H "Authorization: Bearer mmk_replace_with_a_members_manage_key"
 ```
 
-Add or invite a collaborator by email:
-
-```bash
-curl -X POST https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
-  -H "Authorization: Bearer mmk_replace_with_a_members_manage_key" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: add-spouse-001" \
-  -d '{ "email": "person@example.com", "role": "editor" }'
-```
-
-Member management requires `members/manage` and a household-scoped key. The
-target email can be added before the person has an account. If the email is not
-registered yet, Assist With Moving stores a pending invitation and activates
-household access when that person signs in with the same email. Owner access
-cannot be granted through the API.
-
-Expected write responses:
-
-| Status | Meaning |
-| --- | --- |
-| `201` | Existing Assist With Moving user was added as an active household member. |
-| `202` | Pending invitation was created for an email without an account yet. |
-| `200` | Existing member/invitation was updated or refreshed. |
-
-Supported roles:
-
-| Role | Use |
-| --- | --- |
-| `admin` | Trusted household administrator who can manage members/settings/keys. |
-| `editor` | Full move and inventory editing helper. |
-| `packer` | Packing-focused collaborator. |
-| `viewer` | Read-focused collaborator. |
-| `guest` | Minimal household access. |
+Invitations are website-only. POST /households/{id}/members is refused for
+all API keys. The person invites people on the signed-in website.
 
 List moves:
 
@@ -1763,46 +1735,23 @@ curl https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
-Create a documentation share link:
-
-```bash
-curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
-  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: share-link-001" \
-  -d '{
-    "documentationProfileId": "DOCUMENTATION_PROFILE_ID",
-    "scope": "profile",
-    "label": "PCS packet for transportation office",
-    "role": "guest",
-    "allowedActions": ["view", "download"],
-    "expiresAt": 1780876800000
-  }'
-```
-
-The create response includes the raw `token` and `/share/{token}` URL once.
-List responses only include safe metadata such as `shareLinkId`, `tokenPreview`,
-status, scope, allowed actions, expiration, and access counts.
-
-Create a move-scoped plan share link:
-
-```bash
-curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
-  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: plan-share-link-001" \
-  -d '{
-    "scope": "move",
-    "label": "Unload plan for crew",
-    "role": "guest",
-    "allowedActions": ["viewPlan"],
-    "expiresAt": 1780876800000
-  }'
-```
-
-`viewPlan` exposes the public read-only Layout Studio plan surface. The public
-payload hides blueprint underlays, values/prices, private notes, raw storage
-metadata, and free-text plan annotations.
+AI share-link creation is allowed: POST /moves/{id}/share-links checks the
+actual outgoing packet. Secrets refuse with a category and field path, never
+the secret value. The current publishing power is rechecked beside the visibility
+write in the same Convex transaction; stored packet reads participate in its
+version/conflict checks. Moving publishes stored packet text and inline plan SVG,
+not file-backed text bodies. Opaque body bytes or body-file references refuse
+until readable content is available; acknowledgement cannot waive this. Existing
+live packet reads also refuse secrets added after publication. JSON-quoted
+secrets are detected, and contact matches never cross line boundaries.
+Emails, phones and street addresses produce one counted
+summary. Supply `acknowledgeContactDetails: { emails: 12, phones: 30, addresses: 8 }`
+with counts exactly equal to what was found for the whole batch. It is accepted on the
+first call too. Business contact details are expected; remove only the person's
+own private details. Unpublishing needs only an active grant and current move access, even with zero
+powers; it never requires exports/create. The AI or person can revoke the link to unpublish, with
+attributed history. The HTTP/stdio `create_share_link` and `revoke_share_link`
+tools expose this existing publication path; OAuth catalogs remain unchanged.
 
 List recent public-recipient comments for all share links on a move:
 
@@ -1850,8 +1799,9 @@ and retain only the labeled non-privileged test identity after cleanup.
   browser-sign-in clients.** Discovery:
   `/.well-known/oauth-protected-resource/mcp`.
 - **Legacy persisted OAuth compatibility:**
-  `https://movingmanifest.com/mcp/connect` — preserves the older 29-tool
-  Convex-gateway catalog for already-connected clients. It is not an alias for
+  `https://movingmanifest.com/mcp/connect` — preserves the original 29-tool
+  Convex-gateway catalog for already-connected clients plus `reduce_connection`
+  (30 tools total). It is not an alias for
   the canonical grant-gated catalog; do not use it for new setup unless
   compatibility is specifically required.
 - **API-key door:** `https://movingmanifest.com/api/mcp` — accepts `mmk_` API
@@ -1895,22 +1845,27 @@ API-key and maintainer stdio sections below still show one CLI's configuration
 syntax; those are key-based transports where the config format is the fact being
 documented, not a claim that an AI product completed an OAuth lifecycle.)
 
-**Signing in is not permission.** OAuth proves who is calling; a product grant,
+**Connecting creates a full-access grant with no end date by default**, including
+future scopes. The person can narrow moves or operations, choose an end date, or
+revoke it at `https://movingmanifest.com/settings/ai`. OAuth proves who is calling; a product grant,
 re-read from the database on every discovery and every tool call, decides what
 that caller may do. Clerk issues identity-only scopes (`openid profile email`)
-and a broader token never widens a grant. People approve, inspect, and revoke
+and a broader token never widens a grant. People inspect, narrow, and revoke
 grants at `https://movingmanifest.com/settings/ai`; revoking refuses the very
 next call even while the access token is still cryptographically valid. The
 current boundary version is `GRANT_BOUNDARY_VERSION` in
 `convex/lib/aiGrants.ts`.
 
-Client ID Metadata Documents are retrieved only after an active product grant
-is found. Retrieval runs in a Node-only internal Convex action: every resolved
+Both OAuth doors validate a required Client ID Metadata Document before
+creating or binding a first-contact grant. Retrieval runs in a Node-only
+internal Convex action: every resolved
 address must be public, the HTTPS connection is pinned to a validated address,
 redirects are refused, and DNS, connection and streaming share a five-second
 deadline. The body is capped at 32 KiB while streaming; its self-ID and digest
-checks still apply. Without a grant, `describe_connection` remains available
-without fetching metadata or presenting its registration method as verified.
+checks still apply. Failed validation creates no grant or binding. After
+validation, the mutation rechecks current grant decisions and refusals
+atomically before first-contact issuance or binding; metadata validation does
+not override a person's saved limits or refusal.
 
 Canonical OAuth tool catalog. This is the exact list in
 `STATELESS_MOVING_TOOL_NAMES` (`convex/httpRoutes/mcp.ts`), with the scope each
@@ -1921,6 +1876,7 @@ connection never sees a capability nobody approved.
 | Tool | Required scope | Purpose |
 | --- | --- | --- |
 | `describe_connection` | none — always available | Report what this connection may currently do, what it can never do, and how the person changes that. Safe to call first when no other tools are listed. |
+| `reduce_connection` | none — always available | Reduce only the verified calling connection’s scopes, moveIds or expiry; pause or revoke. Requires expectedVersion; returns atomic durable audit receipt and version. Only the person in Settings can widen or restore access. |
 | `get_move_brief` | `moving.context.read` | First call. List bounded accessible moves or return one move's route, spaces, counts, review attention, saved planning records, and Queue summaries. |
 | `search_move_records` | `moving.context.read` | Search bounded items, boxes, spaces, decisions, estimates, plan results, source checks, and the person's Queue summaries. |
 | `get_move_records` | `moving.context.read` | Hydrate up to 25 selected records with role-filtered detail. |
@@ -2095,7 +2051,8 @@ If that decision changes, maintainers must bump the version in
 `mcp-server/assistwithmoving-mcp.mjs`, publish from `mcp-server`, verify a clean
 install, and update every public setup surface in the same release.
 
-Available API-key HTTP/stdio MCP tools:
+Available API-key HTTP/stdio MCP tools (95 registered tools in the full registry;
+34 in the optional hosted trusted-helper subset, including `reduce_connection`):
 
 Agents using this larger registry should usually call `get_api_capabilities`
 first. It returns supported workflows, required scopes, REST endpoints, tool
@@ -2105,8 +2062,9 @@ names, and known launch blockers.
 | --- | --- |
 | `get_api_capabilities` | Inspect supported REST/MCP workflows, required scopes, tools, and known launch blockers without calling the API. |
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
+| `reduce_connection` | Reduce only this bearer key’s scopes, one selected move, or expiry; pause or revoke. Requires expectedVersion from get_api_context and returns a durable receipt/version. |
 | `list_household_members` | List real household login access for the API key household. |
-| `add_household_member` | Add an existing user or create a pending household invitation by email, with `dryRun` support. |
+| `add_household_member` | Website-only; AI calls, including dry-run, are refused. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `setup_move` | Create or update a move, room lists, transport resources/zones, and starter inventory in one setup call. |
@@ -2195,7 +2153,7 @@ names, and known launch blockers.
 | `download_export` | Return an unexpired export artifact as text. |
 | `list_share_links` | List safe share-link metadata. |
 | `list_share_link_comments` | List public-recipient comments for a move or one share link without returning raw share tokens. |
-| `create_share_link` | Create a scoped documentation share link, with `dryRun` support. |
+| `create_share_link` | Website-only; refuses all API-key calls. |
 | `revoke_share_link` | Revoke a documentation share link, with `dryRun` support. |
 
 Canonical Queue tools (`list_queue_items`, `get_queue_item`,
@@ -2245,13 +2203,13 @@ Recommended MCP key scopes depend on the intended agent:
 | Broad move assistant | `moves/read`, `moves/write`, `inventory/read`, `inventory/write`, `queue/read`, `queue/write`, `plans/read`, `plans/write`, `photos/write`, `exports/read`, `exports/create`, `members/manage` |
 | Layout Studio helper | `plans/read`, `plans/write`, plus `inventory/read` when placing real items or boxes |
 
-Prefer move-restricted API keys for headless or non-OAuth agents.
+Move-restricted API keys are an optional person choice for headless or non-OAuth agents.
 
 ## Security Guidance
 
 - Use separate keys per agent/client.
-- Prefer the smallest scope set that supports the workflow.
-- Prefer move-restricted keys when the agent only needs one move.
+- New connections default to full entitled access; the person may choose a smaller scope set.
+- The person may choose a move restriction when useful.
 - Store keys in an environment variable, secret manager, or password manager,
   not source code.
 - Use `dryRun` before write tools when an agent is planning a bulk change.
@@ -2271,3 +2229,135 @@ external clients depend on background completion.
 The current API version is `v1` in the URL path. Breaking changes should ship
 under a new path such as `/api/v2`. Additive response fields may be added within
 `v1`; clients should ignore unknown fields.
+
+
+## AI connections — AWL-0015 (6 November 2026)
+
+All four doors (`/mcp`, `/mcp/connect`, API-key HTTP `/api/mcp`, and stdio)
+start with every entitled current and future power and no end date. Connecting
+needs no product approval. Only removed powers stay withheld when new tools
+arrive. Archive and restore are included; permanent delete, invitations remain off. Household invitations stay website-only. Live household roles, move participation,
+private-record visibility and agent-access switches still apply to every call.
+
+### Per-connection policy and durable floor (revised 9 November)
+
+Each OAuth client and API key has its own revisioned policy in
+`aiAccessConnections`. Existing client IDs keep that policy exactly on sign-in;
+restricting one connection does not revoke, supersede or change another.
+`aiAccessOwners` holds the floor across every restricted, unreleased OAuth connection: union of withheld powers, any revoke/pause, earliest chosen date and
+intersected move limits. New OAuth connections inherit that floor regardless of name,
+host, CIMD or registration method. No identity matching decides inheritance.
+
+Every OAuth restriction updates its source ID/revision entry atomically with the
+connection policy and private receipt. Person Restore/Resume/widening releases
+inherited entries and that connection's entry only at the revisions overridden.
+Later source restrictions count again. Inherited connections display “Started
+with the limits of your most limited AI” with Restore; revoked connections offer
+Forget. Forget removes only that connection's own floor entries, never inherited
+source entries, without reviving the token. API keys are deliberate script credentials:
+the person picks their limits. Keys never feed the OAuth floor, and OAuth restrictions
+never shape a fresh or rotated key; rotation preserves only its predecessor's policy.
+Restore of an ordinary revoked connection preserves chosen powers, pause and
+end date, including a past date. Inherited Restore releases inherited limits
+while retaining choices made on that connection itself. No runtime history scan
+or record-count cap decides access.
+
+### One-time lazy bootstrap; no migration
+
+On an owner's first access, `ensureAccess` creates and checkpoints the durable
+record. Its sole legacy traversal reads **every** grant through `by_owner_created`
+and every key through `by_created_by`, in complete indexed pages. Pages are
+checkpoints, never an authorization cap. Revoked, paused, expired, narrowed,
+unbound and unnamed connections are all checked. Retired, replaced and rotated
+history rows never count as connections or restrictions. Keys are bootstrapped
+for their own policy only, never as OAuth floor entries. A scheduled continuation finishes the
+remaining pages. Until both streams finish, all domain access stays stopped;
+inspection remains available. A failed continuation can be retried on the next
+access without losing the restrictions already read.
+
+Unmarked main-era OAuth end dates were forced defaults and lift. Exact legacy
+90-day API-key default dates lift; other chosen key dates stay on that key.
+Legacy end dates already past at bootstrap never enter the OAuth floor.
+Only untouched active version-1 automatic OAuth scope defaults lift. An explicit
+system automatic marker, or the original immutable connected-by-signing-in
+receipt for the exact old 30-day default, proves provenance. Settings choices, AI reductions and ambiguous scope provenance retain their old
+powers. Bootstrap records restricted sources and its before/after system
+receipts without rewriting legacy OAuth scopes, dates or revisions. Key status, pause
+and effective date are mirrored to the key row so revocation/expiry frees plan slots. After completion,
+all mutations write the durable authority; no connection or tool call imports
+legacy records again. No separate migration or production data script is used.
+
+### Inspection, narrow-only control and private Settings
+
+OAuth `describe_connection` and API-key `get_api_context` / `GET /api/v1/me`
+work without domain powers, including while initializing, paused, revoked,
+expired or superseded. They return state, permitted tools, tools held back with
+the missing power and reason, chosen date, revision, and the absolute
+https://movingmanifest.com/settings/ai recovery link. A stopped or readless key
+receives credential metadata without household or move contents.
+
+All four doors offer `reduce_connection`; REST uses `POST /api/v1/me/access`.
+Supply a non-secret `opId` and the current `expectedVersion`, plus optional
+`scopes`, `moveIds`, `expiresAt`, and `action` (`narrow`, `pause`, `revoke`). Omitted
+fields preserve limits. Adding powers or moves, clearing/extending a date,
+resuming and restoring are refused with the narrow-only error and Settings link.
+A verified caller cannot choose a sibling credential through arguments. Matching
+replays return the original receipt; opId collisions and stale writes fail.
+
+`aiConnectionChanges` stores append-only, durable owner-private before/after
+history, actor, date and opId. Secret-shaped names and text are redacted.
+Mutation and receipt commit together. Shared household events and admin
+observability do not expose private connection history. Settings requires a
+signed Clerk person-session `sid`, refuses OAuth identities, paginates every
+current connection, and separately paginates earlier registrations and connection
+history. No arbitrary connection cap or historical scan decides authority.
+
+Both OAuth HTTP doors validate a required CIMD document through the protected,
+DNS-pinned Node action **before** creating or binding any connection, including
+initialize. A failed validation has no product-grant effects. The atomic mutation
+then reads current durable restrictions, so a limit committed during metadata
+I/O still wins. `clientInfo.name` is accepted only on initialize; verified
+registration metadata has precedence. Names can only narrow, never widen.
+
+Before shipping, verify Clerk's native Convex integration supplies person
+session claims (`sid`, audience `convex`); legacy custom templates cannot be
+used for website administration. This PR changes no Clerk configuration.
+
+### Recoverable box unassignments
+
+Both API-key DELETE paths that remove an item-to-box assignment move its full
+source into `archivedBoxAssignments`, with AI/key attribution, before removing
+the active relationship. Quantity and notes are retained. No archive purge is
+exposed. `GET /moves/:moveId/assignments?archived=true` pages Archive (use the
+returned cursor); `POST /moves/:moveId/assignments/:archiveId/restore` restores
+without overwriting a current assignment. HTTP/stdio tools expose these as
+`list_archived_box_assignments` and `restore_box_assignment`. Ordinary item and
+person deletes already archive or soft-delete; protocol receipt/rate-limit
+cleanup does not delete user move data.
+
+### Policy and catalogue maintenance
+
+`shared/ai-connection-policy.json` owns common instructions used on connect,
+`/ai`, `/ai.txt`, and `llms*.txt`. `node scripts/build-ai-access.mjs` regenerates
+the public policy prefix and API tool-to-power catalogue from handlers and
+backend route requirements; `--check` verifies parity and rejects undecided
+tools. Both API-key registries refuse household invitation tools locally, including
+dry-run, and the backend blocks that write route. Share-link creation scans the
+actual public packet: obvious keys/tokens/passwords are refused; email addresses,
+phones and street addresses require removal or acknowledgeContactDetails with counts exactly matching the whole batch.
+Edits, additions, moves, duplicates and restores that change an existing outgoing
+packet run the same complete check in the committing transaction. REST isolates
+these writes in a child mutation so returning an error cannot commit a refused edit.
+The full resulting batch is scanned, with current publish power rechecked. A refused
+restore offers restorePrivately:true, which revokes affected links in that transaction.
+Unscannable bodies refuse; the live public page shows an unavailable state if its
+current secret recheck fails. Secrets include escaped JSON, snake_case-prefixed
+keys, multiline values, credential URLs, common token formats and Luhn-valid cards.
+Both person and AI may revoke links with any active grant; no publish power is
+required to reduce exposure. Creation, updates and revocation retain AI attribution
+and audit history. Scrub shared content before publishing.
+
+Deploy the Convex schema, indexes and functions before the website. No production
+deployment or data mutation is part of the draft-PR build stage. Backend tests
+use `convex-test` with synthetic records; bootstrap and subsequent accesses are
+proved without live credentials.

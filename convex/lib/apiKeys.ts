@@ -1,4 +1,5 @@
 import type { Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { PermissionAction } from "./roles";
 
 export const apiKeyScopes = [
@@ -16,6 +17,13 @@ export const apiKeyScopes = [
   "members/manage",
 ] as const;
 
+/** Only newly explicit full keys follow future scopes; legacy arrays stay exact. */
+export function effectiveApiKeyScopes(key: { scopes: ApiKeyScope[]; scopeChoice?: "full" | "chosen"; withheldScopes?: readonly string[] }): ApiKeyScope[] {
+  const baseline = ["moves/read", "moves/write", "inventory/read", "inventory/write", "queue/read", "queue/write", "plans/read", "plans/write", "photos/write", "exports/read", "exports/create", "members/manage"];
+  const withheld = key.withheldScopes ?? (key.scopeChoice === "full" ? [] : baseline.filter(scope => !key.scopes.includes(scope as ApiKeyScope)));
+  return apiKeyScopes.filter(scope => !withheld.includes(scope));
+}
+
 export type ApiKeyScope = (typeof apiKeyScopes)[number];
 
 export type ApiKeyVerificationInput = {
@@ -27,13 +35,14 @@ export type ApiKeyVerificationInput = {
   secretHash: string;
 };
 
-export type ApiKeyEffectiveStatus = "active" | "expired" | "revoked";
+export type ApiKeyEffectiveStatus = "active" | "expired" | "revoked" | "paused";
 
 export function apiKeyEffectiveStatus(
-  record: Pick<ApiKeyVerificationInput, "status" | "expiresAt">,
+  record: Pick<ApiKeyVerificationInput, "status" | "expiresAt"> & { pausedAt?: number },
   now = Date.now(),
 ): ApiKeyEffectiveStatus {
   if (record.status === "revoked") return "revoked";
+  if (record.pausedAt !== undefined) return "paused";
   if (record.expiresAt !== undefined && record.expiresAt <= now) {
     return "expired";
   }
@@ -41,7 +50,7 @@ export function apiKeyEffectiveStatus(
 }
 
 export function countEffectivelyActiveApiKeys(
-  records: Array<Pick<ApiKeyVerificationInput, "status" | "expiresAt">>,
+  records: Array<Pick<ApiKeyVerificationInput, "status" | "expiresAt"> & { pausedAt?: number }>,
   now = Date.now(),
 ) {
   return records.filter(
@@ -220,4 +229,14 @@ function timingSafeEqual(left: string, right: string) {
     difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
   }
   return difference === 0;
+}
+
+/** Indexed effective-active count; old expired rows never enter these ranges. */
+export async function readActiveApiKeyCount(db: QueryCtx["db"] | MutationCtx["db"], householdId: Id<"households">, limit = 100, now = Date.now()) {
+  const [permanent, dated] = await Promise.all([
+    db.query("apiKeys").withIndex("by_household_status_expiry", q => q.eq("householdId", householdId).eq("status", "active").eq("expiresAt", undefined)).filter(q => q.eq(q.field("pausedAt"), undefined)).take(limit + 1),
+    db.query("apiKeys").withIndex("by_household_status_expiry", q => q.eq("householdId", householdId).eq("status", "active").gt("expiresAt", now)).filter(q => q.eq(q.field("pausedAt"), undefined)).take(limit + 1),
+  ]);
+  const count = permanent.length + dated.length;
+  return { count: Math.min(count, limit), truncated: count > limit };
 }
