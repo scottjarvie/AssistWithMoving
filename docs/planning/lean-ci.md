@@ -4,3 +4,4 @@
 - **On push to main:** nothing. Main only moves by merging a PR that already passed. Tracker state commits carry `skip-checks: true` and Vercel's ignore script validates them.
 - **Docs-only PRs still run CI on purpose:** the docs-truth tests compare `docs/api-and-mcp.md`, `README.md` and `AGENTS.md` with the shipped MCP tool catalog.
 - **By hand:** run either job at any branch head with `gh workflow run required-ci.yml --ref <branch>` (also works for drafts). Browser tests stay local: `npm run test:e2e`, or `npm run verify:launch` for the full release proof.
+- **Where CI runs:** both jobs run on Scott's Mac mini (self-hosted runner `minijarv-moving`, label `mini`) while the repo variable `CI_RUNNER` is `mini`, so they use no GitHub minutes. To fall back to GitHub: `gh variable delete CI_RUNNER -R scottjarvie/AssistWithMoving`, then re-run the checks.

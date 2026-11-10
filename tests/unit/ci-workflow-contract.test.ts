@@ -39,7 +39,9 @@ describe("required CI workflow contract", () => {
       "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444",
     );
     expect(requiredJob).toContain("node-version: 20.20.0");
-    expect(requiredJob).toContain("cache: npm");
+    expect(requiredJob).toContain(
+      "cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}",
+    );
     expect(requiredJob).toContain("run: npm ci");
     expect(requiredJob).toContain("run: npm run lint");
     expect(requiredJob).toContain("run: npm run typecheck");
