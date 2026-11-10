@@ -23,7 +23,9 @@ jobs:
     # marking the PR ready runs the full check before merge. Manual
     # workflow_dispatch runs always execute, whatever the PR's draft state.
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
+    # Runs on the Mac mini's own runner (free minutes) when the repo variable
+    # CI_RUNNER is "mini". Delete that variable to fall back to GitHub's machines.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - name: Check out source
@@ -51,7 +53,8 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 20.20.0
-          cache: npm
+          # The Mini keeps its npm cache between runs; only GitHub's fresh machines need this one.
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
 
       - name: Install from the lockfile
         if: steps.scope.outputs.run_full == 'true'
@@ -116,7 +119,9 @@ jobs:
   full-tests:
     name: Unit tests (informational)
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
+    # Runs on the Mac mini's own runner (free minutes) when the repo variable
+    # CI_RUNNER is "mini". Delete that variable to fall back to GitHub's machines.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - name: Check out source
@@ -144,7 +149,8 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 20.20.0
-          cache: npm
+          # The Mini keeps its npm cache between runs; only GitHub's fresh machines need this one.
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
 
       - name: Install from the lockfile
         if: steps.scope.outputs.run_full == 'true'
