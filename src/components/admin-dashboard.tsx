@@ -300,8 +300,8 @@ export function AdminDashboard() {
 
     return [
       ["AI estimate", formatCents(overview.totals.aiEstimatedCents)],
-      ["Photo storage", formatBytes(overview.totals.photoBytes)],
-      ["Export storage", formatBytes(overview.totals.exportBytes)],
+      ["Original photo metadata (site total; not allowance)", formatBytes(overview.totals.photoBytes)],
+      ["Temporary exports (excluded from allowance)", formatBytes(overview.totals.exportBytes)],
       ["Admin users", overview.totals.adminUsers.toLocaleString()],
     ];
   }, [overview]);

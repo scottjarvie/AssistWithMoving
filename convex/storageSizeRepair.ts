@@ -29,12 +29,12 @@ export const apply = internalMutation({
 });
 export const page = internalAction({
   args: { cursor: v.optional(v.union(v.string(), v.null())), dryRun: v.optional(v.boolean()) },
-  handler: async (ctx, args): Promise<{ cursor: string; isDone: boolean; filesSeen: number; repaired: number; unknownSizeFiles: number; missingObjects: number }> => {
+  handler: async (ctx, args): Promise<{ cursor: string; isDone: boolean; filesSeen: number; repaired: number; unknownSizeFiles: number; missingObjects: number; repairFailures: number }> => {
     const page = await ctx.runQuery(internal.storageSizeRepair.source, { cursor: args.cursor ?? null });
     const endpoint = process.env.B2_ENDPOINT, accessKeyId = process.env.B2_APPLICATION_KEY_ID, secretAccessKey = process.env.B2_APPLICATION_KEY;
     if (!endpoint || !accessKeyId || !secretAccessKey) throw new Error("Storage size repair requires server storage configuration.");
     const client = new S3Client({ endpoint, region: process.env.B2_REGION ?? "us-west-004", forcePathStyle: true, credentials: { accessKeyId, secretAccessKey } });
-    let repaired = 0, unknownSizeFiles = 0, missingObjects = 0;
+    let repaired = 0, unknownSizeFiles = 0, missingObjects = 0, repairFailures = 0;
     for (const [index, photo] of page.page.entries()) {
       const sizes: Record<string, number> = {}; let unknown = false;
       const generatedSizes: Record<string, number> = {};
@@ -45,9 +45,11 @@ export const page = internalAction({
       }
       if (unknown) { unknownSizeFiles++; continue; }
       for (const object of page.generated[index]) if (object.state !== "pending" && sizes[object.storageKey] !== undefined) generatedSizes[object.storageKey] = sizes[object.storageKey];
+    try {
       if (args.dryRun === false && await ctx.runMutation(internal.storageSizeRepair.apply, { photoId: photo._id, refs: JSON.stringify(photoStorageRefs(photo)), previousStoredBytes: photo.storedBytes, generatedSizes, originalBytes: sizes[photo.originalStorageKey], derivativeSizes: Object.fromEntries(Object.entries(photo.derivativeRefs).filter(([, key]) => Boolean(key)).map(([kind, key]) => [kind, sizes[key!]])) })) repaired++;
+    } catch { repairFailures++; }
     }
-    return { cursor: page.continueCursor, isDone: page.isDone, filesSeen: page.page.length, repaired, unknownSizeFiles, missingObjects };
+    return { cursor: page.continueCursor, isDone: page.isDone, filesSeen: page.page.length, repaired, unknownSizeFiles, missingObjects, repairFailures };
   },
 });
 
@@ -70,17 +72,19 @@ export const applySession = internalMutation({ args: { sessionId: v.id("photoUpl
   await ctx.db.patch(session._id, { usageOwnerId: ownerId, quarantinedBytes: args.bytes });
   await bumpOwnerRevision(ctx, ownerId); return true;
 } });
-export const sessionPage = internalAction({ args: { cursor: v.optional(v.union(v.string(), v.null())), dryRun: v.optional(v.boolean()) }, handler: async (ctx, args): Promise<{ cursor: string; isDone: boolean; repaired: number; unknownSizeFiles: number; missingObjects: number }> => {
+export const sessionPage = internalAction({ args: { cursor: v.optional(v.union(v.string(), v.null())), dryRun: v.optional(v.boolean()) }, handler: async (ctx, args): Promise<{ cursor: string; isDone: boolean; repaired: number; unknownSizeFiles: number; missingObjects: number; repairFailures: number }> => {
   const page = await ctx.runQuery(internal.storageSizeRepair.sessionSource, { cursor: args.cursor ?? null });
   const endpoint = process.env.B2_ENDPOINT, accessKeyId = process.env.B2_APPLICATION_KEY_ID, secretAccessKey = process.env.B2_APPLICATION_KEY;
   if (!endpoint || !accessKeyId || !secretAccessKey) throw new Error("Storage size repair requires server storage configuration.");
   const client = new S3Client({ endpoint, region: process.env.B2_REGION ?? "us-west-004", forcePathStyle: true, credentials: { accessKeyId, secretAccessKey } });
-  let repaired = 0, unknownSizeFiles = 0, missingObjects = 0;
+  let repaired = 0, unknownSizeFiles = 0, missingObjects = 0, repairFailures = 0;
   for (const { session, refs } of page.rows) {
     let bytes = 0, unknown = false;
     for (const ref of refs) try { const head = await client.send(new HeadObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey })); if (head.ContentLength === undefined) unknown = true; else bytes += head.ContentLength; } catch (error) { if (["NotFound", "NoSuchKey"].includes((error as { name?: string }).name ?? "")) missingObjects++; else unknown = true; }
     if (unknown) { unknownSizeFiles++; continue; }
+    try {
     if (args.dryRun === false && await ctx.runMutation(internal.storageSizeRepair.applySession, { sessionId: session._id, refs: JSON.stringify(uploadSessionStorageRefs(session)), bytes })) repaired++;
+    } catch { repairFailures++; }
   }
-  return { cursor: page.continueCursor, isDone: page.isDone, repaired, unknownSizeFiles, missingObjects };
+  return { cursor: page.continueCursor, isDone: page.isDone, repaired, unknownSizeFiles, missingObjects, repairFailures };
 } });

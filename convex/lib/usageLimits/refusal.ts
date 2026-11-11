@@ -7,7 +7,7 @@ export function refusalOf(error: unknown): UploadRefusal | null {
   return ["USAGE_LIMIT_REACHED", "FILE_TOO_LARGE", "REQUEST_TOO_LARGE", "OPERATION_CONFLICT", "OPERATION_ID_REQUIRED"].includes(data.code) ? data : null;
 }
 export function aiRefusal(refusal: UploadRefusal) {
-  return { isError: true as const, structuredContent: refusal, content: [{ type: "text" as const, text: refusal.code === "USAGE_LIMIT_REACHED" ? mcpLimitText(refusal) : refusal.message }] };
+  return { isError: true as const, structuredContent: refusal, content: [{ type: "text" as const, text: refusal.code === "USAGE_LIMIT_REACHED" ? mcpLimitText(refusal) : refusal.code === "FILE_TOO_LARGE" ? `${refusal.kind} file too large: ${refusal.got} bytes; maximum ${refusal.max} bytes.` : refusal.message }] };
 }
 export function personRefusal(refusal: UploadRefusal): never {
   // The live client knows readable string errors. Keep those readable during a

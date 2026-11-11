@@ -43,7 +43,8 @@ npx convex run usageRecount:status '{"runId":"<returned-run-id>"}'
 ```
 
 The status reports accounts seen, bytes counted, missing objects, unknown sizes,
-unattributed media and counter mismatches. Derived run/proof rows are written;
+unattributed media, counter mismatches, repair failures and failed owners. One
+failed owner is reported while the run continues to other owners. Derived run/proof rows are written;
 file records, counters, settings and objects are untouched. If scheduled progress
 was interrupted, resume with the same run ID:
 
@@ -72,7 +73,8 @@ npx convex run usageRecount:start '{"dryRun":false}'
 npx convex run usageRecount:status '{"runId":"<returned-run-id>"}'
 ```
 
-This first repairs size metadata, then rebuilds every owner's counter. Repair
+This first repairs size metadata, then rebuilds every owner's counter. A counter
+with no reserved upload behind it also loses stale reserved-byte/in-flight values. Repair
 HEADs originals, copies and legacy abandoned objects, writes their verified sizes
 and retained ownership, and changes no stored object. Each transaction is bounded.
 For standalone size repair, continue the returned cursors for both commands:
@@ -183,3 +185,7 @@ Batch numbers appear on batch tools when enforced; monitoring mode does not
 advertise a smaller unenforced batch cap. Tool introductions remain unchanged.
 Upload notes and effective policy sentences
 are appended; byte values in human-readable policy text use the core formatter.
+
+The current shared formatter can round a file and a nearby cap to the same decimal
+figure. AI file-cap refusals therefore retain exact byte counts in their text and
+structured fields. Person-facing rounding remains a shared-core wording follow-up.

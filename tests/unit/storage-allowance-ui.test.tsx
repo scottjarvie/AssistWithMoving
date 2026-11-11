@@ -1,3 +1,4 @@
+import * as convexHooks from "convex/react";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConvexError } from "convex/values";
@@ -5,10 +6,15 @@ import { checkFileSize, usageLimitError, AI_STORAGE_NOTE } from "../../convex/li
 import { friendlyUploadError } from "../../src/components/media-upload-provider";
 import { photoUploadFailureMessage } from "../../src/components/photo-upload-control";
 import { isRetryableUploadError } from "../../src/lib/media-upload";
-import { StorageFailSoft, StorageLimitsForm } from "../../src/components/storage-allowance";
+import { StorageAdmin, StorageFailSoft, StorageLimitsForm } from "../../src/components/storage-allowance";
 import { registerTools } from "../../mcp-server/assistwithmoving-mcp.mjs";
 import { readFileSync } from "node:fs";
 afterEach(cleanup);
+vi.mock("convex/react", async importOriginal => {
+  const actual = await importOriginal<typeof import("convex/react")>();
+  return { ...actual, useQuery: vi.fn(), useMutation: vi.fn() };
+});
+
 const quota = usageLimitError({ limit: "storedBytesPerUser", unit: "bytes", used: 70, cap: 100, requested: 50, remaining: 30, resetsAt: null });
 
 describe("real website refusal readers", () => {
@@ -91,4 +97,15 @@ it("a failed storage meter leaves the containing page usable", () => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   function BrokenMeter(): never { throw new Error("Synthetic meter failure"); }
   try { render(<main><h1>Account settings</h1><StorageFailSoft><BrokenMeter /></StorageFailSoft><button>Existing settings</button></main>); expect(screen.getByText("Storage is temporarily unavailable.")).toBeVisible(); expect(screen.getByRole("heading", { name: "Account settings" })).toBeVisible(); expect(screen.getByRole("button", { name: "Existing settings" })).toBeEnabled(); } finally { log.mockRestore(); }
+});
+
+it("refusal codes take precedence over status-like numbers in their text", () => {
+  const error = new ConvexError({ ...quota, message: "500 files, 429 bytes" }); error.message = "500 storage failed; 429 retry later";
+  expect(friendlyUploadError(error)).toBe(quota.message); expect(photoUploadFailureMessage(error)).toBe(quota.message); expect(isRetryableUploadError(error)).toBe(false);
+});
+
+it("the actual admin section displays a recorded storage refusal with readable units", () => {
+  const query = vi.mocked(convexHooks.useQuery).mockReturnValue({ settings: null, effectiveSite: { planStoredBytes: { free: 100 }, maxFileBytes: { image: 100 }, mcpBatchMaxItems: 5, mcpBatchMaxBytes: 100 }, people: [], audit: [], events: [{ _id: "synthetic-event", at: 1, ownerId: "synthetic-owner", mode: "on", source: "begin", limit: "storedBytesPerUser", used: 90, requested: 20, remaining: 10, cap: 100 }] } as never);
+  const mutation = vi.mocked(convexHooks.useMutation).mockReturnValue(vi.fn() as never);
+  try { render(<StorageAdmin />); expect(screen.getByText(/90 bytes used; 20 bytes requested; 10 bytes remaining/)).toBeInTheDocument(); } finally { query.mockReset(); mutation.mockReset(); }
 });

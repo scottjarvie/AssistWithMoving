@@ -57,7 +57,8 @@ export const verifyPage = internalMutation({ args: { runId: v.id("usageRecountRu
         } else bytes = row.quarantinedBytes ?? 0;
       }
       if (!await ctx.db.get(ownerId)) { unattributed++; continue; }
-      const counter = await ctx.db.query("usageCounters").withIndex("by_owner", q => q.eq("ownerId", ownerId)).unique();
+      const matching = await ctx.db.query("usageCounters").withIndex("by_owner", q => q.eq("ownerId", ownerId)).take(2);
+      const counter = matching.length === 1 ? matching[0] : null;
       if (!run.dryRun && bytes > 0 && (!counter || !counter.ready)) uncounted++;
       const proof = await ctx.db.query("usageRecountProofs").withIndex("by_run_owner", q => q.eq("runId", run._id).eq("ownerId", ownerId)).unique();
       if (proof) await ctx.db.patch(proof._id, { storedBytes: proof.storedBytes + bytes });
@@ -78,8 +79,8 @@ export const verifyPage = internalMutation({ args: { runId: v.id("usageRecountRu
     await ctx.scheduler.runAfter(0, internal.usageRecount.step, args); return;
   }
   const notReady = await ctx.db.query("usageCounters").withIndex("by_ready", q => q.eq("ready", false)).first();
-  const blocked = unattributed > 0 || unknown > 0 || (!run.dryRun && (Boolean(notReady) || uncounted > 0 || mismatches > 0));
-  await ctx.db.patch(run._id, { counterMismatches: mismatches, status: blocked ? "blocked" : "done", message: blocked ? "Counting found unknown, unattributed, newly uploaded or changed media. Repair sizes if needed, wait for active uploads, then start a new run." : undefined, updatedAt: Date.now() });
+  const blocked = (run.failedOwners ?? 0) > 0 || (run.repairFailures ?? 0) > 0 || unattributed > 0 || unknown > 0 || (!run.dryRun && (Boolean(notReady) || uncounted > 0 || mismatches > 0));
+  await ctx.db.patch(run._id, { unattributedFiles: unattributed, counterMismatches: mismatches, status: blocked ? "blocked" : "done", message: blocked ? "Counting found unknown, unattributed, newly uploaded or changed media. Repair sizes if needed, wait for active uploads, then start a new run." : undefined, updatedAt: Date.now() });
   if (!run.dryRun && !blocked) {
     const site = await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique();
     if (site) await ctx.db.patch(site._id, { backfillCompletedAt: Date.now() });
@@ -87,10 +88,16 @@ export const verifyPage = internalMutation({ args: { runId: v.id("usageRecountRu
   }
 } });
 /** Progress is accepted only for the current bounded repair page. */
-export const advanceRepair = internalMutation({ args: { runId: v.id("usageRecountRuns"), previous: v.union(v.string(), v.null()), cursor: v.string(), done: v.boolean() }, handler: async (ctx, args) => {
+export const advanceRepair = internalMutation({ args: { runId: v.id("usageRecountRuns"), previous: v.union(v.string(), v.null()), cursor: v.string(), done: v.boolean(), failures: v.optional(v.number()) }, handler: async (ctx, args) => {
   const run = await ctx.db.get(args.runId);
   if (!run || run.status !== "running" || run.phase >= 0 || run.sourceCursor !== args.previous) return;
-  await ctx.db.patch(run._id, { sourceCursor: args.done ? null : args.cursor, phase: args.done ? (run.phase === -1 ? -2 : 0) : run.phase });
+  await ctx.db.patch(run._id, { repairFailures: (run.repairFailures ?? 0) + (args.failures ?? 0), sourceCursor: args.done ? null : args.cursor, phase: args.done ? (run.phase === -1 ? -2 : 0) : run.phase });
+  await ctx.scheduler.runAfter(0, internal.usageRecount.step, { runId: run._id });
+} });
+export const ownerFailed = internalMutation({ args: { runId: v.id("usageRecountRuns"), ownerId: v.id("users") }, handler: async (ctx, args) => {
+  const run = await ctx.db.get(args.runId);
+  if (!run || run.status !== "running" || run.ownerId !== args.ownerId) return;
+  await ctx.db.patch(run._id, { failedOwners: (run.failedOwners ?? 0) + 1, accountsSeen: run.accountsSeen + 1, ownerId: undefined, ownerBytes: 0, sourceCursor: null, ownersCursor: run.nextOwnerCursor ?? null, phase: run.lastOwner ? 1 : 0 });
   await ctx.scheduler.runAfter(0, internal.usageRecount.step, { runId: run._id });
 } });
 export const step = internalAction({
@@ -100,9 +107,10 @@ export const step = internalAction({
     if (!run || run.status !== "running") return;
     if (run.phase < 0) {
       const repaired = run.phase === -1 ? await ctx.runAction(internal.storageSizeRepair.page, { cursor: run.sourceCursor, dryRun: run.dryRun }) : await ctx.runAction(internal.storageSizeRepair.sessionPage, { cursor: run.sourceCursor, dryRun: run.dryRun });
-      await ctx.runMutation(internal.usageRecount.advanceRepair, { runId: run._id, previous: run.sourceCursor, cursor: repaired.cursor, done: repaired.isDone }); return;
+      await ctx.runMutation(internal.usageRecount.advanceRepair, { runId: run._id, previous: run.sourceCursor, cursor: repaired.cursor, done: repaired.isDone, failures: repaired.repairFailures }); return;
     }
     if (run.phase !== 0 || !run.ownerId) { await ctx.runMutation(internal.usageRecount.verifyPage, args); return; }
+    try {
     const snapshot = run.dryRun ? null : await ctx.runMutation(internal.usageLimits.beginRecountPage, { ownerId: run.ownerId });
     const page = await ctx.runAction(internal.usageLimitsStorage.dryRunPage, { ownerId: run.ownerId, cursor: snapshot?.cursor ?? run.sourceCursor });
     if (snapshot) {
@@ -110,5 +118,6 @@ export const step = internalAction({
       if (finished.restarted) { await ctx.scheduler.runAfter(0, internal.usageRecount.step, args); return; }
     }
     await ctx.runMutation(internal.usageRecount.advance, { ...args, cursor: page.cursor, bytes: page.bytes, unknown: page.unknownSizeFiles, missing: page.missingObjects, done: page.isDone });
+    } catch { await ctx.runMutation(internal.usageRecount.ownerFailed, { runId: run._id, ownerId: run.ownerId }); }
   },
 });

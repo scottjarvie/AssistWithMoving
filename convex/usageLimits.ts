@@ -265,7 +265,8 @@ export const finishRecountPage = internalMutation({ args: { ownerId: v.id("users
   if (await ctx.db.query("storageDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "pending")).first()) return { done: false, restarted: true };
   if (await ctx.db.query("sessionDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "pending")).first()) return { done: false, restarted: true };
   const bytes = row.repair.bytes + args.bytes;
-  if (args.done) await ctx.db.patch(row._id, { storedBytes: bytes, ready: (row.repair.phase + (args.unknownSizeFiles ?? 0)) === 0, repair: undefined, revision: row.revision + 1, updatedAt: Date.now() });
+  const backedHold = args.done ? await ctx.db.query("uploadReservations").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "reserved")).first() : null;
+  if (args.done) await ctx.db.patch(row._id, { storedBytes: bytes, ...(!backedHold ? { reservedBytes: 0, inFlight: 0 } : {}), ready: (row.repair.phase + (args.unknownSizeFiles ?? 0)) === 0, repair: undefined, revision: row.revision + 1, updatedAt: Date.now() });
   else await ctx.db.patch(row._id, { repair: { ...row.repair, phase: row.repair.phase + (args.unknownSizeFiles ?? 0), bytes, cursor: args.nextCursor } });
   if (args.done) await touchStorageRevision(ctx);
   return { done: args.done, restarted: false };
@@ -274,7 +275,7 @@ export const adminOverview = query({ args: {}, handler: async ctx => {
   await requirePersonConnectionManagement(ctx);
   await requireAppAdmin(ctx);
   const settings = await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique();
-  return { settings, effectiveSite: { ...effectiveLimits(settings).limits, planStoredBytes: { ...DEFAULT_PLAN_STORED_BYTES, ...settings?.planStoredBytes }, maxFileBytes: { ...siteDefaults, ...settings?.maxFileBytes } }, people: await ctx.db.query("usageCounters").take(500), overrides: await ctx.db.query("usageLimitOverrides").take(500), audit: await ctx.db.query("usageLimitAudit").withIndex("by_at").order("desc").take(50) };
+  return { settings, effectiveSite: { ...effectiveLimits(settings).limits, planStoredBytes: { ...DEFAULT_PLAN_STORED_BYTES, ...settings?.planStoredBytes }, maxFileBytes: { ...siteDefaults, ...settings?.maxFileBytes } }, people: await ctx.db.query("usageCounters").take(500), overrides: await ctx.db.query("usageLimitOverrides").take(500), audit: await ctx.db.query("usageLimitAudit").withIndex("by_at").order("desc").take(50), events: await ctx.db.query("usageLimitEvents").withIndex("by_at").order("desc").take(50) };
 } });
 export const adminSetLimits = mutation({
   args: { ownerId: v.optional(v.id("users")), limits: nullableLimitPatch, enforcement: v.optional(v.union(enforcementValidator, v.null())), reason: v.string() },

@@ -282,7 +282,8 @@ export function textResult(data) {
 export function toolErrorResult(error) {
   const refusal = error?.payload?.error ?? error?.data ?? error?.structuredContent;
   if (refusal?.code === "USAGE_LIMIT_REACHED") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: mcpLimitText(refusal) }] };
-  if (["FILE_TOO_LARGE", "REQUEST_TOO_LARGE", "OPERATION_ID_REQUIRED", "OPERATION_CONFLICT"].includes(refusal?.code)) return { isError: true, structuredContent: refusal, content: [{ type: "text", text: refusal.message }] };
+  if (refusal?.code === "FILE_TOO_LARGE") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: `${refusal.kind} file too large: ${refusal.got} bytes; maximum ${refusal.max} bytes.` }] };
+  if (["REQUEST_TOO_LARGE", "OPERATION_ID_REQUIRED", "OPERATION_CONFLICT"].includes(refusal?.code)) return { isError: true, structuredContent: refusal, content: [{ type: "text", text: refusal.message }] };
   return {
     isError: true,
     content: [

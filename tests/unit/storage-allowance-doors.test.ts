@@ -83,6 +83,7 @@ describe("storage admission through actual upload doors", () => {
     await expect(f.person.action(api.photos.initUpload, f.beginArgs("full"))).rejects.toMatchObject({ data: expect.stringContaining("[USAGE_LIMIT_REACHED]") });
     expect(storage.puts).toHaveLength(0);
     expect(await f.t.run(ctx => ctx.db.query("usageLimitEvents").collect())).toHaveLength(1);
+    expect((await f.admin.query(api.usageLimits.adminOverview, {})).events[0]).toMatchObject({ mode: "on", limit: "storedBytesPerUser", requested: png.byteLength });
   });
   it("does not expose invented byte numbers before backfill", async () => {
     const f = await fixture({ backfilled: false });
@@ -855,4 +856,27 @@ it("a new upload's stored original survives the full existing cleanup grace even
   expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).toMatchObject({ deleted: false }); expect(storage.objects.has("composer-original")).toBe(true); expect((await f.summary()).usedBytes).toBe(20);
   vi.setSystemTime(row.expiresAt + 24 * 60 * 60 * 1000 + 1);
   expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).toMatchObject({ deleted: true }); expect((await f.summary()).usedBytes).toBe(0);
+});
+
+it("backfill clears stuck in-flight bytes with no reservation behind them", async () => {
+  const f = await fixture({ backfilled: false });
+  await f.t.run(ctx => ctx.db.insert("usageCounters", { ownerId: f.owner, storedBytes: 0, reservedBytes: 9000, inFlight: 20, hourUploads: 0, dayUploads: 0, dayUploadBytes: 0, dayDownloadBytes: 0, hourKey: "synthetic", dayKey: "synthetic", ready: false, revision: 0, updatedAt: 1 }));
+  const runId = await f.t.mutation(internal.usageRecount.start, { dryRun: false }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await f.t.query(internal.usageRecount.status, { runId })).toMatchObject({ status: "done" });
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").withIndex("by_owner", q => q.eq("ownerId", f.owner)).unique())).toMatchObject({ ready: true, reservedBytes: 0, inFlight: 0 });
+});
+
+it("one owner's invalid counter rows are reported without preventing another owner's recount", async () => {
+  const f = await fixture({ backfilled: false }); await f.upload();
+  await f.t.run(async ctx => { const counter = (await ctx.db.query("usageCounters").first())!; const { _id, _creationTime, ...fields } = counter; void _id; void _creationTime; await ctx.db.insert("usageCounters", fields); });
+  const runId = await f.t.mutation(internal.usageRecount.start, { dryRun: false }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await f.t.query(internal.usageRecount.status, { runId })).toMatchObject({ status: "blocked", failedOwners: 1, accountsSeen: 2 });
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").withIndex("by_owner", q => q.eq("ownerId", f.adminId)).unique())).toMatchObject({ ready: true });
+});
+
+it("AI file-cap transport text retains exact counts even when decimal formatting rounds both values alike", async () => {
+  const { checkFileSize } = await import("../../convex/lib/usageLimits/core");
+  const refusal = checkFileSize("image", 104857601, 104857600)!;
+  const result = toolErrorResult({ payload: { error: refusal } });
+  expect(result.structuredContent).toEqual(refusal); expect(result.content[0].text).toContain("104857601 bytes"); expect(result.content[0].text).toContain("104857600 bytes");
 });

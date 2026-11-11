@@ -57,6 +57,7 @@ export function StorageAdmin() {
     <p>Site allowances: {Object.entries(data.effectiveSite.planStoredBytes).map(([plan, cap]) => `${plan} ${formatBytes(cap)}`).join("; ")}. File limits: {Object.entries(data.effectiveSite.maxFileBytes).map(([kind, cap]) => `${kind} ${formatBytes(cap)}`).join("; ")}. Batch: {data.effectiveSite.mcpBatchMaxItems} files, {formatBytes(data.effectiveSite.mcpBatchMaxBytes)}.</p>
     <StorageLimitsForm personal={false} onSave={save} /><StorageLimitsForm personal onSave={save} />
     {data.people.map(person => <p key={person._id}>Account …{person.ownerId.slice(-8)}: {person.ready ? `${formatBytes(person.storedBytes)} stored; ${formatBytes(person.reservedBytes)} reserved` : "Counting…"}</p>)}
+    <details><summary>Recent admission events</summary>{data.events.map(event => { const amount = (value: number) => event.limit.includes("Bytes") ? formatBytes(value) : String(value); return <p key={event._id}>{new Date(event.at).toISOString()} · Account …{event.ownerId.slice(-8)} · {event.mode} · {event.source}: {amount(event.used)} used; {amount(event.requested)} requested; {amount(event.remaining ?? Math.max(0, event.cap - event.used))} remaining.</p>; })}</details>
     <details><summary>History</summary>{data.audit.map(entry => <p key={entry._id}>{new Date(entry.at).toISOString()} · {entry.field} · {entry.before} → {entry.after} · {entry.reason}</p>)}</details>
   </section>;
 }
