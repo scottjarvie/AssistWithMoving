@@ -577,6 +577,10 @@ export const storeIdempotency = internalMutation({
     expiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const reply = (args.response && typeof args.response === "object" ? args.response : {}) as { error?: { code?: string }; data?: { results?: Array<{ ok?: boolean; code?: string }> } };
+    const transferErrors = ["photo_upload_failed", "upload_init_failed", "upload_finalize_failed"];
+    if (transferErrors.includes(reply.error?.code ?? "") || (Array.isArray(reply.data?.results) && reply.data.results.some(item => item.ok === false && transferErrors.includes(item.code ?? "")))) return;
+
     if (!args.idempotencyKey || !args.requestHash) return;
     if (hasUploadRefusal(args.response)) return;
     await ctx.db.insert("apiIdempotencyKeys", {

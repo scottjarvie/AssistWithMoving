@@ -9,14 +9,14 @@ import { nativeWebsiteIdentity } from "../helpers/website-session";
 import { mcpLimitText } from "../../convex/lib/usageLimits/core";
 import { toolErrorResult } from "../../mcp-server/assistwithmoving-api.mjs";
 
-const storage = vi.hoisted(() => ({ objects: new Map<string, { bytes: Uint8Array; mime: string; version: string }>(), deletes: [] as string[], puts: [] as string[], failDelete: false, failHead: new Set<string>(), revealOlder: false }));
+const storage = vi.hoisted(() => ({ objects: new Map<string, { bytes: Uint8Array; mime: string; version: string }>(), deletes: [] as string[], puts: [] as string[], failDelete: false, failPut: false, failHead: new Set<string>(), revealOlder: false }));
 vi.mock("@aws-sdk/client-s3", async importOriginal => {
   const real = await importOriginal<typeof import("@aws-sdk/client-s3")>();
   return { ...real, S3Client: class {
     async send(command: { constructor: { name: string }; input: { Key: string; Body?: Uint8Array; ContentType?: string; VersionId?: string } }) {
       const key = command.input.Key, object = storage.objects.get(key);
       if (command.constructor.name === "HeadObjectCommand" && storage.failHead.has(key)) throw Object.assign(new Error("Synthetic metadata outage"), { name: "ServiceUnavailable" });
-      if (command.constructor.name === "PutObjectCommand") { const bytes = new Uint8Array(command.input.Body!); storage.objects.set(key, { bytes, mime: command.input.ContentType ?? "image/webp", version: `version-${storage.puts.length}` }); storage.puts.push(key); return {}; }
+      if (command.constructor.name === "PutObjectCommand") { if (storage.failPut) throw new Error("Synthetic PUT failure"); const bytes = new Uint8Array(command.input.Body!); storage.objects.set(key, { bytes, mime: command.input.ContentType ?? "image/webp", version: `version-${storage.puts.length}` }); storage.puts.push(key); return {}; }
       if (command.constructor.name === "DeleteObjectCommand") { if (storage.failDelete) throw new Error("Synthetic delete failure"); expect(command.input.VersionId).toBeTruthy(); storage.deletes.push(key); storage.objects.delete(key); if (storage.revealOlder) storage.objects.set(key, { bytes: new Uint8Array(1), mime: "image/png", version: "unknown-older-version" }); return {}; }
       if (!object || (command.input.VersionId && object.version !== command.input.VersionId)) throw Object.assign(new Error("Synthetic missing object"), { name: "NotFound" });
       if (command.constructor.name === "HeadObjectCommand") return { ContentLength: object.bytes.byteLength, ContentType: object.mime, VersionId: object.version };
@@ -33,7 +33,7 @@ vi.mock("../../mcp-server/media-ingress.mjs", async importOriginal => {
 const modules = import.meta.glob("../../convex/**/*.ts");
 let png: Uint8Array;
 beforeEach(async () => {
-  vi.useFakeTimers(); storage.objects.clear(); storage.puts.length = 0; storage.deletes.length = 0; storage.failDelete = false; storage.failHead.clear(); storage.revealOlder = false;
+  vi.useFakeTimers(); storage.objects.clear(); storage.puts.length = 0; storage.deletes.length = 0; storage.failDelete = false; storage.failPut = false; storage.failHead.clear(); storage.revealOlder = false;
   for (const [name, value] of Object.entries({ B2_ENDPOINT: "https://synthetic-storage.invalid", B2_BUCKET_NAME: "synthetic", B2_APPLICATION_KEY_ID: "synthetic-test-only", B2_APPLICATION_KEY: "synthetic-test-only" })) vi.stubEnv(name, value);
   png = await sharp({ create: { width: 2, height: 2, channels: 3, background: "red" } }).png().toBuffer();
   vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
@@ -901,6 +901,7 @@ it("reservation expiry preserves its first timestamp beyond one page", async () 
 it("generated-intent recovery keeps the original cutoff on scheduled pages", async () => {
   const f = await fixture(); const { done } = await f.upload(); const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">, before = Date.now() - 15 * 60 * 1000;
   const late = await f.t.run(async ctx => { for (let n = 0; n < 61; n++) await ctx.db.insert("generatedObjects", { ownerId: f.owner, photoId, bucket: "synthetic", storageKey: `old-intent-${n}`, bytes: 1, state: "pending", createdAt: before - 1 }); return ctx.db.insert("generatedObjects", { ownerId: f.owner, photoId, bucket: "synthetic", storageKey: "newer-intent", bytes: 1, state: "pending", createdAt: before + 1000 }); });
+  await f.t.run(async ctx => { const photo = (await ctx.db.get(photoId))!; const counter = (await ctx.db.query("usageCounters").withIndex("by_owner", q => q.eq("ownerId", f.owner)).unique())!; await ctx.db.patch(photoId, { storedBytes: photo.storedBytes! + 62 }); await ctx.db.patch(counter._id, { storedBytes: counter.storedBytes + 62 }); });
   await f.t.action(internal.storageDeletion.recoverGenerated, {}); vi.setSystemTime(Date.now() + 60000); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
   const intents = await f.t.run(ctx => ctx.db.query("generatedObjects").collect()); expect(intents.filter(row => row.state === "failed")).toHaveLength(61); expect((await f.t.run(ctx => ctx.db.get(late)))?.state).toBe("pending");
 });
@@ -1002,4 +1003,28 @@ it("late cleanup receipts never rewrite a cleaned session's true failure", async
   const before = await f.t.run(ctx => ctx.db.get(sessionId));
   await f.admin.mutation(internal.photos.finishExpiredUploadSessionCleanup, { now: Date.now(), deleteObjects: true, plannedSessionCount: 1, skippedReferencedObjectCount: 0, results: [{ uploadSessionId: sessionId, attemptedObjectCount: 1, deletedObjectCount: 0, error: "Late synthetic error" }] });
   expect(await f.t.run(ctx => ctx.db.get(sessionId))).toEqual(before);
+});
+
+it("a failed original transfer reports failure, frees its slot and retries the same operation instead of caching the error", async () => {
+  const f = await fixture(); const key = await f.key();
+  const args = { method: "POST" as const, path: "photos/upload", authorization: `Bearer ${key.raw}`, idempotencyKey: "transfer-retry", query: {}, body: { moveId: f.moveId, fileBase64: Buffer.from(png).toString("base64"), mimeType: "image/png" } };
+  storage.failPut = true; const failed = await f.t.action(internal.restApiActions.handle, args); expect(failed).toMatchObject({ status: 400, body: { error: { code: "photo_upload_failed" } } });
+  expect(await f.t.run(ctx => ctx.db.query("photoUploadSessions").first())).toMatchObject({ status: "failed", failureCode: "UPLOAD_TRANSFER_FAILED" });
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ inFlight: 0, reservedBytes: 0 });
+  storage.failPut = false; expect((await f.t.action(internal.restApiActions.handle, args)).status).toBe(201);
+});
+
+it("confirmed absence ends a pending generated copy's charge and clears its registered size once", async () => {
+  const f = await fixture(); const { done } = await f.upload(); const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">, before = (await f.summary()).usedBytes!;
+  await f.t.mutation(internal.photos.prepareStoredDerivative, { photoId, storageKey: "missing-copy", bytes: 20 });
+  const intent = (await f.t.run(ctx => ctx.db.query("generatedObjects").withIndex("by_key", q => q.eq("storageKey", "missing-copy")).unique()))!;
+  await f.t.mutation(internal.storageDeletion.recoveredGenerated, { id: intent._id, exists: false });
+  expect((await f.summary()).usedBytes).toBe(before); expect(await f.t.run(ctx => ctx.db.get(intent._id))).toMatchObject({ bytes: 0, state: "failed" });
+  await f.t.mutation(internal.storageDeletion.recoveredGenerated, { id: intent._id, exists: false }); expect((await f.summary()).usedBytes).toBe(before);
+});
+
+it("an automatically created settings row keeps enforcement off and contains no saved policy maps", async () => {
+  const f = await fixture(); await f.t.run(ctx => ctx.db.delete(f.settings)); await f.upload();
+  const settings = await f.t.run(ctx => ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique());
+  expect(settings).toMatchObject({ enforcement: "off", storageRevision: expect.any(Number) }); expect(settings).not.toHaveProperty("planStoredBytes"); expect(settings).not.toHaveProperty("maxFileBytes");
 });

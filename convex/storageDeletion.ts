@@ -138,9 +138,14 @@ export const pendingGenerated = internalQuery({ args: { cursor: v.union(v.string
 export const recoveredGenerated = internalMutation({ args: { id: v.id("generatedObjects"), exists: v.boolean() }, handler: async (ctx, args) => {
   const object = await ctx.db.get(args.id);
   if (!object || object.state !== "pending") return;
-  // A failed generation keeps its charge and reference until version-exact
-  // deletion (or confirmed absence) succeeds in the photo deletion worker.
-  await ctx.db.patch(object._id, { state: args.exists ? "active" : "failed" });
+  // A failed generation keeps its charge and reference until this metadata
+  // probe confirms absence, or the photo deletion worker removes its version.
+  if (!args.exists && object.bytes > 0) {
+    await removeStoredBytes(ctx, object.ownerId, object.bytes);
+    const photo = await ctx.db.get(object.photoId);
+    if (photo) await ctx.db.patch(photo._id, { storedBytes: Math.max(0, (photo.storedBytes ?? photo.sizeBytes) - object.bytes) });
+  }
+  await ctx.db.patch(object._id, { state: args.exists ? "active" : "failed", ...(!args.exists ? { bytes: 0 } : {}) });
   await bumpOwnerRevision(ctx, object.ownerId);
 } });
 export const recoverGenerated = internalAction({ args: { cursor: v.optional(v.union(v.string(), v.null())), before: v.optional(v.number()) }, handler: async (ctx, args): Promise<void> => {

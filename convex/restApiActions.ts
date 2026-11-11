@@ -249,6 +249,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
 
   return await withActionRateLimit(ctx, args, auth, async () => {
     let uploadSessionId: Id<"photoUploadSessions"> | undefined;
+    let transferFailed = false;
     try {
       const callerOperation = optionalString(body.operationId) ?? args.idempotencyKey;
       if (callerOperation) { const replay = await ctx.runQuery(internal.photos.completedOperation, { householdId: auth.householdId, moveId, actorUserId: auth.createdByUserId, operationId: callerOperation }); if (replay) return restOk({ data: { ...replay, storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }), uploadLimits: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.householdId }) } }, 201); }
@@ -338,7 +339,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
       let originalExists = false;
       try { const head = await b2Client().send(new HeadObjectCommand({ Bucket: config.bucketName, Key: objectKey })); originalExists = head.ContentLength === media.bytes.byteLength; if (!originalExists) throw new Error("An earlier upload at this operation id has different bytes."); }
       catch (error) { if (!["NotFound", "NoSuchKey"].includes((error as { name?: string }).name ?? "")) throw error; }
-      if (!originalExists) await b2Client().send(
+      if (!originalExists) try { await b2Client().send(
         new PutObjectCommand({
           Bucket: config.bucketName,
           Key: objectKey,
@@ -346,7 +347,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
           ContentType: original.mimeType,
           ContentLength: media.bytes.byteLength,
         })
-      );
+      ); } catch (error) { transferFailed = true; throw error; }
 
       const finished = await ctx.runMutation(internal.photos.tryCompleteUploadSession, {
         householdId: auth.householdId,
@@ -452,8 +453,9 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         201
       );
     } catch (error) {
-      if (uploadSessionId && error instanceof Error && /does not match|invalid|unsupported|USAGE_LIMIT_REACHED|FILE_TOO_LARGE/i.test(error.message)) {
+      if (uploadSessionId && (transferFailed || (error instanceof Error && /does not match|invalid|unsupported|USAGE_LIMIT_REACHED|FILE_TOO_LARGE/i.test(error.message)))) {
         await ctx.runMutation(internal.photos.markUploadSessionFailed, {
+          ...(transferFailed ? { code: "UPLOAD_TRANSFER_FAILED", reason: error instanceof Error ? error.message : "Upload transfer failed." } : {}),
           householdId: auth.householdId,
           moveId,
           uploadSessionId,
