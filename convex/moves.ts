@@ -574,7 +574,7 @@ export const purgePage = internalMutation({
     // Dynamic table/index pairs are a closed, server-owned list above.
     const db = ctx.db as any;
     const household = args.table >= MOVE_INDEXED_PURGE_TABLES.length;
-    const page = await db.query(entry.table).withIndex(entry.index, (q: any) => q.eq(household ? "householdId" : "moveId", household ? args.householdId : args.moveId)).paginate({ cursor: args.cursor, numItems: 100 });
+    const page = await db.query(entry.table).withIndex(entry.index, (q: any) => q.eq(household ? "householdId" : "moveId", household ? args.householdId : args.moveId)).paginate({ cursor: args.cursor, numItems: entry.table === "itemPhotos" ? 500 : 100, maximumBytesRead: 1_000_000 });
     const owner = entry.table === "itemPhotos" ? (await ctx.db.get(args.householdId))?.ownerUserId : undefined;
     const owners = new Set<Doc<"users">["_id"]>();
     for (const row of page.page) {

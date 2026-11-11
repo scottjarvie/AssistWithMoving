@@ -195,7 +195,8 @@ figure. AI file-cap refusals therefore retain exact byte counts in their text an
 structured fields. Person-facing rounding remains a shared-core wording follow-up.
 
 Large move purges remove the move immediately, then continue through bounded,
-resumable indexed pages of one hundred records. The missing move prevents new
+resumable indexed pages of up to five hundred photo records or one hundred other
+records, bounded to 1 MB of page input. The missing move prevents new
 uploads. Small purges retain their synchronous reply. Erased media records are
 replaced atomically with stripped storage cleanup records: private captions,
 notes, filenames, room labels, hashes and uploader attribution are removed.
