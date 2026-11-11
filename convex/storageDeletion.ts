@@ -8,6 +8,8 @@ import { retainPhotoForDeletion } from "./lib/storageDeletion";
 import { defaultPhotoUploadCleanupGraceMs, photoStorageRefs, uploadSessionStorageRefs } from "./lib/photoCleanup";
 import { bumpOwnerRevision, removeStoredBytes, releaseUpload, closeUploadReservation } from "./usageLimits";
 
+async function enabled(ctx: Pick<QueryCtx, "db">) { return Boolean((await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique())?.storageDeletionEnabled); }
+
 export async function referencedObject(ctx: Pick<QueryCtx, "db">, storageKey: string, except?: Id<"itemPhotos">, exceptSession?: Id<"photoUploadSessions">) {
   for (const index of ["by_original_key", "by_thumb_key", "by_card_key", "by_detail_key", "by_full_key"] as const) {
     const field = { by_original_key: "originalStorageKey", by_thumb_key: "derivativeRefs.thumb", by_card_key: "derivativeRefs.card", by_detail_key: "derivativeRefs.detail", by_full_key: "derivativeRefs.full" }[index] as "originalStorageKey" | "derivativeRefs.thumb" | "derivativeRefs.card" | "derivativeRefs.detail" | "derivativeRefs.full";
@@ -23,7 +25,7 @@ export async function referencedObject(ctx: Pick<QueryCtx, "db">, storageKey: st
   }
   if (await cleanupKeyClaim(ctx, storageKey, true)) return true;
   for await (const claim of ctx.db.query("uploadObjectClaims").withIndex("by_key", q => q.eq("storageKey", storageKey))) {
-    const session = await ctx.db.get(claim.sessionId);
+    const session = claim.sessionId ? await ctx.db.get(claim.sessionId) : null;
     if (session && session.status === "authorized" && !session.completedPhotoId && (session._id !== exceptSession || session.expiresAt > Date.now())) return true;
   }
   // Include legacy pending derivative slots too. A read-budget failure blocks
@@ -46,7 +48,7 @@ async function cleanupKeyClaim(ctx: Pick<QueryCtx, "db">, key: string, leasesOnl
 export async function claimedUploadObject(ctx: Pick<QueryCtx, "db">, key: string, exceptSession?: Id<"photoUploadSessions">) {
   if (await cleanupKeyClaim(ctx, key) || await ctx.db.query("generatedObjects").withIndex("by_key", q => q.eq("storageKey", key)).first()) return true;
   if (await referencedObject(ctx, key, undefined, exceptSession)) return true;
-  for await (const claim of ctx.db.query("uploadObjectClaims").withIndex("by_key", q => q.eq("storageKey", key))) if (claim.sessionId !== exceptSession) return true;
+  for await (const claim of ctx.db.query("uploadObjectClaims").withIndex("by_key", q => q.eq("storageKey", key))) if (!claim.sessionId || claim.sessionId !== exceptSession) return true;
   for await (const session of ctx.db.query("photoUploadSessions").withIndex("by_original_key", q => q.eq("originalStorageKey", key))) if (session._id !== exceptSession && !session.cleanupCompletedAt) return true;
   for (const status of ["authorized", "cancelled", "failed"] as const) for await (const session of ctx.db.query("photoUploadSessions").withIndex("by_status_claims_expires", q => q.eq("status", status).eq("objectClaimsRegistered", undefined))) if (session._id !== exceptSession && !session.cleanupCompletedAt && uploadSessionStorageRefs(session).some(ref => ref.storageKey === key)) return true;
   return false;
@@ -76,28 +78,35 @@ export const prepare = internalMutation({
     return job;
   },
 });
-export const mayDelete = internalQuery({ args: { storageKey: v.string(), photoId: v.id("itemPhotos") }, handler: async (ctx, args) => !await referencedObject(ctx, args.storageKey, args.photoId) });
 export const recordVersion = internalMutation({
   args: { jobId: v.id("storageDeletionJobs"), index: v.number(), versionId: v.optional(v.string()), bytes: v.number(), deleted: v.boolean() },
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job || job.status === "done") return;
+    if (!job.refs[args.index]) return false;
+    if (!args.deleted) {
+      if (!await enabled(ctx) || (job.notBefore ?? 0) > Date.now() || await referencedObject(ctx, job.refs[args.index].storageKey, job.photoId)) return false;
+      const claim = await ctx.db.query("uploadObjectClaims").withIndex("by_deletion_job", q => q.eq("deletionJobId", String(job._id))).filter(q => q.eq(q.field("storageKey"), job.refs[args.index].storageKey)).first();
+      if (!claim) await ctx.db.insert("uploadObjectClaims", { storageKey: job.refs[args.index].storageKey, deletionJobId: String(job._id) });
+    }
     const refs = [...job.refs];
     refs[args.index] = { ...refs[args.index], versionId: args.versionId ?? refs[args.index].versionId, bytes: args.bytes, deleted: args.deleted };
     await ctx.db.patch(job._id, { refs, updatedAt: Date.now() });
     if (args.deleted) await bumpOwnerRevision(ctx, job.ownerId);
+    return true;
   },
 });
 export const finish = internalMutation({
   args: { jobId: v.id("storageDeletionJobs") },
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
-    if (!job || job.status === "done" || job.refs.some(ref => !ref.deleted)) return false;
+    if (!await enabled(ctx) || !job || job.status === "done" || job.refs.some(ref => !ref.deleted)) return false;
     for (const ref of job.refs) if (await referencedObject(ctx, ref.storageKey, job.photoId)) return false;
     // Recount confirmed storage instead of subtracting a duplicated legacy ref.
     await removeStoredBytes(ctx, job.ownerId, 0);
     for (const generated of await ctx.db.query("generatedObjects").withIndex("by_photo", q => q.eq("photoId", job.photoId)).collect()) await ctx.db.delete(generated._id);
     const photo = await ctx.db.get(job.photoId); if (photo) await ctx.db.delete(photo._id);
+    for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_deletion_job", q => q.eq("deletionJobId", String(job._id))).collect()) await ctx.db.delete(claim._id);
     await ctx.db.delete(job._id);
     await ctx.scheduler.runAfter(0, internal.usageLimitsStorage.recomputeStep, { ownerId: job.ownerId });
     return true;
@@ -112,13 +121,13 @@ function missing(error: unknown) { return ["NotFound", "NoSuchKey", "NoSuchVersi
 export const deletePhoto = internalAction({
   args: { photoId: v.id("itemPhotos"), dryRun: v.optional(v.boolean()) },
   handler: async (ctx, args): Promise<{ deleted: boolean; blocked: boolean; dryRun: boolean; objects?: Array<{ bucket: string; storageKey: string; referenced: boolean }> }> => {
-    if (args.dryRun !== false) return { deleted: false, blocked: false, dryRun: true, objects: await ctx.runQuery(internal.storageDeletion.previewPhoto, { photoId: args.photoId }) };
+    if (args.dryRun !== false || !await ctx.runQuery(internal.storageDeletion.deletionEnabled, {})) return { deleted: false, blocked: false, dryRun: true, objects: await ctx.runQuery(internal.storageDeletion.previewPhoto, { photoId: args.photoId }) };
     const job = await ctx.runMutation(internal.storageDeletion.prepare, { photoId: args.photoId });
     if (!job || job.status === "done") return { deleted: false, blocked: false, dryRun: false };
     const storage = client();
     for (const [index, ref] of job.refs.entries()) {
       if (ref.deleted) continue;
-      if (!await ctx.runQuery(internal.storageDeletion.mayDelete, { storageKey: ref.storageKey, photoId: job.photoId })) return { deleted: false, blocked: true, dryRun: false };
+      if (!await ctx.runMutation(internal.storageDeletion.recordVersion, { jobId: job._id, index, versionId: ref.versionId, bytes: ref.bytes ?? 0, deleted: false })) return { deleted: false, blocked: true, dryRun: false };
       let versionId = ref.versionId, bytes = ref.bytes ?? 0;
       try {
         const head = await storage.send(new HeadObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey, VersionId: versionId }));
@@ -127,8 +136,7 @@ export const deletePhoto = internalAction({
         // A version-exact delete is necessary on versioned storage. Without an
         // identifier we cannot prove physical deletion, so retain the charge.
         if (!versionId) return { deleted: false, blocked: true, dryRun: false };
-        await ctx.runMutation(internal.storageDeletion.recordVersion, { jobId: job._id, index, versionId, bytes, deleted: false });
-        if (!await ctx.runQuery(internal.storageDeletion.mayDelete, { storageKey: ref.storageKey, photoId: job.photoId })) return { deleted: false, blocked: true, dryRun: false };
+        if (!await ctx.runMutation(internal.storageDeletion.recordVersion, { jobId: job._id, index, versionId, bytes, deleted: false })) return { deleted: false, blocked: true, dryRun: false };
         await storage.send(new DeleteObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey, VersionId: versionId }));
         try { await storage.send(new HeadObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey, VersionId: versionId })); return { deleted: false, blocked: true, dryRun: false }; }
         catch (error) { if (!missing(error)) throw error; }
@@ -136,7 +144,7 @@ export const deletePhoto = internalAction({
       // Deleting a version can expose an older version at the same key. Keep
       // the tombstone and charge if any current object remains; never delete an
       // unknown historical version merely to make the counter smaller.
-      try { await storage.send(new HeadObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey })); return { deleted: false, blocked: true, dryRun: false }; }
+      try { if (!job.refs.slice(index + 1).some(other => !other.deleted && other.bucket === ref.bucket && other.storageKey === ref.storageKey)) { await storage.send(new HeadObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey })); return { deleted: false, blocked: true, dryRun: false }; } }
       catch (error) { if (!missing(error)) throw error; }
       await ctx.runMutation(internal.storageDeletion.recordVersion, { jobId: job._id, index, versionId, bytes, deleted: true });
     }
@@ -204,7 +212,7 @@ export const settleSession = internalAction({ args: { sessionId: v.id("photoUplo
 } });
 
 export const prepareSession = internalMutation({ args: { sessionId: v.id("photoUploadSessions") }, handler: async (ctx, args) => {
-  const existing = await ctx.db.query("sessionDeletionJobs").withIndex("by_session", q => q.eq("sessionId", args.sessionId)).order("desc").first();
+  const existing = await ctx.db.query("sessionDeletionJobs").withIndex("by_session", q => q.eq("sessionId", args.sessionId)).filter(q => q.eq(q.field("status"), "pending")).order("desc").first();
   if (existing?.erased) return (existing.notBefore ?? 0) <= Date.now() ? existing : null;
   const session = await ctx.db.get(args.sessionId);
   if (!session || session.completedPhotoId || session.status === "completed" || session.expiresAt > Date.now() || (session.processingUntil ?? 0) > Date.now() || session.cleanupCompletedAt) return null;
@@ -224,22 +232,29 @@ export const prepareSession = internalMutation({ args: { sessionId: v.id("photoU
   const id = await ctx.db.insert("sessionDeletionJobs", { sessionId: session._id, originalStorageKey: session.originalStorageKey, ownerId, refs, status: "pending", updatedAt: Date.now() });
   return ctx.db.get(id);
 } });
-export const sessionMayDelete = internalQuery({ args: { key: v.string() }, handler: async (ctx, args) => !await referencedObject(ctx, args.key) });
 export const recordSessionVersion = internalMutation({ args: { jobId: v.id("sessionDeletionJobs"), index: v.number(), bytes: v.number(), versionId: v.optional(v.string()), deleted: v.boolean() }, handler: async (ctx, args) => {
   const job = await ctx.db.get(args.jobId);
   if (!job || job.status === "done") return;
+  if (!job.refs[args.index]) return false;
+  if (!args.deleted) {
+    const session = await ctx.db.get(job.sessionId);
+    if (!await enabled(ctx) || (job.notBefore ?? 0) > Date.now() || session?.completedPhotoId || session?.status === "completed" || (session && (session.expiresAt > Date.now() || (session.processingUntil ?? 0) > Date.now())) || await referencedObject(ctx, job.refs[args.index].storageKey, undefined, job.sessionId)) return false;
+    const claim = await ctx.db.query("uploadObjectClaims").withIndex("by_deletion_job", q => q.eq("deletionJobId", String(job._id))).filter(q => q.eq(q.field("storageKey"), job.refs[args.index].storageKey)).first();
+    if (!claim) await ctx.db.insert("uploadObjectClaims", { storageKey: job.refs[args.index].storageKey, sessionId: job.sessionId, deletionJobId: String(job._id) });
+  }
   const refs = [...job.refs]; refs[args.index] = { ...refs[args.index], versionId: args.versionId ?? refs[args.index].versionId, bytes: args.bytes, deleted: args.deleted };
   await ctx.db.patch(job._id, { refs, updatedAt: Date.now() });
   if (args.deleted) await bumpOwnerRevision(ctx, job.ownerId);
+  return true;
 } });
 export const finishSession = internalMutation({ args: { jobId: v.id("sessionDeletionJobs") }, handler: async (ctx, args) => {
   const job = await ctx.db.get(args.jobId);
-  if (!job || job.status === "done" || job.refs.some(ref => !ref.deleted)) return false;
+  if (!await enabled(ctx) || !job || job.status === "done" || job.refs.some(ref => !ref.deleted)) return false;
   if (job.erased) {
     for (const ref of job.refs) if (await referencedObject(ctx, ref.storageKey)) return false;
     await removeStoredBytes(ctx, job.ownerId, 0);
     await ctx.scheduler.runAfter(0, internal.usageLimitsStorage.recomputeStep, { ownerId: job.ownerId });
-    for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_session", q => q.eq("sessionId", job.sessionId)).collect()) await ctx.db.delete(claim._id);
+    for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_session", q => q.eq("sessionId", job.sessionId)).collect()) if (!claim.deletionJobId || claim.deletionJobId === String(job._id)) await ctx.db.delete(claim._id);
     await ctx.db.delete(job._id); return true;
   }
   const session = await ctx.db.get(job.sessionId);
@@ -249,30 +264,29 @@ export const finishSession = internalMutation({ args: { jobId: v.id("sessionDele
   else if (session.usageReservationId) await releaseUpload(ctx, session.usageReservationId);
   else await removeStoredBytes(ctx, job.ownerId, job.refs.reduce((sum, ref) => sum + (ref.bytes ?? 0), 0));
   await ctx.db.patch(session._id, { cleanupCompletedAt: Date.now(), quarantinedBytes: undefined, status: "failed" });
-  for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_session", q => q.eq("sessionId", session._id)).collect()) await ctx.db.delete(claim._id);
+  for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_session", q => q.eq("sessionId", session._id)).collect()) if (!claim.deletionJobId || claim.deletionJobId === String(job._id)) await ctx.db.delete(claim._id);
   await ctx.db.patch(job._id, { status: "done", updatedAt: Date.now() });
   return true;
 } });
 export const deleteSession = internalAction({ args: { sessionId: v.id("photoUploadSessions"), dryRun: v.optional(v.boolean()) }, handler: async (ctx, args): Promise<{ deleted: boolean; dryRun: boolean; objects?: Array<{ bucket: string; storageKey: string; referenced: boolean }> }> => {
-  if (args.dryRun !== false) return { deleted: false, dryRun: true, objects: await ctx.runQuery(internal.storageDeletion.previewSession, { sessionId: args.sessionId }) };
+  if (args.dryRun !== false || !await ctx.runQuery(internal.storageDeletion.deletionEnabled, {})) return { deleted: false, dryRun: true, objects: await ctx.runQuery(internal.storageDeletion.previewSession, { sessionId: args.sessionId }) };
   const job = await ctx.runMutation(internal.storageDeletion.prepareSession, { sessionId: args.sessionId });
   if (!job || job.status === "done") return { deleted: false, dryRun: false };
   const storage = client();
   for (const [index, ref] of job.refs.entries()) {
     if (ref.deleted) continue;
-    if (!await ctx.runQuery(internal.storageDeletion.sessionMayDelete, { key: ref.storageKey })) return { deleted: false, dryRun: false };
+    if (!await ctx.runMutation(internal.storageDeletion.recordSessionVersion, { jobId: job._id, index, versionId: ref.versionId, bytes: ref.bytes ?? 0, deleted: false })) return { deleted: false, dryRun: false };
     let versionId = ref.versionId, bytes = ref.bytes ?? 0;
     try {
       const head = await storage.send(new HeadObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey, VersionId: versionId }));
       versionId = head.VersionId; bytes = head.ContentLength ?? bytes;
       if (!versionId) return { deleted: false, dryRun: false };
-      await ctx.runMutation(internal.storageDeletion.recordSessionVersion, { jobId: job._id, index, bytes, versionId, deleted: false });
-      if (!await ctx.runQuery(internal.storageDeletion.sessionMayDelete, { key: ref.storageKey })) return { deleted: false, dryRun: false };
+      if (!await ctx.runMutation(internal.storageDeletion.recordSessionVersion, { jobId: job._id, index, bytes, versionId, deleted: false })) return { deleted: false, dryRun: false };
       await storage.send(new DeleteObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey, VersionId: versionId }));
       try { await storage.send(new HeadObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey, VersionId: versionId })); return { deleted: false, dryRun: false }; }
       catch (error) { if (!missing(error)) throw error; }
     } catch (error) { if (!missing(error)) throw error; }
-    try { await storage.send(new HeadObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey })); return { deleted: false, dryRun: false }; }
+    try { if (!job.refs.slice(index + 1).some(other => !other.deleted && other.bucket === ref.bucket && other.storageKey === ref.storageKey)) { await storage.send(new HeadObjectCommand({ Bucket: ref.bucket, Key: ref.storageKey })); return { deleted: false, dryRun: false }; } }
     catch (error) { if (!missing(error)) throw error; }
     await ctx.runMutation(internal.storageDeletion.recordSessionVersion, { jobId: job._id, index, bytes, versionId, deleted: true });
   }
@@ -285,7 +299,7 @@ export const runPhotoDeletion = internalAction({ args: { photoId: v.id("itemPhot
   return ctx.runAction(internal.storageDeletion.deletePhoto, { ...args, dryRun: !enabled });
 } });
 export const sweep = internalAction({ args: { cursor: v.optional(v.union(v.string(), v.null())), sessions: v.optional(v.boolean()), before: v.optional(v.number()) }, handler: async (ctx, args): Promise<void> => {
-  if (!args.cursor && !args.sessions) await ctx.runMutation(internal.moves.resumePurges, {});
+  if (!args.cursor && !args.sessions && await ctx.runQuery(internal.storageDeletion.deletionEnabled, {})) await ctx.runMutation(internal.moves.resumePurges, {});
   const page = await ctx.runQuery(internal.storageDeletion.plan, { cursor: args.cursor ?? null, sessions: args.sessions, before: args.before });
   for (const photoId of page.ids) try { await ctx.runAction(internal.storageDeletion.runPhotoDeletion, { photoId }); } catch { /* Existing sweep retries pending jobs. */ }
   for (const sessionId of page.sessionIds) try { await ctx.runAction(internal.storageDeletion.runSessionDeletion, { sessionId }); } catch { /* Same retry path. */ }

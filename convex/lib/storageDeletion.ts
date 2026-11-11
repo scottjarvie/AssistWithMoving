@@ -20,6 +20,8 @@ export async function retainPhotoForDeletion(ctx: MutationCtx, photo: Doc<"itemP
 async function eraseSession(ctx: MutationCtx, session: Doc<"photoUploadSessions">) {
   const ownerId = session.usageOwnerId ?? (await ctx.db.get(session.householdId))?.ownerUserId ?? session.createdByUserId;
   if (!ownerId) throw new Error("Storage owner unavailable.");
+  const jobs = await ctx.db.query("sessionDeletionJobs").withIndex("by_session", q => q.eq("sessionId", session._id)).collect();
+  const pending = jobs.filter(job => job.status === "pending");
   if (session.completedPhotoId) {
     const until = session.expiresAt + (session.objectClaimsRegistered ? 0 : defaultPhotoUploadCleanupGraceMs);
     const photo = await ctx.db.get(session.completedPhotoId);
@@ -28,25 +30,51 @@ async function eraseSession(ctx: MutationCtx, session: Doc<"photoUploadSessions"
       const job = await ctx.db.query("storageDeletionJobs").withIndex("by_photo", q => q.eq("photoId", session.completedPhotoId!)).unique();
       if (job) await ctx.db.patch(job._id, { notBefore: Math.max(job.notBefore ?? 0, until) });
     }
-  } else if (!session.cleanupCompletedAt) {
+  }
+  if ((!session.completedPhotoId && !session.cleanupCompletedAt) || pending.length) {
     await closeUploadReservation(ctx, session, false);
     const closed = (await ctx.db.get(session._id))!;
-    const derivativeRefs = Object.fromEntries((session.derivativeUploads ?? []).map(ref => [ref.variant, ref.storageKey]));
-    await ctx.db.insert("sessionDeletionJobs", { sessionId: session._id, originalStorageKey: session.originalStorageKey, ownerId, derivativeRefs, refs: uploadSessionStorageRefs(session).map(ref => ({ ...ref, deleted: false })), bytes: closed.quarantinedBytes ?? 0, notBefore: session.expiresAt + defaultPhotoUploadCleanupGraceMs, erased: true, status: "pending", updatedAt: Date.now() });
+    const candidates: Doc<"sessionDeletionJobs">["refs"] = [...pending.flatMap(job => job.refs), ...(!session.completedPhotoId && !session.cleanupCompletedAt ? uploadSessionStorageRefs(session).map(ref => ({ ...ref, deleted: false })) : [])];
+    const refs: typeof candidates = [];
+    for (const ref of candidates) {
+      // A known version subsumes an unversioned alias; distinct known versions
+      // retain their exact receipts and are removed in order by the worker.
+      const known = candidates.some(other => other.bucket === ref.bucket && other.storageKey === ref.storageKey && other.versionId);
+      if (!ref.versionId && known) continue;
+      const prior = refs.find(other => other.bucket === ref.bucket && other.storageKey === ref.storageKey && other.versionId === ref.versionId);
+      if (prior) { prior.deleted = prior.deleted && ref.deleted; prior.bytes = Math.max(prior.bytes ?? 0, ref.bytes ?? 0); }
+      else refs.push({ ...ref });
+    }
+    const notBefore = Math.max(session.expiresAt + defaultPhotoUploadCleanupGraceMs, ...pending.map(job => job.notBefore ?? 0));
+    const fields = { erased: true as const, refs, notBefore, bytes: closed.quarantinedBytes ?? pending[0]?.bytes ?? 0, status: "pending" as const, updatedAt: Date.now() };
+    const primary = pending[0];
+    if (primary) {
+      await ctx.db.patch(primary._id, fields);
+      for (const job of pending.slice(1)) {
+        for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_deletion_job", q => q.eq("deletionJobId", String(job._id))).collect()) await ctx.db.patch(claim._id, { deletionJobId: String(primary._id) });
+        await ctx.db.delete(job._id);
+      }
+    } else await ctx.db.insert("sessionDeletionJobs", { ...fields, sessionId: session._id, originalStorageKey: session.originalStorageKey, ownerId, derivativeRefs: Object.fromEntries((session.derivativeUploads ?? []).map(ref => [ref.variant, ref.storageKey])) });
+  }
+  for (const job of jobs.filter(job => job.status === "done")) {
+    for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_deletion_job", q => q.eq("deletionJobId", String(job._id))).collect()) await ctx.db.delete(claim._id);
+    await ctx.db.delete(job._id);
   }
   if (session.usageReservationId) await ctx.db.delete(session.usageReservationId);
-  for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_session", q => q.eq("sessionId", session._id)).collect()) await ctx.db.delete(claim._id);
+  for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_session", q => q.eq("sessionId", session._id)).collect()) if (!claim.deletionJobId) await ctx.db.delete(claim._id);
   await ctx.db.delete(session._id);
-  await bumpOwnerRevision(ctx, ownerId);
 }
 
 /** One existing recount continuation per owner, not per erased session. */
 export async function eraseSessions(ctx: MutationCtx, sessions: Doc<"photoUploadSessions">[]) {
   const owners = new Map<Id<"users">, number>();
+  const changed = new Set<Id<"users">>();
   for (const session of sessions) {
     const ownerId = session.usageOwnerId ?? (await ctx.db.get(session.householdId))?.ownerUserId ?? session.createdByUserId;
     await eraseSession(ctx, { ...session, usageOwnerId: ownerId });
+    changed.add(ownerId);
     if (!session.completedPhotoId && !session.cleanupCompletedAt) owners.set(ownerId, Math.max(owners.get(ownerId) ?? 0, session.expiresAt));
   }
+  for (const ownerId of changed) await bumpOwnerRevision(ctx, ownerId);
   for (const [ownerId, at] of owners) await ctx.scheduler.runAt(Math.max(Date.now(), at), internal.usageLimitsStorage.recomputeStep, { ownerId });
 }

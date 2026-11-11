@@ -9,12 +9,13 @@ import { nativeWebsiteIdentity } from "../helpers/website-session";
 import { mcpLimitText } from "../../convex/lib/usageLimits/core";
 import { toolErrorResult } from "../../mcp-server/assistwithmoving-api.mjs";
 
-const storage = vi.hoisted(() => ({ objects: new Map<string, { bytes: Uint8Array; mime: string; version: string }>(), deletes: [] as string[], puts: [] as string[], failDelete: false, failPut: false, failHead: new Set<string>(), revealOlder: false, onSourceRead: null as null | ((url: string) => Promise<void>), sourceReads: [] as string[] }));
+const storage = vi.hoisted(() => ({ objects: new Map<string, { bytes: Uint8Array; mime: string; version: string }>(), deletes: [] as string[], puts: [] as string[], failDelete: false, failPut: false, failHead: new Set<string>(), revealOlder: false, onHead: null as null | ((key: string) => Promise<void>), onSourceRead: null as null | ((url: string) => Promise<void>), sourceReads: [] as string[] }));
 vi.mock("@aws-sdk/client-s3", async importOriginal => {
   const real = await importOriginal<typeof import("@aws-sdk/client-s3")>();
   return { ...real, S3Client: class {
     async send(command: { constructor: { name: string }; input: { Key: string; Body?: Uint8Array; ContentType?: string; VersionId?: string } }) {
       const key = command.input.Key, object = storage.objects.get(key);
+      if (command.constructor.name === "HeadObjectCommand") await storage.onHead?.(key);
       if (command.constructor.name === "HeadObjectCommand" && storage.failHead.has(key)) throw Object.assign(new Error("Synthetic metadata outage"), { name: "ServiceUnavailable" });
       if (command.constructor.name === "PutObjectCommand") { if (storage.failPut) throw new Error("Synthetic PUT failure"); const bytes = new Uint8Array(command.input.Body!); storage.objects.set(key, { bytes, mime: command.input.ContentType ?? "image/webp", version: `version-${storage.puts.length}` }); storage.puts.push(key); return {}; }
       if (command.constructor.name === "DeleteObjectCommand") { if (storage.failDelete) throw new Error("Synthetic delete failure"); expect(command.input.VersionId).toBeTruthy(); storage.deletes.push(key); storage.objects.delete(key); if (storage.revealOlder) storage.objects.set(key, { bytes: new Uint8Array(1), mime: "image/png", version: "unknown-older-version" }); return {}; }
@@ -33,7 +34,7 @@ vi.mock("../../mcp-server/media-ingress.mjs", async importOriginal => {
 const modules = import.meta.glob("../../convex/**/*.ts");
 let png: Uint8Array;
 beforeEach(async () => {
-  vi.useFakeTimers(); storage.objects.clear(); storage.puts.length = 0; storage.deletes.length = 0; storage.failDelete = false; storage.failPut = false; storage.failHead.clear(); storage.revealOlder = false; storage.onSourceRead = null; storage.sourceReads.length = 0;
+  vi.useFakeTimers(); storage.objects.clear(); storage.puts.length = 0; storage.deletes.length = 0; storage.failDelete = false; storage.failPut = false; storage.failHead.clear(); storage.revealOlder = false; storage.onHead = null; storage.onSourceRead = null; storage.sourceReads.length = 0;
   for (const [name, value] of Object.entries({ B2_ENDPOINT: "https://synthetic-storage.invalid", B2_BUCKET_NAME: "synthetic", B2_APPLICATION_KEY_ID: "synthetic-test-only", B2_APPLICATION_KEY: "synthetic-test-only" })) vi.stubEnv(name, value);
   png = await sharp({ create: { width: 2, height: 2, channels: 3, background: "red" } }).png().toBuffer();
   vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
@@ -91,6 +92,7 @@ async function drainPurge(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 async function deletePhotoAndSettle(f: Awaited<ReturnType<typeof fixture>>, args: { photoId: import("../../convex/_generated/dataModel").Id<"itemPhotos">; dryRun?: boolean }) {
+  if (args.dryRun === false) await approveBucket(f);
   const result = await f.t.action(internal.storageDeletion.deletePhoto, args);
   if (result.deleted) await f.t.finishAllScheduledFunctions(vi.runAllTimers);
   return result;
@@ -164,7 +166,7 @@ describe("storage admission through actual upload doors", () => {
     await f.t.run(ctx => ctx.db.patch(id, { expiresAt: 1 }));
     await f.t.mutation(internal.usageLimits.expireReservations, {});
     expect((await f.summary()).usedBytes).toBe(20);
-    expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).toMatchObject({ deleted: true });
+    expect(await deleteSessionApproved(f, { sessionId: id, dryRun: false })).toMatchObject({ deleted: true });
     expect((await f.summary()).usedBytes).toBe(0);
   });
 });
@@ -203,10 +205,9 @@ describe("cleanup and confirmed removal", () => {
 });
 
 describe("person-only allowance controls", () => {
-  it.each(["adminOverview", "adminSetLimits", "adminSetDeletionMode", "forHousehold"] as const)("rejects an administrator's AI identity on %s", async name => {
+  it.each(["adminOverview", "adminSetLimits", "forHousehold"] as const)("rejects an administrator's AI identity on %s", async name => {
     const f = await fixture(); const ai = f.t.withIdentity({ ...nativeWebsiteIdentity("synthetic-admin"), client_id: "synthetic-ai" });
-    if (name === "adminSetDeletionMode") await expect(ai.mutation(api.usageLimits.adminSetDeletionMode, { enabled: true, reason: "Synthetic" })).rejects.toThrow(/only reduce/);
-    else if (name === "adminSetLimits") await expect(ai.mutation(api.usageLimits.adminSetLimits, { limits: {}, reason: "Synthetic" })).rejects.toThrow(/only reduce/);
+    if (name === "adminSetLimits") await expect(ai.mutation(api.usageLimits.adminSetLimits, { limits: {}, reason: "Synthetic" })).rejects.toThrow(/only reduce/);
     else if (name === "adminOverview") await expect(ai.query(api.usageLimits.adminOverview, {})).rejects.toThrow(/only reduce/);
     else await expect(ai.query(api.usageLimits.forHousehold, { householdId: f.householdId })).rejects.toThrow(/only reduce/);
   });
@@ -301,6 +302,7 @@ it("data exports succeed at the storage cap, count against nobody, and their art
   const job = await f.person.mutation(api.accountPrivacy.createAccountExport, {});
   expect(job.sizeBytes).toBeGreaterThan(0); expect((await f.summary()).usedBytes).toBe(0);
   await f.t.run(ctx => ctx.db.patch(job.exportJobId, { expiresAt: 1 }));
+  await f.t.mutation(internal.usageLimits.operatorSetDeletionModes, { exports: true, reason: "Synthetic operator approval" });
   await f.t.mutation(internal.exportCleanup.expireArtifacts, {});
   await f.t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(await f.t.run(ctx => ctx.db.get(job.exportJobId))).toMatchObject({ status: "expired" });
@@ -324,7 +326,7 @@ it("a legacy failed session without a completed-photo link still cannot delete a
   const sessionId = begin.uploadSessionId as import("../../convex/_generated/dataModel").Id<"photoUploadSessions">;
   await f.t.run(ctx => ctx.db.patch(sessionId, { status: "failed", completedPhotoId: undefined, expiresAt: 0 }));
   expect((await f.t.query(internal.photos.claimExpiredCleanup, {})).candidates[0].refs).toEqual([]);
-  expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId, dryRun: false })).toMatchObject({ deleted: false });
+  expect(await deleteSessionApproved(f, { sessionId, dryRun: false })).toMatchObject({ deleted: false });
   expect(storage.objects.has(key)).toBe(true); expect(storage.deletes).toEqual([]);
 });
 
@@ -414,7 +416,7 @@ it("a released upload can reopen the same operation after cleanup without double
   const f = await fixture();
   const id = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("retryable", 20));
   await f.t.run(ctx => ctx.db.patch(id, { status: "failed", expiresAt: 1 }));
-  expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).toMatchObject({ deleted: true });
+  expect(await deleteSessionApproved(f, { sessionId: id, dryRun: false })).toMatchObject({ deleted: true });
   const again = await f.person.mutation(internal.photos.createUploadSession, { ...f.sessionArgs("retryable", 20), originalStorageKey: "new-key-after-cleanup" });
   expect(again).toBe(id);
   const counters = await f.t.run(ctx => ctx.db.query("usageCounters").first());
@@ -680,6 +682,7 @@ it("export expiry schedules separate transactions, audits removal, and leaves a 
   const f = await fixture();
   const job = await f.person.mutation(api.accountPrivacy.createAccountExport, {});
   const writing = await f.t.run(async ctx => { await ctx.db.patch(job.exportJobId, { expiresAt: 1 }); return ctx.db.insert("exportJobs", { householdId: f.householdId, moveId: f.moveId, type: "inventory", format: "csv", status: "processing", version: 1, createdByUserId: f.owner, createdAt: 1, updatedAt: 1, expiresAt: 1 }); });
+  await f.t.mutation(internal.usageLimits.operatorSetDeletionModes, { exports: true, reason: "Synthetic operator approval" });
   expect(await f.t.mutation(internal.exportCleanup.expireArtifacts, {})).toEqual({ scheduled: 1 });
   expect((await f.t.run(ctx => ctx.db.get(job.exportJobId)))?.status).toBe("completed");
   await f.t.finishAllScheduledFunctions(vi.runAllTimers);
@@ -815,9 +818,9 @@ it("legacy presigned sessions keep their cleanup grace and remain charged until 
   await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id });
   await f.t.run(ctx => ctx.db.patch(id, { objectClaimsRegistered: undefined, expiresAt: Date.now() - 1 }));
   storage.objects.set("legacy-grace-original", { bytes: new Uint8Array(20), mime: "image/png", version: "legacy-grace-version" });
-  expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).toMatchObject({ deleted: false }); expect((await f.summary()).usedBytes).toBe(20);
+  expect(await deleteSessionApproved(f, { sessionId: id, dryRun: false })).toMatchObject({ deleted: false }); expect((await f.summary()).usedBytes).toBe(20);
   vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
-  expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).toMatchObject({ deleted: true }); expect((await f.summary()).usedBytes).toBe(0);
+  expect(await deleteSessionApproved(f, { sessionId: id, dryRun: false })).toMatchObject({ deleted: true }); expect((await f.summary()).usedBytes).toBe(0);
 });
 
 it("both persisted administrators and the existing Convex email list receive Pro storage", async () => {
@@ -878,9 +881,9 @@ it("a new upload's stored original survives the full existing cleanup grace even
   const row = (await f.t.run(ctx => ctx.db.get(id)))!; vi.setSystemTime(row.expiresAt + 1);
   await f.t.mutation(internal.usageLimits.expireReservations, {});
   await f.t.action(internal.storageDeletion.settleSession, { sessionId: id });
-  expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).toMatchObject({ deleted: false }); expect(storage.objects.has("composer-original")).toBe(true); expect((await f.summary()).usedBytes).toBe(20);
+  expect(await deleteSessionApproved(f, { sessionId: id, dryRun: false })).toMatchObject({ deleted: false }); expect(storage.objects.has("composer-original")).toBe(true); expect((await f.summary()).usedBytes).toBe(20);
   vi.setSystemTime(row.expiresAt + 24 * 60 * 60 * 1000 + 1);
-  expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).toMatchObject({ deleted: true }); expect((await f.summary()).usedBytes).toBe(0);
+  expect(await deleteSessionApproved(f, { sessionId: id, dryRun: false })).toMatchObject({ deleted: true }); expect((await f.summary()).usedBytes).toBe(0);
 });
 
 it("backfill clears stuck in-flight bytes with no reservation behind them", async () => {
@@ -1070,7 +1073,7 @@ it("R3 purged unfinished sessions discard private fields and disappear after con
   expect(await f.t.run(ctx => ctx.db.get(id))).toBeNull();
   const job = (await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").first()))!;
   vi.setSystemTime(job.notBefore! + 1);
-  await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false });
+  await deleteSessionApproved(f, { sessionId: id, dryRun: false });
   await f.t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(await f.t.run(ctx => ctx.db.get(id))).toBeNull();
   expect(await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").collect())).toEqual([]);
@@ -1110,7 +1113,7 @@ it("R3 early URL batch refusal explicitly reports unknown total rather than a si
 it("R3 cleaned-operation target conflicts remain per item without hidden holds", async () => {
   const f = await fixture(); const id = await f.person.mutation(internal.photos.createUploadSession, { ...f.sessionArgs("cleaned"), room: "A" });
   await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id });
-  vi.setSystemTime(Date.now() + 25 * 3600000); await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false });
+  vi.setSystemTime(Date.now() + 25 * 3600000); await deleteSessionApproved(f, { sessionId: id, dryRun: false });
   const response = await f.person.mutation(internal.photos.tryCreateUploadBatch, { files: [f.sessionArgs("fresh"), { ...f.sessionArgs("cleaned"), originalStorageKey: "cleaned-new-key", room: "B" }], requestBytes: 1 });
   expect(response).not.toHaveProperty("refusal"); expect(response.results?.[0].uploadSessionId).toBeTruthy(); expect(response.results?.[1]).toMatchObject({ code: "OPERATION_CONFLICT" });
   expect(await f.t.run(ctx => ctx.db.query("uploadReservations").withIndex("by_owner_status", q => q.eq("ownerId", f.owner).eq("status", "reserved")).collect())).toHaveLength(1);
@@ -1139,7 +1142,7 @@ it("R3 the REST batch door exposes a cleaned target conflict per item and keeps 
   const f = await fixture(); const key = await f.key();
   const id = await f.t.mutation(internal.photos.createUploadSession, { ...f.sessionArgs("rest-cleaned"), room: "A", apiActor: { apiKeyId: String(key.id), createdByUserId: f.owner } });
   await f.t.mutation(internal.photos.markUploadSessionFailed, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id, apiActor: { apiKeyId: String(key.id), createdByUserId: f.owner } });
-  vi.setSystemTime(Date.now() + 25 * 3600000); await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false });
+  vi.setSystemTime(Date.now() + 25 * 3600000); await deleteSessionApproved(f, { sessionId: id, dryRun: false });
   const response = await f.t.action(internal.restApiActions.handle, { method: "POST", path: "uploads/batch", authorization: `Bearer ${key.raw}`, idempotencyKey: "mixed-cleaned-rest", query: {}, body: { moveId: f.moveId, continueOnError: true, images: [{ fileBase64: Buffer.from(png).toString("base64"), mimeType: "image/png", room: "A", idempotencyKey: "rest-fresh" }, { fileBase64: Buffer.from(png).toString("base64"), mimeType: "image/png", room: "B", idempotencyKey: "rest-cleaned" }] } });
   expect(response).toMatchObject({ status: 200, body: { data: { uploadedCount: 1, failedCount: 1, results: [{ index: 0, ok: true }, { index: 1, ok: false, code: "OPERATION_CONFLICT" }] } } });
   expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ inFlight: 0, reservedBytes: 0 });
@@ -1171,6 +1174,7 @@ it("R4 joint erasure of shared originals and cross-derivatives finishes without 
   // The erased jobs neither block each other nor expose user metadata.
   const jobs = await f.t.run(ctx => ctx.db.query("storageDeletionJobs").collect());
   expect(jobs).toHaveLength(3); for (const job of jobs) expect(job).not.toHaveProperty("caption");
+  await approveBucket(f);
   for (const job of jobs) await f.t.action(internal.storageDeletion.deletePhoto, { photoId: job.photoId, dryRun: false });
   await f.t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(await f.t.run(ctx => ctx.db.query("storageDeletionJobs").collect())).toEqual([]);
@@ -1191,6 +1195,7 @@ it("R4 erasure cannot delete a key another household still uses", async () => {
   });
   await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" }); await drainPurge(f);
   expect(await f.t.run(ctx => ctx.db.get(outside))).not.toBeNull();
+  await approveBucket(f);
   expect(await f.t.action(internal.storageDeletion.deletePhoto, { photoId, dryRun: false })).toMatchObject({ deleted: false, blocked: true });
   expect(storage.objects.has(key)).toBe(true);
 });
@@ -1239,6 +1244,7 @@ it("R4 copy recovery cannot return an erased job's charge twice after confirmed-
   await f.t.mutation(internal.photos.prepareStoredDerivative, { photoId, storageKey: "synthetic-missing-erased-copy", bytes: 20 });
   const intent = (await f.t.run(ctx => ctx.db.query("generatedObjects").withIndex("by_key", q => q.eq("storageKey", "synthetic-missing-erased-copy")).unique()))!;
   await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" }); await drainPurge(f);
+  await f.t.finishAllScheduledFunctions(vi.runAllTimers); await approveBucket(f);
   vi.setSystemTime(Date.now() + 16 * 60000);
   await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
   expect((await f.summary()).usedBytes).toBe(before);
@@ -1261,4 +1267,141 @@ it("R4 household session erasure does not schedule one recount per session", asy
   expect(await f.t.run(ctx => ctx.db.query("photoUploadSessions").first())).toBeNull();
   expect(await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").collect())).toHaveLength(1001);
   expect(await f.t.run(async ctx => (await ctx.db.system.query("_scheduled_functions").collect()).filter(row => row.name.includes("usageLimitsStorage:recomputeStep")))).toHaveLength(1);
+});
+
+
+async function approveBucket(f: Awaited<ReturnType<typeof fixture>>) {
+  await f.t.mutation(internal.usageLimits.operatorSetDeletionModes, { bucket: true, reason: "Synthetic operator approval" });
+}
+async function deleteSessionApproved(f: Awaited<ReturnType<typeof fixture>>, args: { sessionId: import("../../convex/_generated/dataModel").Id<"photoUploadSessions">; dryRun?: boolean }) {
+  if (args.dryRun === false) await approveBucket(f);
+  return f.t.action(internal.storageDeletion.deleteSession, args);
+}
+async function physicalInventory(f: Awaited<ReturnType<typeof fixture>>) {
+  let cursor: string | null = null, bytes = 0, objects = 0;
+  for (;;) { const page: { bytes: number; objects: number; cursor: string; isDone: boolean } = await f.t.action(internal.usageLimitsStorage.dryRunPage, { ownerId: f.owner, cursor }); bytes += page.bytes; objects += page.objects; if (page.isDone) return { bytes, objects }; cursor = page.cursor; }
+}
+
+it("R5 recount counts a shared physical object once across live rows, cleanup jobs and pages", async () => {
+  const f = await fixture({ cap: 1000000 }); const { done, key } = await f.upload();
+  const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">;
+  const expected = [...storage.objects.values()].reduce((sum, object) => sum + object.bytes.byteLength, 0);
+  await f.t.run(async ctx => { for (let i = 0; i < 205; i++) await ctx.db.insert("storageDeletionJobs", { photoId, ownerId: f.owner, originalStorageKey: key, derivativeRefs: {}, refs: [{ bucket: "synthetic", storageKey: key, bytes: png.byteLength, deleted: false }], bytes: png.byteLength, status: "pending", updatedAt: i }); });
+  expect(await physicalInventory(f)).toEqual({ bytes: expected, objects: 5 });
+  // Replaying the same noninitial page is idempotent, not a zero-byte result.
+  const first = await f.t.action(internal.usageLimitsStorage.dryRunPage, { ownerId: f.owner, cursor: null });
+  const next = await f.t.action(internal.usageLimitsStorage.dryRunPage, { ownerId: f.owner, cursor: first.cursor });
+  expect(await f.t.action(internal.usageLimitsStorage.dryRunPage, { ownerId: f.owner, cursor: first.cursor })).toEqual(next);
+  await approveBucket(f);
+  await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect((await f.summary()).usedBytes).toBe(expected);
+  await f.t.run(ctx => ctx.db.patch(f.settings, { planStoredBytes: { free: expected + 1, pro: expected + 1 } }));
+  await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("last-byte", 1));
+  await expect(f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("too-much", 1))).rejects.toThrow(/USAGE_LIMIT_REACHED/);
+  await f.t.run(ctx => ctx.db.delete(photoId));
+  for (const objectKey of storage.objects.keys()) if (objectKey !== key) storage.objects.delete(objectKey);
+  expect(await physicalInventory(f)).toEqual({ bytes: png.byteLength, objects: 1 });
+});
+
+it("R5 recount does not count an ordinary failed session again through its pending cleanup job", async () => {
+  const f = await fixture(); const id = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("overlap", 20));
+  await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id });
+  vi.setSystemTime(Date.now() + 25 * 3600000);
+  storage.objects.set("overlap-original", { bytes: new Uint8Array(20), mime: "image/png", version: "known-version" });
+  await approveBucket(f); storage.failDelete = true;
+  await expect(f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).rejects.toThrow(/Synthetic delete failure/);
+  expect(await physicalInventory(f)).toEqual({ bytes: 20, objects: 1 });
+});
+
+it("R5 erasure adopts a previously failed cleanup job, preserves its receipt and longest lease, and retries it to completion", async () => {
+  const f = await fixture(); const id = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("adopt", 20));
+  await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id });
+  vi.setSystemTime(Date.now() + 25 * 3600000);
+  storage.objects.set("adopt-original", { bytes: new Uint8Array(20), mime: "image/png", version: "receipt-version" });
+  await approveBucket(f); storage.failDelete = true;
+  await expect(f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false })).rejects.toThrow(/Synthetic delete failure/);
+  const old = (await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").first()))!;
+  const later = Date.now() + 10000;
+  await f.t.run(async ctx => {
+    await ctx.db.patch(old._id, { notBefore: later - 1 });
+    const { _id, _creationTime, ...fields } = old; void _id; void _creationTime;
+    await ctx.db.insert("sessionDeletionJobs", { ...fields, notBefore: later, refs: [{ bucket: "synthetic", storageKey: "adopt-second", versionId: "second-version", bytes: 7, deleted: false }] });
+    await ctx.db.insert("sessionDeletionJobs", { ...fields, status: "done" });
+  });
+  storage.objects.set("adopt-second", { bytes: new Uint8Array(7), mime: "image/png", version: "second-version" });
+  await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" }); await drainPurge(f);
+  const jobs = await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").collect());
+  expect(jobs).toHaveLength(1); expect(jobs[0]).toMatchObject({ _id: old._id, erased: true, notBefore: later, refs: [{ bucket: "synthetic", storageKey: "adopt-original", versionId: "receipt-version", bytes: 20, deleted: false }, { bucket: "synthetic", storageKey: "adopt-second", versionId: "second-version", bytes: 7, deleted: false }] });
+  expect(await f.t.run(ctx => ctx.db.get(id))).toBeNull();
+  storage.failDelete = false; vi.setSystemTime(later + 1);
+  await f.t.action(internal.storageDeletion.sweep, {}); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(storage.objects.size).toBe(0); expect(await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").collect())).toEqual([]);
+  expect(await f.t.run(ctx => ctx.db.query("uploadObjectClaims").collect())).toEqual([]); expect((await f.summary()).usedBytes).toBe(0);
+});
+
+it.each(["photo", "session", "erased-session"] as const)("R5 %s claim transaction rechecks a newly added live reference before granting deletion", async kind => {
+  const f = await fixture(); await approveBucket(f);
+  const uploaded = await f.upload(); const photoId = uploaded.done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">;
+  const template = (await f.t.run(ctx => ctx.db.get(photoId)))!;
+  let jobId: string, key: string;
+  if (kind === "photo") {
+    await f.t.run(ctx => ctx.db.patch(photoId, { pendingStorageDeletion: true }));
+    const job = (await f.t.mutation(internal.storageDeletion.prepare, { photoId }))!; jobId = job._id; key = job.refs[0].storageKey;
+  } else {
+    const id = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("claim-test", 20));
+    await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id }); vi.setSystemTime(Date.now() + 25 * 3600000);
+    const job = (await f.t.mutation(internal.storageDeletion.prepareSession, { sessionId: id }))!; jobId = job._id; key = job.refs[0].storageKey;
+    if (kind === "erased-session") { await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" }); await drainPurge(f); }
+  }
+  const outside = await f.t.run(async ctx => { const { _id, _creationTime, ...fields } = template; void _id; void _creationTime; return ctx.db.insert("itemPhotos", { ...fields, originalStorageKey: key, derivativeRefs: {} }); });
+  const claim = () => kind === "photo" ? f.t.mutation(internal.storageDeletion.recordVersion, { jobId: jobId as import("../../convex/_generated/dataModel").Id<"storageDeletionJobs">, index: 0, bytes: 20, deleted: false }) : f.t.mutation(internal.storageDeletion.recordSessionVersion, { jobId: jobId as import("../../convex/_generated/dataModel").Id<"sessionDeletionJobs">, index: 0, bytes: 20, deleted: false });
+  expect(await claim()).toBe(false); expect(storage.deletes).toEqual([]);
+  await f.t.run(ctx => ctx.db.delete(outside)); expect(await claim()).toBe(true);
+  expect(await f.t.run(ctx => ctx.db.query("uploadObjectClaims").withIndex("by_deletion_job", q => q.eq("deletionJobId", jobId)).collect())).toEqual([expect.objectContaining({ storageKey: key })]);
+  // A reference arriving after the first claim/HEAD must be caught by the
+  // second transaction, immediately before the worker's physical delete.
+  storage.objects.set(key, { bytes: new Uint8Array(20), mime: "image/png", version: "race-version" });
+  storage.onHead = async readKey => { if (readKey !== key) return; storage.onHead = null; await f.t.run(async ctx => { const { _id, _creationTime, ...fields } = template; void _id; void _creationTime; await ctx.db.insert("itemPhotos", { ...fields, originalStorageKey: key, derivativeRefs: {} }); }); };
+  const result = kind === "photo" ? await f.t.action(internal.storageDeletion.deletePhoto, { photoId, dryRun: false }) : await f.t.action(internal.storageDeletion.deleteSession, { sessionId: (await f.t.run(ctx => ctx.db.get(jobId as import("../../convex/_generated/dataModel").Id<"sessionDeletionJobs">)))!.sessionId, dryRun: false });
+  expect(result.deleted).toBe(false); expect(storage.deletes).toEqual([]); expect(storage.objects.has(key)).toBe(true);
+});
+
+it("R5 absent switches preserve main's automatic-deletion set; previews are read-only counts and bytes", async () => {
+  const f = await fixture(); const { done } = await f.upload(); const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">;
+  const pending = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("off-session", 20));
+  const exported = await f.person.mutation(api.accountPrivacy.createAccountExport, {});
+  await f.t.run(async ctx => { await ctx.db.patch(photoId, { pendingStorageDeletion: true }); await ctx.db.patch(pending, { expiresAt: 1 }); await ctx.db.patch(exported.exportJobId, { expiresAt: 1 }); await ctx.db.insert("movePurges", { householdId: f.householdId, moveId: f.moveId, table: 0, cursor: null, updatedAt: 0 }); });
+  const before = await f.t.run(async ctx => ({ photos: await ctx.db.query("itemPhotos").collect(), sessions: await ctx.db.query("photoUploadSessions").collect(), exports: await ctx.db.query("accountExportJobs").collect(), purges: await ctx.db.query("movePurges").collect() }));
+  const snapshot = await f.t.action(internal.exportCleanup.preview, {}); expect(snapshot).toEqual({ count: 1, bytes: exported.sizeBytes });
+  const purgePreview = await f.t.action(internal.moves.previewPurges, {}); expect(Object.keys(purgePreview).sort()).toEqual(["bytes", "count"]); expect(purgePreview.count).toBeGreaterThan(0);
+  expect(await f.t.run(async ctx => ({ photos: await ctx.db.query("itemPhotos").collect(), sessions: await ctx.db.query("photoUploadSessions").collect(), exports: await ctx.db.query("accountExportJobs").collect(), purges: await ctx.db.query("movePurges").collect() }))).toEqual(before);
+  expect(await f.t.action(internal.storageDeletion.deletePhoto, { photoId, dryRun: false })).toMatchObject({ dryRun: true });
+  expect(await f.t.action(internal.storageDeletion.deleteSession, { sessionId: pending, dryRun: false })).toMatchObject({ dryRun: true });
+  await f.t.action(internal.storageDeletion.sweep, {}); await f.t.action(internal.storageDeletion.sweepSessions, {}); await f.t.action(internal.photos.cleanupExpiredInternal, {});
+  expect(await f.t.mutation(internal.exportCleanup.expireArtifacts, {})).toEqual({ scheduled: 0 });
+  await f.t.mutation(internal.moves.resumePurges, {}); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  // main's cron fixture never removes bucket objects, photo/session rows, or export artifacts.
+  expect(storage.deletes).toEqual([]); expect(await f.t.run(ctx => ctx.db.query("itemPhotos").collect())).toEqual(before.photos);
+  expect((await f.t.run(ctx => ctx.db.query("photoUploadSessions").collect())).map(row => row._id)).toEqual(before.sessions.map(row => row._id));
+  expect(await f.t.run(ctx => ctx.db.query("accountExportJobs").collect())).toEqual(before.exports); expect(await f.t.run(ctx => ctx.db.query("movePurges").collect())).toEqual(before.purges);
+  const limitsModule = await import("../../convex/usageLimits"); expect(limitsModule.operatorSetDeletionModes).toHaveProperty("isInternal", true); expect(limitsModule).not.toHaveProperty("adminSetDeletionMode");
+  await expect(f.admin.mutation(api.usageLimits.adminSetLimits, { limits: { storageDeletionEnabled: true }, reason: "Synthetic" } as never)).rejects.toThrow();
+});
+
+it("R5 export expiry rechecks its switch in the clearing transaction", async () => {
+  const f = await fixture(); const exported = await f.person.mutation(api.accountPrivacy.createAccountExport, {}); await f.t.run(ctx => ctx.db.patch(exported.exportJobId, { expiresAt: 1 }));
+  await f.t.mutation(internal.usageLimits.operatorSetDeletionModes, { exports: true, reason: "Synthetic approval" });
+  expect(await f.t.mutation(internal.exportCleanup.expireArtifacts, {})).toEqual({ scheduled: 1 });
+  await f.t.mutation(internal.usageLimits.operatorSetDeletionModes, { exports: false, reason: "Synthetic pause" });
+  await f.t.finishAllScheduledFunctions(vi.runAllTimers); expect(await f.t.run(ctx => ctx.db.get(exported.exportJobId))).toHaveProperty("artifactText");
+  await f.t.mutation(internal.usageLimits.operatorSetDeletionModes, { exports: true, reason: "Synthetic approval" }); await f.t.mutation(internal.exportCleanup.expireArtifacts, {}); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await f.t.run(ctx => ctx.db.get(exported.exportJobId))).not.toHaveProperty("artifactText");
+});
+
+it("R5 reset-data counters stay charged with deletion off and fall after enabled confirmed cleanup", async () => {
+  const f = await fixture(); const { done } = await f.upload(); const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">; const before = (await f.summary()).usedBytes;
+  await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" }); await drainPurge(f);
+  storage.objects.clear(); await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect((await f.summary()).usedBytes).toBe(before);
+  await deletePhotoAndSettle(f, { photoId, dryRun: false }); expect((await f.summary()).usedBytes).toBe(0);
 });

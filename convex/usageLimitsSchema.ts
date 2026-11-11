@@ -39,8 +39,9 @@ export const nullableLimitPatch = v.object({
 });
 
 export const usageLimitTables = {
+  usageInventoryObjects: defineTable({ scanId: v.string(), ownerId: v.string(), bucket: v.string(), storageKey: v.string(), firstPage: v.string(), bytes: v.number(), unknown: v.boolean(), missing: v.boolean(), expiresAt: v.number() }).index("by_scan_object", ["scanId", "ownerId", "bucket", "storageKey"]).index("by_expiry", ["expiresAt"]),
   movePurges: defineTable({ householdId: v.id("households"), moveId: v.id("moves"), table: v.number(), cursor: v.union(v.string(), v.null()), updatedAt: v.number() }).index("by_updated", ["updatedAt"]),
-  uploadObjectClaims: defineTable({ storageKey: v.string(), sessionId: v.id("photoUploadSessions") }).index("by_key", ["storageKey"]).index("by_session", ["sessionId"]),
+  uploadObjectClaims: defineTable({ storageKey: v.string(), sessionId: v.optional(v.id("photoUploadSessions")), deletionJobId: v.optional(v.string()) }).index("by_key", ["storageKey"]).index("by_session", ["sessionId"]).index("by_deletion_job", ["deletionJobId"]),
   usageRecountProofs: defineTable({ runId: v.id("usageRecountRuns"), ownerId: v.id("users"), storedBytes: v.number(), observedBytes: v.optional(v.number()) }).index("by_run_owner", ["runId", "ownerId"]),
   sessionDeletionJobs: defineTable({ erased: v.optional(v.boolean()), bytes: v.optional(v.number()), notBefore: v.optional(v.number()), derivativeRefs: v.optional(v.object({ thumb: v.optional(v.string()), card: v.optional(v.string()), detail: v.optional(v.string()), full: v.optional(v.string()) })), sessionId: v.id("photoUploadSessions"), originalStorageKey: v.string(), ownerId: v.id("users"), refs: v.array(v.object({ bucket: v.string(), storageKey: v.string(), versionId: v.optional(v.string()), bytes: v.optional(v.number()), deleted: v.boolean() })), status: v.union(v.literal("pending"), v.literal("done")), updatedAt: v.number() }).index("by_session", ["sessionId"]).index("by_owner_status", ["ownerId", "status"]).index("by_original_key", ["originalStorageKey"]).index("by_thumb_key", ["derivativeRefs.thumb"]).index("by_card_key", ["derivativeRefs.card"]).index("by_detail_key", ["derivativeRefs.detail"]).index("by_full_key", ["derivativeRefs.full"]).index("by_status_updated", ["status", "updatedAt"]),
   generatedObjects: defineTable({ ownerId: v.id("users"), photoId: v.id("itemPhotos"), bucket: v.string(), storageKey: v.string(), bytes: v.number(), state: v.union(v.literal("pending"), v.literal("active"), v.literal("failed")), createdAt: v.number() }).index("by_owner", ["ownerId"]).index("by_photo", ["photoId"]).index("by_key", ["storageKey"]).index("by_state_created", ["state", "createdAt"]),
@@ -53,6 +54,7 @@ export const usageLimitTables = {
     storageRevision: v.optional(v.number()),
     backfillCompletedAt: v.optional(v.number()),
     storageDeletionEnabled: v.optional(v.boolean()),
+    exportExpiryEnabled: v.optional(v.boolean()),
     ...limitFields,
     enforcement: enforcementValidator,
     downloadEnforcement: v.optional(enforcementValidator),

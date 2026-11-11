@@ -1432,6 +1432,7 @@ export const finishExpiredUploadSessionCleanup = aiMutation({
   handler: async (ctx, args) => {
     const admin = await requireAppAdmin(ctx);
     let markedFailedSessionCount = 0;
+    const deletionEnabled = Boolean((await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique())?.storageDeletionEnabled);
 
     for (const result of args.results) {
       const session = await ctx.db.get(result.uploadSessionId);
@@ -1444,7 +1445,7 @@ export const finishExpiredUploadSessionCleanup = aiMutation({
         status: session.status === "authorized" ? "failed" : session.status,
         cleanupAttemptedAt: args.now,
         cleanupCompletedAt:
-          result.error || !args.deleteObjects ? undefined : args.now,
+          result.error || !args.deleteObjects || !deletionEnabled ? undefined : args.now,
         cleanupError: result.error,
         abandonedObjectCount: result.attemptedObjectCount,
         deletedAbandonedObjectCount: result.deletedObjectCount,

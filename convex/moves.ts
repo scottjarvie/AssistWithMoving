@@ -4,7 +4,7 @@ import { v } from "convex/values";
 
 import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, internalAction, mutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
@@ -556,14 +556,18 @@ async function purgeMoveData(
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // One bounded transaction per indexed table page; the removed move cannot
 // accept new uploads while the authorized purge continues.
+function purgeTables() {
+  const photos = MOVE_INDEXED_PURGE_TABLES.find(entry => entry.table === "itemPhotos")!;
+  return [...MOVE_INDEXED_PURGE_TABLES.filter(entry => entry !== photos), photos, ...HOUSEHOLD_FILTER_PURGE_TABLES];
+}
 export const purgePage = internalMutation({
-  args: { runId: v.id("movePurges") },
-  handler: async (ctx, { runId }) => {
+  args: { runId: v.id("movePurges"), automatic: v.optional(v.boolean()) },
+  handler: async (ctx, { runId, automatic }) => {
+    if (automatic && !(await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique())?.storageDeletionEnabled) return null;
     const args = await ctx.db.get(runId);
     if (!args) return null;
     // Retire sessions first, transferring active write leases to their photos.
-    const photos = MOVE_INDEXED_PURGE_TABLES.find(entry => entry.table === "itemPhotos")!;
-    const tables = [...MOVE_INDEXED_PURGE_TABLES.filter(entry => entry !== photos), photos, ...HOUSEHOLD_FILTER_PURGE_TABLES];
+    const tables = purgeTables();
     const entry = tables[args.table];
     if (!entry) { await ctx.db.delete(runId); return null; }
     // Dynamic table/index pairs are a closed, server-owned list above.
@@ -588,7 +592,7 @@ export const purgePage = internalMutation({
     const table = page.isDone ? args.table + 1 : args.table;
     if (table === tables.length) { await ctx.db.delete(runId); return null; }
     await ctx.db.patch(runId, { table, cursor: page.isDone ? null : page.continueCursor, updatedAt: Date.now() });
-    await ctx.scheduler.runAfter(0, internal.moves.purgePage, { runId });
+    await ctx.scheduler.runAfter(0, internal.moves.purgePage, { runId, automatic });
     return { runId };
 
   },
@@ -596,8 +600,9 @@ export const purgePage = internalMutation({
 
 /* eslint-enable @typescript-eslint/no-explicit-any */
 export const resumePurges = internalMutation({ args: {}, handler: async ctx => {
+  if (!(await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique())?.storageDeletionEnabled) return;
   const runs = await ctx.db.query("movePurges").withIndex("by_updated", q => q.lt("updatedAt", Date.now() - 15 * 60 * 1000)).take(30);
-  for (const run of runs) { await ctx.db.patch(run._id, { updatedAt: Date.now() }); await ctx.scheduler.runAfter(0, internal.moves.purgePage, { runId: run._id }); }
+  for (const run of runs) { await ctx.db.patch(run._id, { updatedAt: Date.now() }); await ctx.scheduler.runAfter(0, internal.moves.purgePage, { runId: run._id, automatic: true }); }
 } });
 export const purge = mutation({
   args: {
@@ -665,3 +670,34 @@ export const purge = mutation({
     };
   },
 });
+
+export const pendingPurgeRuns = internalQuery({ args: { cursor: v.union(v.string(), v.null()) }, handler: async (ctx, args) => {
+  const page = await ctx.db.query("movePurges").paginate({ cursor: args.cursor, numItems: 30 });
+  return { ids: page.page.map(row => row._id), cursor: page.continueCursor, done: page.isDone };
+} });
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export const previewPurgePage = internalQuery({ args: { runId: v.id("movePurges"), table: v.number(), cursor: v.union(v.string(), v.null()) }, handler: async (ctx, args) => {
+  const run = await ctx.db.get(args.runId); const entry = purgeTables()[args.table];
+  if (!run || !entry) return { count: 0, bytes: 0, next: null };
+  const household = args.table >= MOVE_INDEXED_PURGE_TABLES.length;
+  const page = await (ctx.db as any).query(entry.table).withIndex(entry.index, (q: any) => q.eq(household ? "householdId" : "moveId", household ? run.householdId : run.moveId)).paginate({ cursor: args.cursor, numItems: 100, maximumBytesRead: 350_000 });
+  const rows = page.page.filter((row: any) => !household || row.moveId === run.moveId);
+  return { count: rows.length, bytes: rows.reduce((sum: number, row: any) => sum + new TextEncoder().encode(JSON.stringify(row)).byteLength, 0), next: page.isDone ? (args.table + 1 === purgeTables().length ? null : { table: args.table + 1, cursor: null }) : { table: args.table, cursor: page.continueCursor } };
+} });
+/* eslint-enable @typescript-eslint/no-explicit-any */
+/** Counts/serialized row bytes only; no ids or user data leave this preview. */
+export const previewPurges = internalAction({ args: {}, handler: async (ctx): Promise<{ count: number; bytes: number }> => {
+  let count = 0, bytes = 0, cursor: string | null = null;
+  for (;;) {
+    const runs: { ids: Doc<"movePurges">["_id"][]; cursor: string; done: boolean } = await ctx.runQuery(internal.moves.pendingPurgeRuns, { cursor });
+    for (const runId of runs.ids) {
+      const run = await ctx.runQuery(internal.moves.purgeCheckpoint, { runId });
+      if (!run) continue;
+      let next: { table: number; cursor: string | null } | null = { table: run.table, cursor: run.cursor };
+      while (next) { const page: { count: number; bytes: number; next: { table: number; cursor: string | null } | null } = await ctx.runQuery(internal.moves.previewPurgePage, { runId, ...next }); count += page.count; bytes += page.bytes; next = page.next; }
+    }
+    if (runs.done) break; cursor = runs.cursor;
+  }
+  return { count, bytes };
+} });
+export const purgeCheckpoint = internalQuery({ args: { runId: v.id("movePurges") }, handler: (ctx, args) => ctx.db.get(args.runId) });

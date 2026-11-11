@@ -161,6 +161,7 @@ export async function restoreUploadReservation(ctx: MutationCtx, session: Doc<"p
 }
 export const expireReservations = internalMutation({ args: { cursor: v.optional(v.union(v.string(), v.null())), at: v.optional(v.number()) }, handler: async (ctx, args) => {
   const at = args.at ?? Date.now();
+  if (!args.cursor) await ctx.scheduler.runAfter(0, internal.usageLimitsStorage.cleanupInventorySeen, { before: at });
   const page = await ctx.db.query("uploadReservations").withIndex("by_status_expires", q => q.eq("status", "reserved").lte("expiresAt", at)).paginate({ cursor: args.cursor ?? null, numItems: 100 });
   let closed = 0, processing = 0, skipped = 0;
   for (const row of page.page) {
@@ -216,23 +217,24 @@ async function storedPage(ctx: Ctx, ownerId: string, cursor: string | null) {
       : await ctx.db.query("sessionDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", ownerId as Id<"users">).eq("status", "pending")).paginate({ cursor: at.cursor, numItems: 100 });
     const objects: Array<{ bucket: string; storageKey: string }> = []; let pendingBytes = 0, pendingLegacyFiles = 0;
     for (const job of jobs.page) {
+      if ("sessionId" in job && !job.erased && await ctx.db.get(job.sessionId)) continue;
       const writeUntil = "sessionId" in job ? (job.notBefore ?? 0) - defaultPhotoUploadCleanupGraceMs : job.notBefore ?? 0;
       if (writeUntil > Date.now()) { pendingBytes += job.bytes ?? 0; pendingLegacyFiles++; }
-      else objects.push(...job.refs.filter(ref => !ref.deleted).map(ref => ({ bucket: ref.bucket, storageKey: ref.storageKey })));
+      objects.push(...job.refs.filter(ref => !ref.deleted).map(ref => ({ bucket: ref.bucket, storageKey: ref.storageKey })));
     }
     return { bytes: pendingBytes, pendingBytes, pendingLegacyFiles, unknown: 0, objects, cursor: JSON.stringify({ ...at, phase: jobs.isDone && at.phase === 7 ? 8 : at.phase, cursor: jobs.isDone && at.phase === 7 ? null : jobs.continueCursor }), isDone: jobs.isDone && at.phase === 8 };
   }
   if (at.phase === 6) {
     const generated = await ctx.db.query("generatedObjects").withIndex("by_owner", q => q.eq("ownerId", ownerId as Id<"users">)).paginate({ cursor: at.cursor, numItems: 100, maximumBytesRead: 350_000 });
-    const objects = []; let pendingBytes = 0;
+    const objects = []; let pendingBytes = 0, pendingLegacyFiles = 0;
     for (const intent of generated.page) {
       if (await ctx.db.query("storageDeletionJobs").withIndex("by_photo", q => q.eq("photoId", intent.photoId)).filter(q => q.eq(q.field("status"), "pending")).first()) continue;
       const photo = await ctx.db.get(intent.photoId);
       if (photo && photoStorageRefs(photo).some(ref => ref.storageKey === intent.storageKey)) continue;
-      if (intent.state === "pending") pendingBytes += intent.bytes;
-      else objects.push({ bucket: intent.bucket, storageKey: intent.storageKey });
+      if (intent.state === "pending") { pendingBytes += intent.bytes; pendingLegacyFiles++; }
+      objects.push({ bucket: intent.bucket, storageKey: intent.storageKey });
     }
-    return { bytes: pendingBytes, pendingBytes, pendingLegacyFiles: 0, unknown: 0, objects, cursor: JSON.stringify({ ...at, phase: generated.isDone ? 7 : 6, cursor: generated.isDone ? null : generated.continueCursor }), isDone: false };
+    return { bytes: pendingBytes, pendingBytes, pendingLegacyFiles, unknown: 0, objects, cursor: JSON.stringify({ ...at, phase: generated.isDone ? 7 : 6, cursor: generated.isDone ? null : generated.continueCursor }), isDone: false };
   }
   const isSession = at.phase === 1 || at.phase >= 4;
   const page = at.phase <= 1
@@ -252,9 +254,13 @@ async function storedPage(ctx: Ctx, ownerId: string, cursor: string | null) {
       if ((at.phase === 3 || at.phase === 5) && row.usageOwnerId) continue;
     }
     if ("expectedSizeBytes" in row) {
-      if (row.quarantinedBytes && !row.cleanupCompletedAt) { pendingBytes += row.quarantinedBytes; continue; }
+      if (row.quarantinedBytes !== undefined && !row.cleanupCompletedAt) {
+        pendingBytes += row.quarantinedBytes;
+        if (row.expiresAt + (row.objectClaimsRegistered ? 0 : defaultPhotoUploadCleanupGraceMs) > Date.now()) pendingLegacyFiles++;
+        objects.push(...uploadSessionStorageRefs(row)); continue;
+      }
       if (row.completedPhotoId || row.status === "completed" || row.cleanupCompletedAt || row.usageReservationId) continue;
-      if (row.status === "authorized" && row.expiresAt > Date.now()) { pendingLegacyFiles++; continue; }
+      if (row.status === "authorized" && row.expiresAt > Date.now()) { pendingLegacyFiles++; objects.push(...uploadSessionStorageRefs(row)); continue; }
       // Legacy abandoned objects have no hold. Count only refs not already owned
       // by a photo, including historically failed completed sessions.
       for (const ref of uploadSessionStorageRefs(row)) if (!await referencedObject(ctx, ref.storageKey, undefined, row._id)) objects.push(ref);
@@ -277,7 +283,9 @@ async function storedPage(ctx: Ctx, ownerId: string, cursor: string | null) {
 export const metadataPage = internalQuery({ args: { ownerId: v.string(), cursor: v.union(v.string(), v.null()) }, handler: (ctx, args) => storedPage(ctx, args.ownerId, args.cursor) });
 export const beginRecountPage = internalMutation({ args: { ownerId: v.id("users") }, handler: async (ctx, args) => {
   const { row } = await load(ctx, args.ownerId, false);
-  const repair = row.repair?.revision === row.revision ? row.repair : { phase: 0, cursor: null, bytes: 0, revision: row.revision, restarts: (row.repair?.restarts ?? 0) + 1 };
+  let expired = false;
+  if (row.repair?.cursor) { try { expired = JSON.parse(row.repair.cursor).inventoryExpiresAt < Date.now(); } catch { expired = true; } }
+  const repair = !expired && row.repair?.revision === row.revision ? row.repair : { phase: 0, cursor: null, bytes: 0, revision: row.revision, restarts: (row.repair?.restarts ?? 0) + 1 };
   await ctx.db.patch(row._id, { repair });
   return { revision: row.revision, cursor: repair.cursor };
 } });
@@ -289,7 +297,8 @@ export const finishRecountPage = internalMutation({ args: { ownerId: v.id("users
   const site = args.done ? await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique() : null;
   const unknown = row.repair.phase + (args.unknownSizeFiles ?? 0);
   const keepEnforced = Boolean(site?.backfillCompletedAt && row.ready);
-  if (args.done) await ctx.db.patch(row._id, { storedBytes: keepEnforced && unknown > 0 ? row.storedBytes : bytes, ...(!backedHold ? { reservedBytes: 0, inFlight: 0 } : {}), ready: keepEnforced || unknown === 0, repair: undefined, revision: row.revision + 1, updatedAt: Date.now() });
+  const resetHeld = args.done && !site?.storageDeletionEnabled && (await ctx.db.query("storageDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "pending")).first() || await ctx.db.query("sessionDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "pending")).filter(q => q.eq(q.field("erased"), true)).first());
+  if (args.done) await ctx.db.patch(row._id, { storedBytes: resetHeld ? Math.max(row.storedBytes, bytes) : keepEnforced && unknown > 0 ? row.storedBytes : bytes, ...(!backedHold ? { reservedBytes: 0, inFlight: 0 } : {}), ready: keepEnforced || unknown === 0, repair: undefined, revision: row.revision + 1, updatedAt: Date.now() });
   else await ctx.db.patch(row._id, { repair: { ...row.repair, phase: row.repair.phase + (args.unknownSizeFiles ?? 0), bytes, cursor: args.nextCursor } });
   if (args.done) await touchStorageRevision(ctx);
   return { done: args.done, restarted: false };
@@ -375,14 +384,16 @@ export const releaseFetch = internalMutation({ args: { id: v.id("uploadReservati
   await releaseUpload(ctx, args.id);
 } });
 
-/** Independent dry-run-first gate: changing allowance mode never enables deletion. */
-export const adminSetDeletionMode = mutation({ args: { enabled: v.boolean(), reason: v.string() }, handler: async (ctx, args) => {
-  await requirePersonConnectionManagement(ctx); const actor = await requireAppAdmin(ctx);
-  if (!args.reason.trim()) throw new ConvexError("A reason is required.");
-  const site = await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique();
-  await ctx.db.insert("usageLimitAudit", { at: Date.now(), actor: String(actor._id), target: "site", field: "storageDeletionEnabled", before: String(site?.storageDeletionEnabled ?? false), after: String(args.enabled), reason: args.reason.trim() });
-  if (site) await ctx.db.patch(site._id, { storageDeletionEnabled: args.enabled });
-  else await ctx.db.insert("usageLimitSettings", { key: "site", enforcement: "off", storageDeletionEnabled: args.enabled, updatedAt: Date.now(), updatedBy: String(actor._id) });
+/** Only an internal operator may approve automatic deletion, after previews. */
+export const operatorSetDeletionModes = internalMutation({ args: { bucket: v.optional(v.boolean()), exports: v.optional(v.boolean()), reason: v.string() }, handler: async (ctx, args) => {
+  if (!args.reason.trim() || (args.bucket === undefined && args.exports === undefined)) throw new ConvexError("Specify a switch and a reason.");
+  let site = await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique();
+  if (!site) { const id = await ctx.db.insert("usageLimitSettings", { key: "site", enforcement: "off", updatedAt: Date.now(), updatedBy: "internal-operator" }); site = (await ctx.db.get(id))!; }
+  for (const [field, after] of [["storageDeletionEnabled", args.bucket], ["exportExpiryEnabled", args.exports]] as const) {
+    if (after === undefined) continue;
+    await ctx.db.insert("usageLimitAudit", { at: Date.now(), actor: "internal-operator", target: "site", field, before: String(site[field] ?? false), after: String(after), reason: args.reason.trim() });
+    await ctx.db.patch(site._id, { [field]: after, updatedAt: Date.now(), updatedBy: "internal-operator" });
+  }
 } });
 
 export const reservationInternal = internalQuery({ args: { id: v.id("uploadReservations") }, handler: (ctx, args) => ctx.db.get(args.id) });

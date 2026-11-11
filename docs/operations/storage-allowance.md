@@ -63,7 +63,9 @@ Continue with each returned cursor until `isDone`. Sum page bytes, missing objec
 and unknown sizes. The cursor traverses indexed owned households, photos, sessions
 and generated intents, including retained records whose parent is gone. An orphan
 uses its retained owner, then its uploader/creator. Every original and referenced
-copy is HEADed individually. Missing objects contribute zero and are reported;
+copy is HEADed. A bounded, expiring derived seen set identifies physical objects
+by bucket/key across all pages and phases, so shared references count once.
+Replaying a page returns its original contribution; a new scan observes afresh. Missing objects contribute zero and are reported;
 other metadata failures remain unknown and block enforcement readiness. Live
 legacy uploads without a reservation must finish or expire before verification.
 
@@ -103,10 +105,10 @@ Only a separately reviewed bucket inventory can establish that; none was run.
 ## Deletion and abandoned uploads
 
 Object deletion is independent of allowance enforcement. New workers default to
-read-only dry run (`storageDeletionEnabled` absent/false). Admins have a separate,
-reasoned and audited deletion-mode control; turning allowance On never turns on
-deletion. Existing explicit admin cleanup remains available through the guarded
-worker. A reviewed operator can inspect an exact photo/session without mutation:
+read-only dry run (`storageDeletionEnabled` absent/false). Only the internal
+operator function can enable bucket deletion; the website shows its status only.
+Turning allowance On never enables deletion. A reviewed operator can inspect
+an exact photo/session without mutation:
 
 ```sh
 npx convex run storageDeletion:deletePhoto '{"photoId":"<photo-id>"}'
@@ -114,7 +116,8 @@ npx convex run storageDeletion:deleteSession '{"sessionId":"<session-id>"}'
 ```
 
 These list exact objects and whether another reference protects them. Explicit
-`dryRun:false` requests deletion; scheduled workers require the separate setting.
+`dryRun:false` requests deletion only while the internal operator switch is on;
+direct workers and scheduled workers both recheck the switch.
 New pending uploads hold indexed object claims in the reservation transaction;
 legacy pending references have a separate indexed fallback. A terminal cleanup
 claim freezes finalization and prevents another operation from adopting its keys.
@@ -149,8 +152,10 @@ upload-attempt limits and do not turn that accepted upload into a refusal.
 Account exports and move exports store temporary artifact text in their existing
 database job rows, not in the media bucket. They never reserve storage, count
 against an account or fail for lack of storage. Existing lifetimes remain fourteen
-days for account exports and thirty days for move exports. Hourly expiry schedules
-one transaction per completed artifact, clears its text/size and audits removal.
+days for account exports and thirty days for move exports. Export artifact expiry
+defaults off (`exportExpiryEnabled` absent/false). When enabled by the internal
+operator, hourly expiry schedules one transaction per completed artifact, clears
+its text/size and audits removal. Each clearing transaction rechecks the switch.
 Queued/processing exports are excluded.
 
 ## Policy and fixed ceilings
@@ -199,7 +204,7 @@ Move purges remove the move immediately, then continue through bounded,
 resumable indexed pages of up to five hundred photo records or one hundred other
 records, bounded to 1 MB of page input. The missing move prevents new
 uploads. Each authorized purge has one durable table/cursor checkpoint. The existing
-cleanup tick resumes failed checkpoints; successful completion deletes the
+cleanup tick resumes failed checkpoints only while bucket deletion is enabled; successful completion deletes the
 checkpoint. User media rows are deleted, rather than replaced with altered photo
 or session rows. Completed sessions, claims and reservations are retired; minimal
 cleanup jobs are removed after confirmed object cleanup. Shared erasures do not
@@ -231,3 +236,39 @@ may therefore share a key without blocking each other. Actual live references
 still protect their objects. Move erasures use one durable table/cursor
 checkpoint; the existing cleanup sweep resumes interrupted checkpoints and removes
 the checkpoint at completion. The same cursor loop is used at every size; every page is transactional.
+
+## Deletion release order
+
+Deploy with both deletion switches absent or false. Run the read-only previews,
+then have the lead review the numbers. Only then may an internal operator enable
+the reviewed mode with a reason. No real deployment or operator change was run
+for this draft.
+
+```sh
+npx convex run exportCleanup:preview '{}'
+npx convex run moves:previewPurges '{}'
+npx convex run usageLimits:operatorSetDeletionModes '{"bucket":true,"exports":true,"reason":"<reviewed reason>"}'
+```
+
+The export preview returns only artifact count and bytes. The pending-purge
+preview returns only database row count and serialized row bytes. Neither writes
+or reveals identifiers or content. Photo/session previews above remain read-only.
+The two switches are independent; omit a flag to leave it unchanged. There is no
+public mutation or administrator form that can enable either switch.
+
+With switches off, automatic workers remove no stored files, photo/session rows,
+or export artifacts beyond main's automatic behavior. Explicitly requested user
+erasure still removes the same private database rows as main and records minimal
+cleanup obligations. New automatic recovery of a stalled purge waits for the
+bucket switch; the already authorized purge's own cursor continuation proceeds.
+Counters for reset data stay charged until deletion is enabled and confirmed.
+A session erasure adopts its existing unfinished cleanup jobs, preserving exact
+version receipts and the longest write lease, then retires every adopted job and
+claim on confirmation.
+
+Immediately before each physical object delete, the worker mutation rechecks live
+photo, generated-file, upload-session and erased-session lease references and
+records a durable key claim in that same transaction. Both photo and session
+workers use this path, including erased sessions, manual cleanup and cron retries.
+The claim prevents new upload registrations from adopting the key while the
+version-specific delete runs.
