@@ -976,3 +976,30 @@ it("an early URL batch count refusal reports uploads rather than byte counts", a
   const result = await f.t.action(internal.restApiActions.handle, { method: "POST", path: "uploads/batch", authorization: `Bearer ${key.raw}`, idempotencyKey: "url-count", query: {}, body: { moveId: f.moveId, images: [{ sourceUrl: "https://synthetic.invalid/a.png" }, { sourceUrl: "https://synthetic.invalid/b.png" }] } });
   expect(result).toMatchObject({ status: 413, body: { error: { code: "USAGE_LIMIT_REACHED", limit: "uploadsPerHour", unit: "uploads", used: 0, requested: 2, cap: 1, remaining: 1 } } }); expect(storage.puts).toEqual([]);
 });
+
+it("a post-backfill recount keeps a counted owner enforced if metadata temporarily fails", async () => {
+  const f = await fixture(); const { key } = await f.upload(); const before = (await f.summary()).usedBytes!;
+  await f.t.run(ctx => ctx.db.patch(f.settings, { planStoredBytes: { free: before, pro: before } })); storage.failHead.add(key);
+  await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await f.summary()).toMatchObject({ ready: true, usedBytes: before });
+  await expect(f.person.action(api.photos.initUpload, f.beginArgs("still-enforced"))).rejects.toMatchObject({ data: expect.stringContaining("[USAGE_LIMIT_REACHED]") });
+});
+
+it("batch reopening sums new slots without charging the hourly count again", async () => {
+  const f = await fixture();
+  for (const name of ["reopen-a", "reopen-b"]) { const id = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs(name, 20)); await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id }); }
+  await f.t.run(ctx => ctx.db.patch(f.settings, { maxUploadsInFlight: 1, uploadsPerHour: 2 }));
+  const files = [f.sessionArgs("reopen-a", 20), f.sessionArgs("reopen-b", 20)];
+  const blocked = await f.person.mutation(internal.photos.tryCreateUploadBatch, { files, requestBytes: 50 }); expect(blocked.refusal).toMatchObject({ limit: "maxUploadsInFlight", requested: 2, used: 0 });
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ inFlight: 0, hourUploads: 2, storedBytes: 40 });
+  await f.t.run(ctx => ctx.db.patch(f.settings, { maxUploadsInFlight: 2 })); const reopened = await f.person.mutation(internal.photos.tryCreateUploadBatch, { files, requestBytes: 50 }); expect(reopened.refusal).toBeUndefined();
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ inFlight: 2, hourUploads: 2, reservedBytes: 40, storedBytes: 0 });
+});
+
+it("late cleanup receipts never rewrite a cleaned session's true failure", async () => {
+  const f = await fixture(); const sessionId = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("cleaned-receipt", 20));
+  await f.t.run(ctx => ctx.db.patch(sessionId, { status: "failed", failureCode: "ORIGINAL_FAILURE", cleanupCompletedAt: 1, expiresAt: 1 }));
+  const before = await f.t.run(ctx => ctx.db.get(sessionId));
+  await f.admin.mutation(internal.photos.finishExpiredUploadSessionCleanup, { now: Date.now(), deleteObjects: true, plannedSessionCount: 1, skippedReferencedObjectCount: 0, results: [{ uploadSessionId: sessionId, attemptedObjectCount: 1, deletedObjectCount: 0, error: "Late synthetic error" }] });
+  expect(await f.t.run(ctx => ctx.db.get(sessionId))).toEqual(before);
+});

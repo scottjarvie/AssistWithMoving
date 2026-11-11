@@ -1430,10 +1430,11 @@ export const finishExpiredUploadSessionCleanup = aiMutation({
 
     for (const result of args.results) {
       const session = await ctx.db.get(result.uploadSessionId);
-      if (!session || session.status === "completed") {
+      if (!session || session.status === "completed" || session.completedPhotoId || session.cleanupCompletedAt) {
         continue;
       }
 
+      await closeUploadReservation(ctx, session);
       await ctx.db.patch(result.uploadSessionId, {
         status: session.status === "authorized" ? "failed" : session.status,
         cleanupAttemptedAt: args.now,
@@ -2276,15 +2277,22 @@ async function createBatch(ctx: MutationCtx, args: Infer<typeof batchValidator>)
         const actorId = file.apiActor?.createdByUserId ?? (await requireMovePermission(ctx, file.householdId, file.moveId, "inventory:edit")).actor;
         const userId = typeof actorId === "string" ? actorId : actorId.type === "user" ? actorId.userId : "";
         const operationId = file.operationId ? `${file.moveId}:${userId}:${file.operationId}` : file.originalStorageKey;
+        if (pendingOperations.has(operationId)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "An operationId can occur only once in a batch." });
         const prior = await ctx.db.query("photoUploadSessions").withIndex("by_household_operation", q => q.eq("householdId", file.householdId).eq("operationId", operationId)).unique();
         if (prior && (prior.expectedSizeBytes !== file.expectedSizeBytes || prior.expectedMimeType !== file.expectedMimeType)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId names different media." });
-        if (prior && !prior.cleanupCompletedAt) { results[index] = { uploadSessionId: prior._id, created: false }; continue; }
+        if (prior && !prior.cleanupCompletedAt) {
+          if (["itemId", "boxId", "spaceId", "transportResourceId", "transportZoneId", "room"].some(field => (prior[field as keyof typeof prior] ?? null) !== (file[field as keyof typeof file] ?? null)) || JSON.stringify((prior.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes])) !== JSON.stringify((file.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes]))) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId already names different media." });
+          const held = prior.usageReservationId ? await ctx.db.get(prior.usageReservationId) : null;
+          if (prior.completedPhotoId || prior.status === "completed" || held?.status === "reserved" || !held) { pendingOperations.add(operationId); results[index] = { uploadSessionId: prior._id, created: false }; continue; }
+          const deletion = await ctx.db.query("sessionDeletionJobs").withIndex("by_session", q => q.eq("sessionId", prior._id)).order("desc").first();
+          if (deletion?.status === "pending") throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This upload is being cleaned up. Use a new operationId." });
+          const missing = Math.max(0, held.bytes - (prior.quarantinedBytes ?? 0));
+          bytes += missing; newSizes.push({ bytes: missing, countUpload: false }); pendingOperations.add(operationId); valid.push({ index, file }); continue;
+        }
         const sizeFailure = fileSizeFailure(original.mediaKind, original.sizeBytes, info.site, info.override);
         if (sizeFailure) throw new ConvexError(sizeFailure);
         if (!file.operationId && info.effective.enforcement === "on") throw new ConvexError({ code: "OPERATION_ID_REQUIRED", message: "Send an operationId and retry this upload." });
         for (const key of [file.originalStorageKey, ...(file.derivativeUploads ?? []).map(d => d.storageKey)]) if (await claimedUploadObject(ctx, key)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This storage object is already registered to another operation." });
-        if (pendingOperations.has(operationId)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "An operationId can occur only once in a batch." });
-        pendingOperations.add(operationId);
         const keys = [file.originalStorageKey, ...(file.derivativeUploads ?? []).map(d => d.storageKey)];
         if (keys.some(key => pendingKeys.has(key)) || new Set(keys).size !== keys.length) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "A stored object belongs to one upload in this batch." });
         for (const key of keys) pendingKeys.add(key);
@@ -2292,7 +2300,7 @@ async function createBatch(ctx: MutationCtx, args: Infer<typeof batchValidator>)
         if (held?.status === "reserved") heldBytes += held.bytes;
         else newSizes.push({ bytes: file.expectedSizeBytes + (file.derivativeUploads ?? []).reduce((sum, d) => sum + d.expectedSizeBytes, 0), countUpload: !held });
         bytes += file.expectedSizeBytes + (file.derivativeUploads ?? []).reduce((sum, d) => sum + d.expectedSizeBytes, 0);
-        valid.push({ index, file });
+        pendingOperations.add(operationId); valid.push({ index, file });
       } catch (error) { const refusal = refusalOf(error); if (refusal) await recordRefusalActivity(ctx, file.householdId, refusal, file.apiActor); results[index] = { code: error instanceof ConvexError && typeof error.data === "object" ? String(error.data?.code ?? "INVALID_FILE") : "INVALID_FILE", error: error instanceof ConvexError && typeof error.data === "object" ? String(error.data?.message ?? "Invalid media.") : error instanceof Error ? error.message : "Invalid media." }; }
     }
     await checkBatchAdmission(ctx, args.files[0].householdId, bytes, valid.length, args.requestBytes, heldBytes, newSizes);

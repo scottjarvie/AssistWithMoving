@@ -10,7 +10,8 @@ features are unchanged. Exceptions belong in personal settings.
 
 ## Validation and release
 
-Use Node 20.20.0, pinned by required CI, for `npm ci`, `npm run check` and
+The full check includes the Convex project typecheck. Use Node 20.20.0, pinned
+by required CI, for `npm ci`, `npm run check` and
 `npm run check:convex-typecheck`. Tests use synthetic accounts and storage only.
 The synced core and the generated JavaScript runtime must agree:
 
@@ -85,7 +86,8 @@ npx convex run storageSizeRepair:sessionPage '{"cursor":null,"dryRun":true}'
 ```
 
 `dryRun:false` explicitly enables those metadata repairs. A counter revision
-change restarts its recount; repeated pages cannot be applied twice. The final
+change restarts its recount; after a verified backfill, an unknown metadata read
+keeps the previous counted amount and enforcement active; repeated pages cannot be applied twice. The final
 whole-site proof compares source totals and observed object totals with ready
 counters, reports new/concurrent uploads, and records `backfillCompletedAt` only
 when nothing is unknown, unattributed or inconsistent. A blocked run explains the

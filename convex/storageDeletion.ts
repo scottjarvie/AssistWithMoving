@@ -167,6 +167,8 @@ export const applySessionSettlement = internalMutation({ args: { sessionId: v.id
   const difference = session.quarantinedBytes - args.bytes;
   if (difference >= 0) await removeStoredBytes(ctx, ownerId, difference);
   else { const row = await ctx.db.query("usageCounters").withIndex("by_owner", q => q.eq("ownerId", ownerId)).unique(); if (!row) return false; await ctx.db.patch(row._id, { storedBytes: row.storedBytes - difference, revision: row.revision + 1, updatedAt: Date.now() }); await bumpOwnerRevision(ctx, ownerId); }
+  const counter = await ctx.db.query("usageCounters").withIndex("by_owner", q => q.eq("ownerId", ownerId)).unique();
+  if (counter && hold?.day === counter.dayKey) await ctx.db.patch(counter._id, { dayUploadBytes: Math.max(0, counter.dayUploadBytes - difference) });
   await ctx.db.patch(session._id, { quarantinedBytes: args.bytes }); return true;
 } });
 export const settleSession = internalAction({ args: { sessionId: v.id("photoUploadSessions") }, handler: async (ctx, args): Promise<{ settled: boolean; unknown: number }> => {

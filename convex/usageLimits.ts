@@ -151,9 +151,11 @@ export async function restoreUploadReservation(ctx: MutationCtx, session: Doc<"p
   if (kept > reservation.bytes) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "Stored bytes do not match this upload. Use a new operationId while cleanup settles it." });
   const info = await limitsFor(ctx, session.householdId);
   await verdict(ctx, info, row, checkCommit(counters, info.effective.limits, 0, reservation.bytes - kept));
+  const missing = reservation.bytes - kept;
+  if (counters.dayUploadBytes + missing > info.effective.limits.uploadBytesPerDay) await verdict(ctx, info, row, { limit: "uploadBytesPerDay", unit: "bytes", used: counters.dayUploadBytes, cap: info.effective.limits.uploadBytesPerDay, requested: missing, remaining: Math.max(0, info.effective.limits.uploadBytesPerDay - counters.dayUploadBytes), resetsAt: new Date(nextDayStart(Date.now())).toISOString() });
   if (counters.inFlight >= info.effective.limits.maxUploadsInFlight) await verdict(ctx, info, row, { limit: "maxUploadsInFlight", unit: "uploads", used: counters.inFlight, cap: info.effective.limits.maxUploadsInFlight, requested: 1, remaining: 0, resetsAt: null });
-  await save(ctx, row, { ...counters, storedBytes: Math.max(0, counters.storedBytes - kept), reservedBytes: counters.reservedBytes + reservation.bytes, inFlight: counters.inFlight + 1 }, true);
-  await ctx.db.patch(reservation._id, { status: "reserved", expiresAt });
+  await save(ctx, row, { ...counters, storedBytes: Math.max(0, counters.storedBytes - kept), reservedBytes: counters.reservedBytes + reservation.bytes, inFlight: counters.inFlight + 1, dayUploadBytes: counters.dayUploadBytes + missing }, true);
+  await ctx.db.patch(reservation._id, { status: "reserved", expiresAt, day: counters.dayKey });
   await ctx.db.patch(session._id, { quarantinedBytes: undefined });
   await ctx.scheduler.runAt(expiresAt, internal.usageLimits.expireReservations, {});
 }
@@ -273,7 +275,10 @@ export const finishRecountPage = internalMutation({ args: { ownerId: v.id("users
   if (await ctx.db.query("sessionDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "pending")).first()) return { done: false, restarted: true };
   const bytes = row.repair.bytes + args.bytes;
   const backedHold = args.done ? await ctx.db.query("uploadReservations").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "reserved")).first() : null;
-  if (args.done) await ctx.db.patch(row._id, { storedBytes: bytes, ...(!backedHold ? { reservedBytes: 0, inFlight: 0 } : {}), ready: (row.repair.phase + (args.unknownSizeFiles ?? 0)) === 0, repair: undefined, revision: row.revision + 1, updatedAt: Date.now() });
+  const site = args.done ? await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique() : null;
+  const unknown = row.repair.phase + (args.unknownSizeFiles ?? 0);
+  const keepEnforced = Boolean(site?.backfillCompletedAt && row.ready);
+  if (args.done) await ctx.db.patch(row._id, { storedBytes: keepEnforced && unknown > 0 ? row.storedBytes : bytes, ...(!backedHold ? { reservedBytes: 0, inFlight: 0 } : {}), ready: keepEnforced || unknown === 0, repair: undefined, revision: row.revision + 1, updatedAt: Date.now() });
   else await ctx.db.patch(row._id, { repair: { ...row.repair, phase: row.repair.phase + (args.unknownSizeFiles ?? 0), bytes, cursor: args.nextCursor } });
   if (args.done) await touchStorageRevision(ctx);
   return { done: args.done, restarted: false };
