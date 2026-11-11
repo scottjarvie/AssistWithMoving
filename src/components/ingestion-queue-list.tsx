@@ -459,7 +459,7 @@ export function IngestionQueueList({
 
     const accepted: { file: File; kind: "image" | "audio" | "video" }[] = [];
     for (const file of files) {
-      const validation = validateMediaUploadFile(file);
+      const validation = validateMediaUploadFile(file, Number.MAX_SAFE_INTEGER);
       const kind = mediaKindForMimeType(file.type);
       if (!validation.ok || !kind) {
         setMessage(

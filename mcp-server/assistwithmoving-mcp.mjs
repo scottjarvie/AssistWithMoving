@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { siteDefaults } from "../shared/media-limits.mjs";
+import { uploadPolicyLine } from "../shared/upload-policy.mjs";
+import { AI_STORAGE_NOTE } from "../shared/usage-limits.mjs";
+import { transportLimits } from "../shared/media-limits.mjs";
 import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
 import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { pathToFileURL } from "node:url";
@@ -944,24 +946,30 @@ export function createAllowedToolFilter(allowedToolNames) {
   return (toolName) => allowed.has(toolName);
 }
 
+const policyByTarget = new WeakMap();
+const uploadDescriptionsByTarget = new WeakMap();
 export function createAssistWithMovingMcpServer(apiConfig, options = {}) {
   const target = new McpServer({
     name: "assistwithmoving",
     version: "0.2.0",
     websiteUrl: "https://movingmanifest.com",
-  }, { instructions: connectionPolicy.instructions + " Read storage.line in move context and upload replies. Storage refusals affect one upload and leave your connection working; retain the source file." });
+  }, { instructions: connectionPolicy.instructions });
   registerTools(target, apiConfig, options);
   return target;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const config = createApiConfig();
-  const server = createAssistWithMovingMcpServer(config);
+  let uploadLimits;
+  try { const context = await getApiContext(config); uploadLimits = context.data?.uploadLimits; } catch { /* Tools still provide the normal authenticated recovery path. */ }
+  const server = createAssistWithMovingMcpServer(config, { uploadLimits });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
 export function registerTools(target, apiConfig, options = {}) {
+  policyByTarget.set(target, options.uploadLimits);
+  uploadDescriptionsByTarget.set(target, []);
   if (options.allowedToolNames) {
     allowedToolNamesByTarget.set(target, new Set(options.allowedToolNames));
   } else {
@@ -991,7 +999,7 @@ export function registerTools(target, apiConfig, options = {}) {
       "Inspect the current Assist With Moving API key context, including scopes and any move restriction.",
     inputSchema: {},
     annotations: { readOnlyHint: true, openWorldHint: false },
-    handler: () => getApiContext(apiConfig),
+    handler: async () => { const context = await getApiContext(apiConfig); const policy = context.data?.uploadLimits; if (policy) for (const entry of uploadDescriptionsByTarget.get(target) ?? []) entry.handle.update({ description: entry.base + " " + uploadPolicyLine(policy, entry.policyOptions) }); return context; },
   });
 
   registerTool(target, "list_household_members", {
@@ -2075,6 +2083,8 @@ export function registerTools(target, apiConfig, options = {}) {
     description:
       "Create a presigned evidence upload session for an image, audio file, or video. The client must PUT the file to the returned URL and then call finalize_photo_upload. Image derivatives are optional; Assist With Moving creates them server-side when API/MCP clients upload only the original.",
     inputSchema: {
+      operationId: z.string().optional().describe("Reuse the same operationId when retrying this upload."),
+      idempotencyKey: z.string().optional(),
       moveId: z.string(),
       itemId: z.string().optional(),
       boxId: z.string().optional(),
@@ -2083,13 +2093,13 @@ export function registerTools(target, apiConfig, options = {}) {
       transportZoneId: z.string().optional(),
       room: z.string().optional(),
       mimeType: z.enum(allowedOriginalMediaMimeTypes),
-      sizeBytes: z.number().int().positive().max(siteDefaults.video),
+      sizeBytes: z.number().int().positive().max(transportLimits.video),
       derivatives: z
         .array(
           z.object({
             variant: z.enum(["thumb", "card", "detail", "full"]),
             mimeType: z.enum(allowedDerivativeImageMimeTypes),
-            sizeBytes: z.number().int().positive().max(siteDefaults.image),
+            sizeBytes: z.number().int().positive().max(transportLimits.image),
             width: z.number().int().positive(),
             height: z.number().int().positive(),
           })
@@ -2754,7 +2764,12 @@ function registerTool(target, name, config) {
     return;
   }
 
-  target.registerTool(
+  if (["start_photo_upload", "finalize_photo_upload", "upload_evidence_file", "upload_evidence_image", "upload_evidence_images", "upload_photo", "upload_image", "upload_photos", "upload_images"].includes(name)) config.description += " " + AI_STORAGE_NOTE;
+  const baseDescription = config.description;
+  const policy = policyByTarget.get(target);
+  const policyOptions = { batch: ["upload_evidence_images", "upload_photos", "upload_images"].includes(name), kinds: ["start_photo_upload", "finalize_photo_upload", "upload_evidence_file"].includes(name) ? undefined : ["image"] };
+  if (config.description.includes(AI_STORAGE_NOTE) && policy) config.description += " " + uploadPolicyLine(policy, policyOptions);
+  const handle = target.registerTool(
     name,
     {
       title: config.title,
@@ -2775,4 +2790,5 @@ function registerTool(target, name, config) {
       }
     }
   );
+  if (baseDescription.includes(AI_STORAGE_NOTE) && handle?.update) uploadDescriptionsByTarget.get(target)?.push({ handle, base: baseDescription, policyOptions });
 }

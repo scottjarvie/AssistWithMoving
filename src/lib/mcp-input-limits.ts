@@ -1,3 +1,4 @@
+import { formatBytes } from "../../convex/lib/usageLimits/core";
 /** Bound hosted JSON before mcp-handler parses it. Inline media can still use
  * the host's request allowance; larger originals use the existing source URL
  * upload flow. This limit does not apply to the local stdio transport. */
@@ -5,7 +6,7 @@ export const MAX_HOSTED_MCP_REQUEST_BYTES = 5 * 1024 * 1024;
 export const MAX_HOSTED_MCP_INPUT_ELEMENTS = 65_536;
 
 function tooLarge(): Response {
-  return Response.json({ error: { code: "request_too_large", message: `MCP requests are limited to ${MAX_HOSTED_MCP_REQUEST_BYTES} bytes. Use a source URL for larger media.` } }, { status: 413 });
+  return Response.json({ error: { code: "request_too_large", message: `MCP requests are limited to ${formatBytes(MAX_HOSTED_MCP_REQUEST_BYTES)}. Use a source URL for larger media.` } }, { status: 413 });
 }
 
 export async function boundHostedMcpRequest(request: Request): Promise<Request | Response> {

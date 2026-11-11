@@ -1,6 +1,7 @@
-import { siteDefaults } from "../../shared/media-limits.mjs";
+import { formatBytes } from "./usageLimits/core";
+import { transportLimits } from "../../shared/media-limits.mjs";
 const directImageUploadPaths = new Set(["photos/upload", "images/upload"]);
-const maxDirectImageUploadBytes = siteDefaults.image;
+const maxDirectImageUploadBytes = transportLimits.image;
 const allowedRawImageMimeTypes = new Set([
   "image/jpeg",
   "image/png",
@@ -194,7 +195,7 @@ function assertDirectImageSize(sizeBytes: number) {
     throw new RestApiBodyParseError("Image upload body was empty.");
   }
   if (sizeBytes > maxDirectImageUploadBytes) {
-    throw new RestApiBodyParseError("Images must be under 25 MB.");
+    throw new RestApiBodyParseError(`Images must be under ${formatBytes(maxDirectImageUploadBytes)} for this transport.`);
   }
 }
 

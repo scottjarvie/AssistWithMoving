@@ -6,19 +6,23 @@ import { internalAction } from "./_generated/server";
 // Reads only exact references retained by the application; never lists a bucket.
 export const dryRunPage = internalAction({
   args: { ownerId: v.id("users"), cursor: v.union(v.string(), v.null()) },
-  handler: async (ctx, args): Promise<{ bytes: number; objects: number; cursor: string; isDone: boolean }> => {
+  handler: async (ctx, args): Promise<{ bytes: number; objects: number; cursor: string; isDone: boolean; unknownSizeFiles: number; missingObjects: number }> => {
     const page = await ctx.runQuery(internal.usageLimits.metadataPage, args);
     const endpoint = process.env.B2_ENDPOINT, accessKeyId = process.env.B2_APPLICATION_KEY_ID, secretAccessKey = process.env.B2_APPLICATION_KEY;
     if (!endpoint || !accessKeyId || !secretAccessKey) throw new Error("Storage inventory requires server storage configuration.");
     const client = new S3Client({ endpoint, region: process.env.B2_REGION ?? "us-west-004", forcePathStyle: true, credentials: { accessKeyId, secretAccessKey } });
-    let bytes = 0;
+    let bytes = page.pendingBytes, unknownSizeFiles = page.pendingLegacyFiles, missingObjects = 0;
     for (const object of page.objects) {
-      // Failure, including a missing object, blocks verification rather than inventing zero.
-      const head = await client.send(new HeadObjectCommand({ Bucket: object.bucket, Key: object.storageKey }));
-      if (head.ContentLength === undefined) throw new Error("Storage object size unavailable.");
-      bytes += head.ContentLength;
+      try {
+        const head = await client.send(new HeadObjectCommand({ Bucket: object.bucket, Key: object.storageKey }));
+        if (head.ContentLength === undefined) unknownSizeFiles++;
+        else bytes += head.ContentLength;
+      } catch (error) {
+        if (["NotFound", "NoSuchKey"].includes((error as { name?: string }).name ?? "")) missingObjects++;
+        else unknownSizeFiles++;
+      }
     }
-    return { bytes, objects: page.objects.length, cursor: page.cursor, isDone: page.isDone };
+    return { bytes, unknownSizeFiles, missingObjects, objects: page.objects.length, cursor: page.cursor, isDone: page.isDone };
   },
 });
 export const recomputeStep = internalAction({
@@ -26,6 +30,8 @@ export const recomputeStep = internalAction({
   handler: async (ctx, args): Promise<{ done: boolean; restarted: boolean }> => {
     const snapshot = await ctx.runMutation(internal.usageLimits.beginRecountPage, args);
     const page = await ctx.runAction(internal.usageLimitsStorage.dryRunPage, { ...args, cursor: snapshot.cursor });
-    return ctx.runMutation(internal.usageLimits.finishRecountPage, { ...args, ...snapshot, bytes: page.bytes, nextCursor: page.cursor, done: page.isDone });
+    const result = await ctx.runMutation(internal.usageLimits.finishRecountPage, { ...args, ...snapshot, bytes: page.bytes, nextCursor: page.cursor, done: page.isDone, unknownSizeFiles: page.unknownSizeFiles });
+    if (!result.done && !result.restarted) await ctx.scheduler.runAfter(0, internal.usageLimitsStorage.recomputeStep, args);
+    return result;
   },
 });

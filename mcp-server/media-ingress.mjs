@@ -1,11 +1,12 @@
-import { siteDefaults } from "../shared/media-limits.mjs";
+import { checkFileSize, formatBytes } from "../shared/usage-limits.mjs";
+import { transportLimits } from "../shared/media-limits.mjs";
 import { lookup } from "node:dns/promises";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import path from "node:path";
 
-export const DEFAULT_REMOTE_MEDIA_BYTES = siteDefaults.image;
+export const DEFAULT_REMOTE_MEDIA_BYTES = transportLimits.image;
 export const DEFAULT_REMOTE_MEDIA_TIMEOUT_MS = 10_000;
 export const DEFAULT_REMOTE_MEDIA_REDIRECTS = 3;
 
@@ -23,7 +24,7 @@ export async function readAllowedLocalMedia({ filePath, transport, allowedFileRo
   const candidateLstat = await lstat(candidatePath).catch(() => null);
   if (!candidateLstat?.isFile()) throw new Error("filePath must identify a regular file inside an allowed root; symlinks, devices, directories, and pipes are refused.");
   if (candidateLstat.size <= 0) throw new Error("filePath was empty.");
-  if (candidateLstat.size > maxBytes) throw new Error(`filePath exceeds the ${maxBytes}-byte media limit.`);
+  if (candidateLstat.size > maxBytes) throw new Error(`filePath exceeds the ${formatBytes(maxBytes)} media limit.`);
   const canonicalPath = await realpath(candidatePath);
   const canonicalRoots = await Promise.all(allowedFileRoots.map(async (root) => await realpath(path.resolve(root))));
   const insideAllowedRoot = canonicalRoots.some((root) => {
@@ -32,7 +33,7 @@ export async function readAllowedLocalMedia({ filePath, transport, allowedFileRo
   });
   if (!insideAllowedRoot) throw new Error("filePath resolves outside ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS.");
   const bytes = await readFile(canonicalPath);
-  if (bytes.byteLength > maxBytes) throw new Error(`filePath exceeds the ${maxBytes}-byte media limit.`);
+  if (bytes.byteLength > maxBytes) throw new Error(`filePath exceeds the ${formatBytes(maxBytes)} media limit.`);
   return { bytes, canonicalPath };
 }
 
@@ -64,9 +65,9 @@ export async function resolvePublicAddresses(url, lookupFn = /** @type {any} */ 
 
 /**
  * @param {string} sourceUrl
- * @param {{maxBytes?:number, timeoutMs?:number, maxRedirects?:number, accept?:string, lookupFn?:(hostname:string, options:{all:true,verbatim:true})=>Promise<Array<{address:string,family:number}>>, requestFn?:(options:{url:URL,address:string,family:number,timeoutMs:number,accept:string})=>Promise<{status:number,headers:Headers|Record<string,string|string[]|undefined>,body:AsyncIterable<Uint8Array>|Iterable<Uint8Array>,destroy?:()=>void}>}} [options]
+ * @param {{maxBytes?:number, fileKind?:string, beforeRead?:(declaredBytes:number|null)=>Promise<void>, timeoutMs?:number, maxRedirects?:number, accept?:string, lookupFn?:(hostname:string, options:{all:true,verbatim:true})=>Promise<Array<{address:string,family:number}>>, requestFn?:(options:{url:URL,address:string,family:number,timeoutMs:number,accept:string})=>Promise<{status:number,headers:Headers|Record<string,string|string[]|undefined>,body:AsyncIterable<Uint8Array>|Iterable<Uint8Array>,destroy?:()=>void}>}} [options]
  */
-export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_REMOTE_MEDIA_BYTES, timeoutMs = DEFAULT_REMOTE_MEDIA_TIMEOUT_MS, maxRedirects = DEFAULT_REMOTE_MEDIA_REDIRECTS, accept = "image/*,audio/*,video/*", lookupFn = /** @type {any} */ (lookup), requestFn = requestPinnedHttps } = {}) {
+export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_REMOTE_MEDIA_BYTES, fileKind, beforeRead, timeoutMs = DEFAULT_REMOTE_MEDIA_TIMEOUT_MS, maxRedirects = DEFAULT_REMOTE_MEDIA_REDIRECTS, accept = "image/*,audio/*,video/*", lookupFn = /** @type {any} */ (lookup), requestFn = requestPinnedHttps } = {}) {
   const deadline = Date.now() + timeoutMs;
   const timeoutError = () => new Error(`sourceUrl timed out after ${timeoutMs}ms.`);
   let activeResponse;
@@ -109,7 +110,8 @@ export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_R
       }
       if (response.status < 200 || response.status >= 300) { response.destroy?.(); throw new Error(`Could not download sourceUrl: HTTP ${response.status}.`); }
       const declaredLength = Number(headerValue(response.headers, "content-length") ?? "0");
-      if (Number.isFinite(declaredLength) && declaredLength > maxBytes) { response.destroy?.(); throw new Error(`sourceUrl exceeds the ${maxBytes}-byte media limit.`); }
+      if (Number.isFinite(declaredLength) && declaredLength > maxBytes) { response.destroy?.(); throw fileSizeError(declaredLength, maxBytes, fileKind); }
+      try { await beforeRead?.(declaredLength > 0 && Number.isFinite(declaredLength) ? declaredLength : null); } catch (error) { response.destroy?.(); activeResponse = undefined; throw error; }
       const chunks = [];
       let receivedBytes = 0;
       try {
@@ -117,7 +119,7 @@ export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_R
           assertWithinDeadline();
           const bytes = Buffer.from(chunk);
           receivedBytes += bytes.byteLength;
-          if (receivedBytes > maxBytes) { response.destroy?.(); throw new Error(`sourceUrl exceeds the ${maxBytes}-byte media limit.`); }
+          if (receivedBytes > maxBytes) { response.destroy?.(); throw fileSizeError(receivedBytes, maxBytes, fileKind); }
           chunks.push(bytes);
         }
       } catch (error) { response.destroy?.(); throw error; }
@@ -203,4 +205,12 @@ function expandIpv6(address) {
   if (missing < 0 || (address.includes("::") && missing < 1)) return null;
   const groups = [...left, ...Array(missing).fill("0"), ...right].map((group) => Number.parseInt(group || "0", 16));
   return groups.length === 8 && groups.every((group) => Number.isInteger(group) && group >= 0 && group <= 0xffff) ? groups : null;
+}
+
+function fileSizeError(bytes, cap, fileKind) {
+  if (!fileKind) return new Error(`sourceUrl exceeds the ${cap}-byte media limit.`);
+  const refusal = checkFileSize(fileKind, bytes, cap);
+  const error = new Error(refusal.message);
+  error.payload = { error: refusal };
+  return error;
 }

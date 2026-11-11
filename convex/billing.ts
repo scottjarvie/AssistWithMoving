@@ -1,4 +1,4 @@
-import { summaryFor, storagePlan } from "./usageLimits";
+import { summaryRawFor, storagePlan } from "./usageLimits";
 import { effectiveLimits } from "./lib/usageLimits/core";
 import { v } from "convex/values";
 
@@ -31,7 +31,7 @@ export const statusForHousehold = query({
       billingGatesEnabled(ctx),
     ]);
     const tier = effectiveBillingTier(profile);
-    const storage = await summaryFor(ctx, args.householdId);
+    const storage = await summaryRawFor(ctx, args.householdId);
     const baseDefinition = billingTierDefinition(tier);
     const definition = { ...baseDefinition, limits: { ...baseDefinition.limits, photoStorageBytes: storage.capBytes } };
 
@@ -55,7 +55,8 @@ export const statusForHousehold = query({
       providerDecision: billingProviderDecision,
       dimensions: usageDimensions.map((dimension) => ({
         dimension,
-        used: dimension === "photoStorageBytes" ? storage.usedBytes : usage[dimension],
+        used: dimension === "photoStorageBytes" ? (storage.ready ? storage.usedBytes : usage.photoStorageBytes) : usage[dimension],
+        counting: dimension === "photoStorageBytes" && !storage.ready,
         limit: definition.limits[dimension],
         evaluation: evaluateEntitlement(usage, definition.limits, dimension, 0),
       })),

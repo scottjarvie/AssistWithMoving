@@ -1,4 +1,5 @@
 "use client";
+import { uploadRefusal } from "@/lib/upload-refusal";
 
 import { type ChangeEvent, useRef, useState } from "react";
 import { useAction, useMutation } from "convex/react";
@@ -63,6 +64,7 @@ export function PhotoUploadControl({
   const initUpload = useAction(api.photos.initUpload);
   const finalizeUpload = useAction(api.photos.finalizeUpload);
   const cancelUploadSession = useMutation(api.photos.cancelUploadSession);
+  const operationIds = useRef(new WeakMap<File, string>());
   const [files, setFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState("");
   const [progress, setProgress] = useState(0);
@@ -94,7 +96,7 @@ export function PhotoUploadControl({
     }
 
     for (const selectedFile of nextFiles) {
-      const validation = validatePhotoUploadFile(selectedFile);
+      const validation = validatePhotoUploadFile(selectedFile, Number.MAX_SAFE_INTEGER);
       if (!validation.ok) {
         setFiles([]);
         clearFileInput();
@@ -180,7 +182,10 @@ export function PhotoUploadControl({
       ]);
       onProgress(uploadProgressWeights.prepare);
 
+      const operationId = operationIds.current.get(file) ?? crypto.randomUUID();
+      operationIds.current.set(file, operationId);
       const session = await initUpload({
+        operationId,
         householdId: householdId!,
         moveId: moveId!,
         itemId,
@@ -194,7 +199,7 @@ export function PhotoUploadControl({
       setUploadSessionId(activeUploadSessionId);
       uploadSessionRef.current = activeUploadSessionId;
 
-      await uploadFileWithProgress({
+      if (!session.alreadyUploaded) await uploadFileWithProgress({
         file,
         uploadUrl: session.uploadUrl,
         contentType: session.headers["Content-Type"],
@@ -457,12 +462,14 @@ function formatUploadSuccess(count: number, derivativeFailureCount: number) {
     : `${count} photos uploaded. Web versions ready.`;
 }
 
-function photoUploadFailureMessage(error: unknown, uploadedCount = 0) {
+export function photoUploadFailureMessage(error: unknown, uploadedCount = 0) {
   const prefix =
     uploadedCount > 0
       ? `${uploadedCount} ${uploadedCount === 1 ? "photo" : "photos"} uploaded. `
       : "";
 
+  const refusal = uploadRefusal(error);
+  if (refusal) return `${prefix}${refusal.message}`;
   if (error instanceof DOMException && error.name === "AbortError") {
     return `${prefix}Upload cancelled.`;
   }

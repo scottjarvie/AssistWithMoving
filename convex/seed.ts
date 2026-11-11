@@ -1,3 +1,4 @@
+import { retainPhotoForDeletion, retainSessionForDeletion } from "./lib/storageDeletion";
 import { v } from "convex/values";
 
 import type { Doc, Id, TableNames } from "./_generated/dataModel";
@@ -615,7 +616,9 @@ async function deleteMatching<T extends TableNames>(
   let deleted = 0;
   for (const doc of docs) {
     if (predicate(doc)) {
-      await ctx.db.delete(doc._id);
+      if (table === "itemPhotos") await retainPhotoForDeletion(ctx, doc as unknown as Doc<"itemPhotos">);
+    else if (table === "photoUploadSessions") await retainSessionForDeletion(ctx, doc as unknown as Doc<"photoUploadSessions">);
+    else await ctx.db.delete(doc._id);
       deleted += 1;
     }
   }

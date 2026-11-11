@@ -1,6 +1,7 @@
+import { retainPhotoForDeletion, retainSessionForDeletion } from "./lib/storageDeletion";
 import { v } from "convex/values";
 
-import type { Id, TableNames } from "./_generated/dataModel";
+import type { Doc, Id, TableNames } from "./_generated/dataModel";
 import { mutation, type MutationCtx } from "./_generated/server";
 import { requireCurrentUser } from "./lib/auth";
 
@@ -528,6 +529,11 @@ async function deleteDocs<TableName extends TableNames>(
   docs: { _id: Id<TableName> }[]
 ) {
   for (const doc of docs) {
+    if (doc._id && String(doc._id)) {
+      const row = await ctx.db.get(doc._id);
+      if (row && "originalStorageKey" in row && "derivativeRefs" in row) { await retainPhotoForDeletion(ctx, row as unknown as Doc<"itemPhotos">); continue; }
+      if (row && "originalStorageKey" in row && "expectedSizeBytes" in row) { await retainSessionForDeletion(ctx, row as unknown as Doc<"photoUploadSessions">); continue; }
+    }
     await ctx.db.delete(doc._id);
   }
   return docs.length;

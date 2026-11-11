@@ -1,4 +1,6 @@
-import { siteDefaults } from "../shared/media-limits.mjs";
+import { legacyUploadResponse } from "./lib/legacyUploadResponse";
+import { formatBytes } from "./lib/usageLimits/core";
+import { transportLimits } from "../shared/media-limits.mjs";
 import { internal as generatedInternal } from "./_generated/api";
 import connectionPolicy from "../shared/ai-connection-policy.json";
 import { anyApi, httpRouter } from "convex/server";
@@ -42,7 +44,7 @@ const allowedDirectImageMimeTypes = new Set([
   "image/png",
   "image/webp",
 ]);
-const maxDirectImageUploadBytes = siteDefaults.image;
+const maxDirectImageUploadBytes = transportLimits.image;
 const directImageFileFieldNames = new Set(["file", "image", "photo"]);
 const directImageMetadataFields = new Set([
   "moveId",
@@ -632,7 +634,7 @@ function finalizeDirectImageUploadBody({
     throw new Error("Image upload body was empty.");
   }
   if (bytes.byteLength > maxDirectImageUploadBytes) {
-    throw new Error("Images must be under 25 MB.");
+    throw new Error(`Images must be under ${formatBytes(maxDirectImageUploadBytes)} for this transport.`);
   }
   if (!mimeType || !allowedDirectImageMimeTypes.has(mimeType)) {
     throw new Error("Direct image upload accepts JPEG, PNG, or WebP images.");
@@ -1265,6 +1267,7 @@ const mcpHttpAction = httpAction(async (ctx, request) => {
     tools: mcpTools, requireAuth: true, cors: true,
     serverInfo: { name: "assistwithmoving", version: "0.2.0" },
   });
+  if (input?.method === "tools/call" && input?.params?.name === "add_images") return legacyUploadResponse(response);
   if (input?.method !== "initialize" || !response.ok) return response;
   const bearer = request.headers.get("authorization")?.replace(/^Bearer /i, "");
   const identity = bearer ? await resolveMcpIdentity(bearer) : null;

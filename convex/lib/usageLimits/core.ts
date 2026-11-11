@@ -1,4 +1,4 @@
-// assist-usage-limits-core v1.4.0 sha256:f2138334f2804a3f303d4e76d24ac51d64e2138b693b0788cc38e17186b7a05f
+// assist-usage-limits-core v1.4.2 sha256:3134094c922204ae2b92f97170bbdc9af53e848c8b6db80387c23482c7cb4b11
 // Synced from assistwithlife shared/usage-limits/core.ts. Do not edit here; change it upstream and re-sync.
 /**
  * Assist family upload and usage limits — framework-free core.
@@ -6,7 +6,7 @@
  * sites receive it through scripts/sync-usage-limits.mjs and must not edit it locally.
  */
 
-export const USAGE_LIMITS_CORE_VERSION = "1.4.0";
+export const USAGE_LIMITS_CORE_VERSION = "1.4.2";
 
 export type Enforcement = "off" | "warn" | "on";
 
@@ -47,6 +47,8 @@ const tableValue = (table: Readonly<Record<string, number>> | undefined, key: st
 export const LIMIT_NAMES = Object.keys(DEFAULT_LIMITS) as LimitName[];
 
 export type LimitSettings = Partial<UsageLimits> & {
+  /** Site settings only; an operator sets this after verifying the all-accounts backfill. */
+  backfillCompletedAt?: number;
   planStoredBytes?: Record<string, number>;
   maxFileBytes?: Record<string, number>;
   enforcement?: Enforcement;
@@ -82,6 +84,21 @@ export function effectiveLimits(site?: LimitSettings | null, override?: LimitSet
   const requestedDownload = override?.downloadEnforcement ?? site?.downloadEnforcement ?? "warn";
   const downloadEnforcement = requestedDownload === "on" ? "warn" : requestedDownload;
   return { limits, enforcement, downloadEnforcement, plan: plan ?? null };
+}
+
+/**
+ * A missing counter is ready with zero files only after the site-wide backfill.
+ * Sites must never set a counter row's ready to false from a caller-supplied value;
+ * only the recount may change it. Backfill completion is read from site settings, never an owner override.
+ */
+export function ownerReady(counter: { ready?: boolean } | null | undefined, site?: LimitSettings | null): boolean {
+  if (counter != null) return counter.ready !== false;
+  return typeof site?.backfillCompletedAt === "number" && Number.isFinite(site.backfillCompletedAt);
+}
+
+/** A not-ready account is warned, never refused. */
+export function ownerEnforcement(effective: EffectiveLimits, ready: boolean): Enforcement {
+  return effective.enforcement === "on" && !ready ? "warn" : effective.enforcement;
 }
 
 export function validateLimits(value: Partial<UsageLimits>): string[] {
@@ -261,6 +278,26 @@ export function storageLine(s: StorageSummary): string {
   return `${formatBytes(s.usedBytes)} of ${formatBytes(s.capBytes)} used; ${formatBytes(s.remainingBytes)} left.`;
 }
 
+export type AiStorage = {
+  ready: boolean;
+  plan: string | null;
+  line: string;
+  usedBytes?: number;
+  capBytes?: number;
+  remainingBytes?: number;
+};
+
+/** This is the only shape a site puts in an AI's reply or shows in a person's meter. */
+export function aiStorage(s: StorageSummary): AiStorage {
+  if (!s.ready) return { ready: false, plan: s.plan, line: storageLine(s) };
+  return {
+    ready: true, plan: s.plan, line: storageLine(s),
+    usedBytes: s.usedBytes, capBytes: s.capBytes, remainingBytes: s.remainingBytes,
+  };
+}
+
+export const AI_STORAGE_NOTE = "The reply carries `storage`: when storage.ready is true, storage.remainingBytes is the room left; when it is false the account is still being counted and no upload is refused for storage. An upload that does not fit is refused with the room left, and the connection is unaffected.";
+
 // ---- Counter transitions (pure; the site adapter persists them) ------------------
 
 /**
@@ -332,9 +369,10 @@ export function pressureBp(c: UsageCounters, limits: UsageLimits): number {
 
 export function formatBytes(bytes: number): string {
   const units: [number, string][] = [[1e9, "GB"], [1e6, "MB"], [1e3, "KB"]];
-  for (const [size, unit] of units) {
+  for (const [index, [size, unit]] of units.entries()) {
     if (bytes >= size) {
       const n = bytes / size;
+      if (index > 0 && Math.round(n) === 1000) return `1 ${units[index - 1][1]}`;
       return `${n >= 10 || Number.isInteger(n) ? Math.round(n) : n.toFixed(1)} ${unit}`;
     }
   }
@@ -346,6 +384,14 @@ const count = (n: number) => n.toLocaleString("en-US");
 export function formatResetTime(resetsAt: string, timeZone?: string): string {
   return new Date(resetsAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
 }
+
+/**
+ * Files the site generates for the person are checked for storage only:
+ * `checkCommit(counters, limits, 0, estimate)` before the provider is called,
+ * `applyStoredAddition` after the file is stored. "Up to" is deliberate because
+ * `requested` is the site's output ceiling, not the size of the result.
+ */
+export type RefusalSubject = "upload" | "generated";
 
 export type UsageLimitError = Refusal & {
   code: "USAGE_LIMIT_REACHED";
@@ -372,7 +418,7 @@ const amount = (r: Pick<Refusal, "unit">, n: number) => (r.unit === "bytes" ? fo
  * zone, so a website rebuilds the message in the browser from the structured fields
  * (`usageLimitError(error)`), and MCP replies use `mcpLimitText`.
  */
-export function usageLimitError(input: RefusalInput, opts: { timeZone?: string } = {}): UsageLimitError {
+export function usageLimitError(input: RefusalInput, opts: { timeZone?: string; subject?: RefusalSubject } = {}): UsageLimitError {
   const r: Refusal = { ...input, remaining: roomLeft(input) };
   const at = r.resetsAt ? formatResetTime(r.resetsAt, opts.timeZone) : null;
   const kept = "Nothing was saved; your file is still on your device.";
@@ -386,13 +432,21 @@ export function usageLimitError(input: RefusalInput, opts: { timeZone?: string }
     uploadBytesPerDay: `You've reached today's upload limit (${formatBytes(r.cap)}). It resets at ${at}. ${kept}`,
     downloadBytesPerDay: `You've reached today's download budget (${formatBytes(r.cap)}). It resets at ${at}.`,
   };
+  if (opts.subject === "generated" && r.limit === "storedBytesPerUser") {
+    messages.storedBytesPerUser = r.remaining === 0
+      ? `Your storage is full: ${formatBytes(r.used)} of ${formatBytes(r.cap)} used. Nothing was made and nothing was charged.`
+      : `Not enough storage to make this: it needs up to ${formatBytes(r.requested)} and you have ${formatBytes(r.remaining)} left of ${formatBytes(r.cap)}. Nothing was made and nothing was charged.`;
+  }
   const refusal: Refusal = { limit: r.limit, unit: r.unit, used: r.used, cap: r.cap, requested: r.requested, remaining: r.remaining, resetsAt: r.resetsAt };
   return { code: "USAGE_LIMIT_REACHED", ...refusal, retryable: true, nothingSaved: true, message: messages[r.limit] ?? `Limit reached: ${LIMIT_LABELS[r.limit]}.` };
 }
 
 /** One line for an AI: which limit, the numbers, and exactly how to retry. Times are UTC. */
-export function mcpLimitText(e: RefusalInput): string {
+export function mcpLimitText(e: RefusalInput, opts: { subject?: RefusalSubject } = {}): string {
   if (e.limit === "storedBytesPerUser") {
+    if (opts.subject === "generated") {
+      return `Generation refused: storage needs up to ${formatBytes(e.requested)}, with ${formatBytes(roomLeft(e))} left of ${formatBytes(e.cap)}. Nothing was made, no provider was called and this connection is unaffected. Retry the same call with the same operationId once the person has more room.`;
+    }
     return `Upload refused: storage needs ${formatBytes(e.requested)}, with ${formatBytes(roomLeft(e))} left of ${formatBytes(e.cap)}. Nothing was saved and this connection is unaffected. Retry the same call with the same operationId once the person has more room.`;
   }
   const when = e.resetsAt ? ` after ${e.resetsAt}` : " once the person has more room";

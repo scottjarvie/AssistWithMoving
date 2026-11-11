@@ -103,7 +103,7 @@ export function IngestionCaptureForm({
 
     const accepted: PendingAttachment[] = [];
     for (const file of files) {
-      const validation = validateMediaUploadFile(file);
+      const validation = validateMediaUploadFile(file, Number.MAX_SAFE_INTEGER);
       const kind = mediaKindForMimeType(file.type);
       if (!validation.ok || !kind) {
         setStatus(validation.message ?? `${file.name} is not a supported file.`);

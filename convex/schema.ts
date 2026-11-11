@@ -924,7 +924,8 @@ export default defineSchema({
   })
     .index("by_user_created", ["userId", "createdAt"])
     .index("by_status", ["status"])
-    .index("by_expires", ["expiresAt"]),
+    .index("by_expires", ["expiresAt"])
+    .index("by_status_expiry", ["status", "expiresAt"]),
 
   accountDeletionRequests: defineTable({
     userId: v.id("users"),
@@ -1143,7 +1144,8 @@ export default defineSchema({
     .index("by_profile_created", ["documentationProfileId", "createdAt"])
     .index("by_household_created", ["householdId", "createdAt"])
     .index("by_status", ["status"])
-    .index("by_expires", ["expiresAt"]),
+    .index("by_expires", ["expiresAt"])
+    .index("by_status_expiry", ["status", "expiresAt"]),
 
   apiKeys: defineTable({
     accessOwnerId: v.optional(v.id("aiAccessOwners")),
@@ -1840,7 +1842,9 @@ export default defineSchema({
     .index("by_household", ["householdId"]),
 
   itemPhotos: defineTable({
+    usageOwnerId: v.optional(v.id("users")),
     storedBytes: v.optional(v.number()),
+    derivativeSizes: v.optional(v.object({ thumb: v.optional(v.number()), card: v.optional(v.number()), detail: v.optional(v.number()), full: v.optional(v.number()) })),
     pendingStorageDeletion: v.optional(v.boolean()),
     householdId: v.id("households"),
     moveId: v.id("moves"),
@@ -1898,9 +1902,24 @@ export default defineSchema({
     .index("by_move_ai_processed", ["moveId", "aiProcessed"])
     .index("by_move_verification", ["moveId", "verificationStatus"])
     .index("by_move_privacy", ["moveId", "privacyLevel"])
-    .index("by_household", ["householdId"]),
+    .index("by_household", ["householdId"])
+    .index("by_usage_owner", ["usageOwnerId"])
+    .index("by_uploader", ["uploadedByUserId"])
+    .index("by_pending_deletion", ["pendingStorageDeletion"])
+    .index("by_original_key", ["originalStorageKey"])
+    .index("by_thumb_key", ["derivativeRefs.thumb"])
+    .index("by_card_key", ["derivativeRefs.card"])
+    .index("by_detail_key", ["derivativeRefs.detail"])
+    .index("by_full_key", ["derivativeRefs.full"]),
 
   photoUploadSessions: defineTable({
+    objectClaimsRegistered: v.optional(v.boolean()),
+    usageOwnerId: v.optional(v.id("users")),
+    operationId: v.optional(v.string()),
+    quarantinedBytes: v.optional(v.number()),
+    processingUntil: v.optional(v.number()),
+    failureCode: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
     usageReservationId: v.optional(v.id("uploadReservations")),
     householdId: v.id("households"),
     moveId: v.id("moves"),
@@ -1950,8 +1969,14 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_status_cleanup_expires", ["status", "cleanupCompletedAt", "expiresAt"])
     .index("by_status_expires", ["status", "expiresAt"])
+    .index("by_status_claims_expires", ["status", "objectClaimsRegistered", "expiresAt"])
     .index("by_expires", ["expiresAt"])
-    .index("by_household", ["householdId"]),
+    .index("by_household", ["householdId"])
+    .index("by_usage_owner", ["usageOwnerId"])
+    .index("by_creator", ["createdByUserId"])
+    .index("by_reservation", ["usageReservationId"])
+    .index("by_household_operation", ["householdId", "operationId"])
+    .index("by_original_key", ["originalStorageKey"]),
 
   // Capture-now, process-later work orders for the user's own AI agent.
   // Evidence lives in itemPhotos (image/audio/video); entries reference it.

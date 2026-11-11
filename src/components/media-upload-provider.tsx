@@ -1,4 +1,5 @@
 "use client";
+import { uploadRefusal } from "@/lib/upload-refusal";
 
 // Background media-upload manager. The capture form hands a saved queue entry's
 // id plus the picked files to enqueue(); from there each file uploads in the
@@ -56,7 +57,9 @@ export type UploadJob = {
 // Map a raw upload error (storage/SDK/network) to a short, actionable message
 // for the background queue UI. The detailed cause is already logged; users just
 // need to know whether to retry.
-function friendlyUploadError(error: unknown): string {
+export function friendlyUploadError(error: unknown): string {
+  const refusal = uploadRefusal(error);
+  if (refusal) return refusal.message;
   const raw = error instanceof Error && error.message ? error.message : "";
   const lower = raw.toLowerCase();
   if (lower.includes("too large")) return "That file is too large to upload.";
@@ -259,6 +262,7 @@ export function MediaUploadProvider({
         let photoId = job.finalizedPhotoId;
         if (!photoId) {
           photoId = await uploadMediaFile({
+            operationId: job.id,
             householdId: job.householdId,
             moveId: job.moveId,
             file: job.file,

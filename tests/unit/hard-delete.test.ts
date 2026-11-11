@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptyCounters } from "../../convex/lib/usageLimits/core";
 
 import type { Id } from "../../convex/_generated/dataModel";
 import {
@@ -14,7 +15,9 @@ function createCtx(tables: Record<string, Row[]>) {
   const deletes: string[] = [];
   return {
     ctx: {
+      scheduler: { runAfter: async () => "synthetic-scheduled-deletion" },
       db: {
+        get: async () => ({ ownerUserId: "synthetic-owner" }),
         query: (table: string) => ({
           withIndex: (_index: string, build: (q: unknown) => unknown) => {
             const clauses: Array<{ field: string; value: unknown }> = [];
@@ -26,6 +29,7 @@ function createCtx(tables: Record<string, Row[]>) {
             };
             build(q);
             return {
+              unique: async () => table === "usageCounters" ? { _id: "synthetic-counter", ownerId: "synthetic-owner", ...emptyCounters(Date.now()), ready: true, revision: 0 } : table === "usageLimitSettings" ? { _id: "synthetic-site", key: "site", enforcement: "off", updatedAt: 1, updatedBy: "synthetic-admin" } : null,
               collect: async () =>
                 (tables[table] ?? []).filter((row) =>
                   clauses.every((clause) => row[clause.field] === clause.value),
@@ -89,7 +93,7 @@ describe("hard delete cascades", () => {
       now: 100,
     });
 
-    for (const id of ["photo_1", "photo_2"]) expect(patches).toContainEqual({ id, patch: { itemId: undefined, boxId: undefined, archivedAt: 100, pendingStorageDeletion: true, updatedAt: 100 } });
+    for (const id of ["photo_1", "photo_2"]) expect(patches).toContainEqual({ id, patch: { itemId: undefined, boxId: undefined, usageOwnerId: "synthetic-owner", archivedAt: 100, pendingStorageDeletion: true, updatedAt: 100 } });
     expect(deletes).toEqual(["membership_1", "listing_1", "placement_1"]);
     expect(patches).toContainEqual({
       id: "entry_live",
@@ -106,7 +110,8 @@ describe("hard delete cascades", () => {
     });
     expect(patches.some((patch) => patch.id === "entry_terminal")).toBe(false);
     expect(result).toMatchObject({
-      deletedPhotoCount: 2,
+      deletedPhotoCount: 0,
+      retainedPhotoCount: 2,
       deletedMembershipCount: 1,
       deletedListingCount: 1,
       deletedPlacementCount: 1,
@@ -157,7 +162,8 @@ describe("hard delete cascades", () => {
       patch: { boxId: undefined, updatedAt: 200 },
     });
     expect(result).toMatchObject({
-      deletedPhotoCount: 1,
+      deletedPhotoCount: 0,
+      retainedPhotoCount: 1,
       unpackedItemCount: 1,
       deletedPlacementCount: 1,
       updatedQueueEntryCount: 1,

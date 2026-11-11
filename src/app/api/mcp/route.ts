@@ -15,6 +15,7 @@ import connectionPolicy from "../../../../shared/ai-connection-policy.json";
 //
 // Tool definitions are shared with the local stdio server in
 // mcp-server/assistwithmoving-mcp.mjs so the two transports cannot drift.
+import { getApiContext } from "../../../../mcp-server/assistwithmoving-api.mjs";
 import { createMcpHandler } from "mcp-handler";
 import type { McpServerOptions } from "@modelcontextprotocol/sdk/server/mcp.js";
 
@@ -38,7 +39,6 @@ const SERVER_INSTRUCTIONS = [connectionPolicy.instructions,
   "New API keys use the limits chosen by the person, with no forced end date. reduce_connection can narrow only this calling key; only the person in Settings can widen or restore it.",
   "Start every session with get_api_context to confirm the key's scopes and any move restriction, then list_moves or setup_move.",
   "Typical workflow: setup_move → create_move_space (rooms) → batch_upsert_items / add_item_from_photo → create_box + add_items_to_box → upload photos → suggest_assignments → get_move_summary.",
-  "Read storage.line in move context and upload replies. A storage refusal leaves this connection working; retain the file and retry after room is available.",
   "Prefer batch tools over repeated single calls. Most write tools accept dryRun for a safe preview and an idempotencyKey for retries.",
 ].join(" ");
 
@@ -121,6 +121,11 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     mediaIngress: { transport: "hosted", allowedFileRoots: [] },
   };
 
+  let uploadLimits: Parameters<typeof import("../../../../shared/upload-policy.mjs").uploadPolicyLine>[0] | undefined;
+  if (boundedRequest.method === "POST") {
+    try { const envelope = await boundedRequest.clone().json(); if (envelope.method === "tools/list") { const context = await getApiContext(apiConfig); uploadLimits = context.data?.uploadLimits; } } catch { /* Authentication failures keep the existing recovery tools available. */ }
+  }
+
   // The wrapper forwards these unchanged but its declarations predate the
   // guard. Validate against the installed SDK constructor's actual options.
   const serverOptions = {
@@ -132,6 +137,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     (server) => {
       registerTools(server, apiConfig, {
         allowedToolNames: hostedAllowedToolNames(apiKey),
+        uploadLimits,
       });
     },
     serverOptions,

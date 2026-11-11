@@ -1,4 +1,4 @@
-import { summaryFor } from "./usageLimits";
+import { summaryFor, uploadPolicy } from "./usageLimits";
 import {queueNeedsInput} from "./lib/queue";
 import {queueWorkFilter} from "./lib/queue";
 import { createQueueItem, readQueueSuggestions, reviewQueueSuggestion, type QueueResultRef } from "./lib/queueService";
@@ -556,6 +556,15 @@ async function deleteExpiredRateLimitWindows(ctx: MutationCtx, now: number) {
   }
 }
 
+function hasUploadRefusal(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const body = value as { body?: unknown; error?: { code?: string }; data?: { results?: Array<{ ok?: boolean; code?: string; refusal?: { code?: string } }> } };
+  if (body.body) return hasUploadRefusal(body.body);
+  const isRefusal = (code?: string) => code === "USAGE_LIMIT_REACHED" || code === "FILE_TOO_LARGE";
+  if (isRefusal(body.error?.code)) return true;
+  return body.data?.results?.some(result => result.ok === false && (isRefusal(result.code) || isRefusal(result.refusal?.code))) ?? false;
+}
+
 export const storeIdempotency = internalMutation({
   args: {
     householdId: v.id("households"),
@@ -569,6 +578,7 @@ export const storeIdempotency = internalMutation({
   },
   handler: async (ctx, args) => {
     if (!args.idempotencyKey || !args.requestHash) return;
+    if (hasUploadRefusal(args.response)) return;
     await ctx.db.insert("apiIdempotencyKeys", {
       householdId: args.householdId,
       moveId: args.moveId,
@@ -1644,6 +1654,7 @@ async function routeMe(
   ]);
   return restOk({
     data: {
+      uploadLimits: auth.status === "active" && auth.scopes.includes("photos/write") ? await uploadPolicy(ctx, auth.householdId) : null,
       storage: auth.status === "active" && auth.scopes.includes("photos/write") ? await summaryFor(ctx, auth.householdId) : null,
       household: household
         ? {

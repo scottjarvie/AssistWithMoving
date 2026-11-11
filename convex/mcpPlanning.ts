@@ -373,7 +373,7 @@ export const getMoveBrief = internalQuery({
         product: "Assist With Moving",
         roleSplit:
           "Assist With Moving keeps the durable move record; your AI reasons and saves authorized move work.",
-        storage: await Promise.all(access.rows.map(async move => ({ householdId: move.householdId, ...await summaryFor(ctx, move.householdId) }))),
+        storage: await Promise.all([...new Set(access.rows.map(move => move.householdId))].map(async householdId => ({ householdId, ...await summaryFor(ctx, householdId) }))),
         moves,
         truncated: access.truncated,
         next: moves.length

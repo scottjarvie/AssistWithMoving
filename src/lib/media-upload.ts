@@ -1,3 +1,4 @@
+import { uploadRefusal } from "./upload-refusal";
 // Shared media-upload primitive, extracted from ingestion-capture-form.tsx so
 // both the capture form and the background MediaUploadProvider run the exact
 // same init → PUT → finalize pipeline. Unlike the old in-form version, the PUT
@@ -28,6 +29,7 @@ export type UploadDeps = {
 };
 
 export type UploadMediaArgs = {
+  operationId?: string;
   householdId: Id<"households">;
   moveId: Id<"moves">;
   file: File;
@@ -57,6 +59,7 @@ export const UPLOAD_MAX_ATTEMPTS = 4;
 // session is never left behind. Only after attempts are exhausted (or a
 // permanent/validation error) does it throw.
 export async function uploadMediaFile({
+  operationId: callerOperationId,
   householdId,
   moveId,
   file,
@@ -72,19 +75,22 @@ export async function uploadMediaFile({
     fileSha256Hex(file),
   ]);
 
+  const operationId = callerOperationId ?? crypto.randomUUID();
   let lastError: unknown;
   for (let attempt = 1; attempt <= UPLOAD_MAX_ATTEMPTS; attempt++) {
     let uploadSessionId: Id<"photoUploadSessions"> | undefined;
     try {
       const session = await deps.initUpload({
+        operationId,
         householdId,
         moveId,
         mimeType: file.type,
         sizeBytes: file.size,
       });
+      if (session.replayedPhotoId) return session.replayedPhotoId as Id<"itemPhotos">;
       uploadSessionId = session.uploadSessionId as Id<"photoUploadSessions">;
 
-      await uploadFileWithProgress({
+      if (!session.alreadyUploaded) await uploadFileWithProgress({
         file,
         uploadUrl: session.uploadUrl,
         contentType: session.headers["Content-Type"],
@@ -133,7 +139,7 @@ export function isRetryableUploadError(
   error: unknown,
   signal?: AbortSignal,
 ): boolean {
-  if (signal?.aborted) return false;
+  if (signal?.aborted || uploadRefusal(error)) return false;
   const name = (error as { name?: string } | null)?.name;
   if (name === "AbortError") return false;
   const message = String(

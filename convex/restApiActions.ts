@@ -7,8 +7,10 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ConvexError, v } from "convex/values";
+import { checkFileSize, usageLimitError } from "./lib/usageLimits/core";
+import { transportLimits } from "../shared/media-limits.mjs";
+import type { UploadRefusal } from "./lib/usageLimits/refusal";
 import sharp from "sharp";
 
 import { downloadPublicHttpsMedia } from "../mcp-server/media-ingress.mjs";
@@ -26,11 +28,9 @@ import {
   withRestRateLimitHeaders,
 } from "./lib/restApi";
 import {
-  assertDerivativeUploadsAllowed,
   assertImageDerivativeUploadFileShape,
   assertOriginalUploadFileShape,
   fileExtensionForMediaMimeType,
-  maxImageUploadBytes,
   mediaKindForMimeType,
   mediaObjectPrefix,
 } from "./lib/mediaStorage";
@@ -114,6 +114,7 @@ export const handle = internalAction({
   },
   handler: async (ctx, args): Promise<RestResponse> => {
     const segments = parseRestPath(args.path);
+    if (segments[0] === "uploads" && segments[1] === "batch" && args.method === "POST") return handleUploadBatch(ctx, args);
     if (segments[0] === "uploads" && segments[1] === "init" && args.method === "POST") {
       return (await handleUploadInit(ctx, args)) as RestResponse;
     }
@@ -209,111 +210,19 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
 
   return await withActionRateLimit(ctx, args, auth, async () => {
     try {
-      const requestedMimeType = requiredString(
-        body.mimeType,
-        "mimeType is required."
-      );
-      const sizeBytes = requiredNumber(body.sizeBytes, "sizeBytes is required.");
-      const original = assertOriginalUploadFileShape({
-        mimeType: requestedMimeType,
-        sizeBytes,
+      const result = await ctx.runAction(internal.photos.initUploadForActor, {
+        householdId: auth.householdId, moveId,
+        operationId: optionalString(body.operationId) ?? args.idempotencyKey,
+        itemId: optionalId<"items">(body.itemId), boxId: optionalId<"boxes">(body.boxId),
+        spaceId: optionalId<"moveSpaces">(body.spaceId),
+        transportResourceId: optionalId<"transportResources">(body.transportResourceId),
+        transportZoneId: optionalId<"transportZones">(body.transportZoneId), room: optionalString(body.room),
+        mimeType: requiredString(body.mimeType, "mimeType is required."), sizeBytes: requiredNumber(body.sizeBytes, "sizeBytes is required."),
+        derivatives: parseDerivativeUploads(body.derivatives),
+        apiActor: { apiKeyId: String(auth.apiKeyId), createdByUserId: auth.createdByUserId, acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined, restorePrivately: body.restorePrivately as boolean | undefined },
       });
-      const mimeType = original.mimeType;
-      const config = requireB2Config();
-      const objectKey = uploadObjectKey({ moveId, mimeType });
-      const derivativeInputs = parseDerivativeUploads(body.derivatives);
-      assertDerivativeUploadsAllowed(original.mediaKind, derivativeInputs.length);
-      const derivativeUploads = derivativeInputs.map((derivative) => ({
-        ...derivative,
-        storageKey: uploadObjectKey({
-          moveId,
-          mimeType: derivative.mimeType,
-          prefix: "photo-derivatives",
-        }),
-        bucket: config.bucketName,
-      }));
-      const expiresAt = Date.now() + uploadSessionTtlMs;
-      const uploadSessionId = await ctx.runMutation(
-        internal.photos.createUploadSession,
-        {
-          householdId: auth.householdId,
-          moveId,
-          itemId: optionalId<"items">(body.itemId),
-          boxId: optionalId<"boxes">(body.boxId),
-          spaceId: optionalId<"moveSpaces">(body.spaceId),
-          transportResourceId: optionalId<"transportResources">(
-            body.transportResourceId
-          ),
-          transportZoneId: optionalId<"transportZones">(
-            body.transportZoneId
-          ),
-          room: optionalString(body.room),
-          originalStorageKey: objectKey,
-          originalBucket: config.bucketName,
-          mediaKind: original.mediaKind,
-          expectedMimeType: original.mimeType,
-          expectedSizeBytes: original.sizeBytes,
-          derivativeUploads: derivativeUploads.map((derivative) => ({
-            variant: derivative.variant,
-            storageKey: derivative.storageKey,
-            bucket: derivative.bucket,
-            expectedMimeType: derivative.mimeType,
-            expectedSizeBytes: derivative.sizeBytes,
-            width: derivative.width,
-            height: derivative.height,
-          })),
-          expiresAt,
-          apiActor: {
-            acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined,
-            restorePrivately: body.restorePrivately as boolean | undefined,
-            apiKeyId: String(auth.apiKeyId),
-            createdByUserId: auth.createdByUserId,
-          },
-        }
-      );
-
-      const uploadUrl = await getSignedUrl(
-        b2Client(),
-        new PutObjectCommand({
-          Bucket: config.bucketName,
-          Key: objectKey,
-          ContentType: original.mimeType,
-          ContentLength: original.sizeBytes,
-        }),
-        { expiresIn: Math.floor(uploadSessionTtlMs / 1000) }
-      );
-      const signedDerivativeUploads = await Promise.all(
-        derivativeUploads.map(async (derivative) => ({
-          variant: derivative.variant,
-          uploadUrl: await getSignedUrl(
-            b2Client(),
-            new PutObjectCommand({
-              Bucket: config.bucketName,
-              Key: derivative.storageKey,
-              ContentType: derivative.mimeType,
-              ContentLength: derivative.sizeBytes,
-            }),
-            { expiresIn: Math.floor(uploadSessionTtlMs / 1000) }
-          ),
-          method: "PUT" as const,
-          headers: { "Content-Type": derivative.mimeType },
-        }))
-      );
-
-      return restOk(
-        {
-          data: {
-            storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }),
-            uploadSessionId,
-            uploadUrl,
-            method: "PUT",
-            headers: { "Content-Type": original.mimeType },
-            derivativeUploads: signedDerivativeUploads,
-            expiresAt,
-          },
-        },
-        201
-      );
+      if (result.refusal) return { status: 413, body: { error: result.refusal } };
+      return restOk({ data: result }, 201);
     } catch (error) {
       if (error instanceof ConvexError && typeof error.data === "object" && error.data?.code === "USAGE_LIMIT_REACHED") return { status: 413, body: { error: error.data } };
       return restError({
@@ -341,11 +250,33 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
   return await withActionRateLimit(ctx, args, auth, async () => {
     let uploadSessionId: Id<"photoUploadSessions"> | undefined;
     try {
-      const media = await loadDirectImageUploadMedia(body);
+      const policy = await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.householdId });
+      const operationId = optionalString(body.operationId) ?? args.idempotencyKey ?? (policy.requiresOperationId ? undefined : crypto.randomUUID());
+      if (!operationId) return { status: 400, body: { error: { code: "OPERATION_ID_REQUIRED", message: "Send an operationId or idempotency key and reuse it when retrying this upload." } } };
+      let fetchReservation: Id<"uploadReservations"> | undefined;
+      let media: Awaited<ReturnType<typeof loadDirectImageUploadMedia>>;
+      try {
+        media = await loadDirectImageUploadMedia(body, policy.maxFileBytes.image, async declared => {
+          const held = await ctx.runMutation(internal.usageLimits.reserveFetch, { householdId: auth.householdId, key: `${moveId}:${auth.createdByUserId}:${operationId}`, bytes: declared ?? 1 });
+          if (held.refusal) { const error = new Error(held.refusal.message); Object.assign(error, { payload: { error: held.refusal } }); throw error; }
+          fetchReservation = held.reservationId;
+        });
+        if (fetchReservation) {
+          const resized = await ctx.runMutation(internal.usageLimits.finishFetch, { householdId: auth.householdId, reservationId: fetchReservation, bytes: media.bytes.byteLength });
+          if (resized.refusal) { await ctx.runMutation(internal.usageLimits.releaseFetch, { id: fetchReservation }); return { status: 413, body: { error: resized.refusal } }; }
+        }
+      } catch (error) {
+        if (fetchReservation) await ctx.runMutation(internal.usageLimits.releaseFetch, { id: fetchReservation });
+        const refusal = (error as { payload?: { error?: UploadRefusal } }).payload?.error;
+        if (refusal) { await ctx.runMutation(internal.usageLimits.recordActionRefusal, { householdId: auth.householdId, actorUserId: auth.createdByUserId, code: refusal.code, message: refusal.message }); return { status: 413, body: { error: refusal } }; }
+        throw error;
+      }
+      const sizeRefusal = checkFileSize("image", media.bytes.byteLength, policy.maxFileBytes.image);
+      if (sizeRefusal) { await ctx.runMutation(internal.usageLimits.recordActionRefusal, { householdId: auth.householdId, actorUserId: auth.createdByUserId, code: sizeRefusal.code, message: sizeRefusal.message }); return { status: 413, body: { error: sizeRefusal } }; }
       const original = assertOriginalUploadFileShape({
         mimeType: media.mimeType,
         sizeBytes: media.bytes.byteLength,
-      });
+      }, Number.MAX_SAFE_INTEGER);
       if (original.mediaKind !== "image") {
         throw new Error(
           "Direct photo upload accepts JPEG, PNG, or WebP images. Use /uploads/init for audio or video."
@@ -358,7 +289,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
       }
 
       const config = requireB2Config();
-      const objectKey = uploadObjectKey({
+      let objectKey = uploadObjectKey({
         moveId,
         mimeType: original.mimeType,
       });
@@ -370,9 +301,10 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         createdByUserId: auth.createdByUserId,
       };
 
-      uploadSessionId = await ctx.runMutation(
-        internal.photos.createUploadSession,
+      const begun = await ctx.runMutation(
+        internal.photos.tryCreateUploadSession,
         {
+          operationId,
           householdId: auth.householdId,
           moveId,
           itemId: optionalId<"items">(body.itemId),
@@ -396,7 +328,15 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         }
       );
 
-      await b2Client().send(
+      if (begun.refusal) return { status: 413, body: { error: begun.refusal } };
+      uploadSessionId = begun.uploadSessionId!;
+      const persisted = await ctx.runQuery(internal.photos.getUploadSession, { householdId: auth.householdId, moveId, uploadSessionId, apiActor });
+      if (persisted.completedPhotoId) return restOk({ data: { photoId: persisted.completedPhotoId, uploadSessionId, storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }) } }, 201);
+      objectKey = persisted.originalStorageKey;
+      let originalExists = false;
+      try { const head = await b2Client().send(new HeadObjectCommand({ Bucket: config.bucketName, Key: objectKey })); originalExists = head.ContentLength === media.bytes.byteLength; if (!originalExists) throw new Error("An earlier upload at this operation id has different bytes."); }
+      catch (error) { if (!["NotFound", "NoSuchKey"].includes((error as { name?: string }).name ?? "")) throw error; }
+      if (!originalExists) await b2Client().send(
         new PutObjectCommand({
           Bucket: config.bucketName,
           Key: objectKey,
@@ -406,7 +346,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         })
       );
 
-      const photoId = await ctx.runMutation(internal.photos.completeUploadSession, {
+      const finished = await ctx.runMutation(internal.photos.tryCompleteUploadSession, {
         householdId: auth.householdId,
         moveId,
         uploadSessionId,
@@ -428,10 +368,13 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         apiActor,
       });
 
+      if (finished.refusal) return { status: 413, body: { error: finished.refusal } };
+      const photoId = finished.photoId!;
       let derivativeStatus: "ready" | "failed" | undefined;
       let derivativeError: string | undefined;
       try {
         const generated = await generateAndStoreImageDerivatives({
+          onPrepare: (storageKey, bytes) => ctx.runMutation(internal.photos.prepareStoredDerivative, { photoId, storageKey, bytes }),
           onStored: (variant, storageKey, bytes) => ctx.runMutation(internal.photos.recordStoredDerivative, { photoId, variant, storageKey, bytes }),
           bucketName: config.bucketName,
           moveId,
@@ -454,7 +397,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
           photoId,
           derivativeError,
           apiActor,
-        });
+        }).catch(() => { /* Accepted original and durable copy intents remain counted. */ });
       }
 
       const aiReview = await maybeGeneratePhotoAiSuggestionsAfterUpload(
@@ -491,6 +434,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
       return restOk(
         {
           data: {
+            uploadLimits: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.householdId }),
             storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }),
             photoId,
             uploadSessionId,
@@ -506,7 +450,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         201
       );
     } catch (error) {
-      if (uploadSessionId) {
+      if (uploadSessionId && error instanceof Error && /does not match|invalid|unsupported|USAGE_LIMIT_REACHED|FILE_TOO_LARGE/i.test(error.message)) {
         await ctx.runMutation(internal.photos.markUploadSessionFailed, {
           householdId: auth.householdId,
           moveId,
@@ -598,6 +542,8 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
           createdByUserId: auth.createdByUserId,
         },
       });
+      if (session.completedPhotoId) return restOk({ data: { photoId: session.completedPhotoId, uploadSessionId, derivativeStatus: session.completedPhoto?.derivativeStatus, derivativeError: session.completedPhoto?.derivativeError, derivativeNote: derivativeNoteForStatus(session.completedPhoto?.derivativeStatus), derivativeVariants: derivativeVariantsForStatus(session.completedPhoto?.derivativeStatus), storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }) } }, 201);
+      await ctx.runMutation(internal.photos.startFinalize, { householdId: auth.householdId, moveId, uploadSessionId, apiActor: { apiKeyId: String(auth.apiKeyId), createdByUserId: auth.createdByUserId } });
       await assertUploadedObject(config.bucketName, session.originalStorageKey, {
         sizeBytes: session.expectedSizeBytes,
         mimeType: session.expectedMimeType,
@@ -609,7 +555,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         });
       }
 
-      const photoId = await ctx.runMutation(internal.photos.completeUploadSession, {
+      const finished = await ctx.runMutation(internal.photos.tryCompleteUploadSession, {
         householdId: auth.householdId,
         moveId,
         uploadSessionId,
@@ -634,12 +580,15 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         },
       });
 
+      if (finished.refusal) return { status: 413, body: { error: finished.refusal } };
+      const photoId = finished.photoId!;
       let derivativeStatus: "pending" | "ready" | "failed" | undefined =
         imageDerivativeStatusForSession(session);
       let derivativeError: string | undefined;
       if (shouldGenerateServerDerivatives(session)) {
         try {
           const generated = await generateAndStoreImageDerivatives({
+          onPrepare: (storageKey, bytes) => ctx.runMutation(internal.photos.prepareStoredDerivative, { photoId, storageKey, bytes }),
           onStored: (variant, storageKey, bytes) => ctx.runMutation(internal.photos.recordStoredDerivative, { photoId, variant, storageKey, bytes }),
             bucketName: session.originalBucket ?? config.bucketName,
             moveId,
@@ -672,7 +621,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
               apiKeyId: String(auth.apiKeyId),
               createdByUserId: auth.createdByUserId,
             },
-          });
+          }).catch(() => { /* Accepted original and durable copy intents remain counted. */ });
         }
       }
 
@@ -705,6 +654,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
       return restOk(
         {
           data: {
+            uploadLimits: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.householdId }),
             storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }),
             photoId,
             derivativeStatus,
@@ -718,7 +668,8 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         201
       );
     } catch (error) {
-      await ctx.runMutation(internal.photos.markUploadSessionFailed, {
+      if (error instanceof Error && /does not match|unsupported|invalid|USAGE_LIMIT_REACHED|FILE_TOO_LARGE/i.test(error.message)) await ctx.runMutation(internal.photos.markUploadSessionFailed, {
+        code: "UPLOAD_VALIDATION_FAILED", reason: error.message,
         householdId: auth.householdId,
         moveId,
         uploadSessionId,
@@ -745,7 +696,7 @@ async function authenticateAction(
   moveId: Id<"moves">
 ) {
   return await ctx.runMutation(internal.restApi.authenticateActionRequest, {
-    ...args,
+    method: args.method, path: args.path, query: args.query, authorization: args.authorization, body: args.body,
     moveId,
   });
 }
@@ -769,7 +720,10 @@ async function withActionIdempotency(
     idempotencyKey: args.idempotencyKey,
   });
   if (idempotency.replay) {
-    return idempotency.replay;
+    const replay = idempotency.replay;
+    const payload = bodyObject(replay.body), data = bodyObject(payload.data);
+    if ("storage" in data || /^(?:\/?uploads|\/?(?:photos|images)\/(?:upload|finalize))/.test(args.path)) return { ...replay, body: { ...payload, data: { ...data, uploadLimits: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.householdId }), storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }) } } };
+    return replay;
   }
   const response = await createResponse();
   await ctx.runMutation(internal.restApi.storeIdempotency, {
@@ -895,11 +849,12 @@ function shouldGenerateServerDerivatives(session: {
 }
 
 async function generateAndStoreImageDerivatives({
-  onStored,
+  onStored, onPrepare,
   bucketName,
   moveId,
   originalStorageKey,
 }: {
+  onPrepare: (storageKey: string, bytes: number) => Promise<unknown>;
   onStored: (variant: PhotoDerivativeVariant, storageKey: string, bytes: number) => Promise<unknown>;
   bucketName: string;
   moveId: Id<"moves">;
@@ -932,6 +887,7 @@ async function generateAndStoreImageDerivatives({
       prefix: "photo-derivatives",
     });
 
+    await onPrepare(storageKey, data.byteLength);
     await client.send(
       new PutObjectCommand({
         Bucket: bucketName,
@@ -993,6 +949,7 @@ async function objectBodyToBuffer(body: unknown) {
 }
 
 function derivativeProcessingError(error: unknown) {
+  if (error instanceof ConvexError && typeof error.data === "string") return error.data;
   if (error instanceof Error && error.message) {
     return `Server derivative processing failed: ${error.message}`;
   }
@@ -1180,7 +1137,8 @@ function pruneUndefined<T extends Record<string, unknown>>(value: T) {
   );
 }
 
-async function loadDirectImageUploadMedia(body: Record<string, unknown>) {
+async function loadDirectImageUploadMedia(body: Record<string, unknown>, cap = transportLimits.image, beforeRead?: (declared: number | null) => Promise<void>) {
+  const finish = (input: Parameters<typeof finalizeLoadedImageUploadMedia>[0]) => finalizeLoadedImageUploadMedia({ ...input, cap });
   const sourceUrl = optionalString(body.sourceUrl);
   const dataUrl = optionalString(body.dataUrl);
   const fileBase64 = optionalString(body.fileBase64);
@@ -1194,12 +1152,13 @@ async function loadDirectImageUploadMedia(body: Record<string, unknown>) {
       sourceUrl,
       fileName: optionalString(body.fileName),
       mimeType: optionalString(body.mimeType),
+      cap, beforeRead,
     });
   }
 
   if (dataUrl) {
     const parsed = parseImageDataUrl(dataUrl);
-    return finalizeLoadedImageUploadMedia({
+    return finish({
       bytes: parsed.bytes,
       source: "dataUrl",
       fileName: optionalString(body.fileName),
@@ -1211,7 +1170,7 @@ async function loadDirectImageUploadMedia(body: Record<string, unknown>) {
   }
 
   const bytes = decodeBase64Image(fileBase64 ?? "");
-  return finalizeLoadedImageUploadMedia({
+  return finish({
     bytes,
     source: "fileBase64",
     fileName: optionalString(body.fileName),
@@ -1225,18 +1184,19 @@ async function loadDirectImageUploadMedia(body: Record<string, unknown>) {
 async function loadRemoteImageUploadMedia({
   sourceUrl,
   fileName,
-  mimeType,
+  mimeType, cap, beforeRead,
 }: {
+  cap: number; beforeRead?: (declared: number | null) => Promise<void>;
   sourceUrl: string;
   fileName?: string;
   mimeType?: string;
 }) {
   const remote = await downloadPublicHttpsMedia(sourceUrl, {
-    maxBytes: maxImageUploadBytes,
+    maxBytes: Math.min(cap, transportLimits.image), fileKind: "image", beforeRead,
   });
   const bytes = remote.bytes;
   return finalizeLoadedImageUploadMedia({
-    bytes,
+    bytes, cap,
     source: "sourceUrl",
     fileName: fileName ?? filenameFromUrl(remote.finalUrl),
     mimeType:
@@ -1249,11 +1209,13 @@ async function loadRemoteImageUploadMedia({
 
 function finalizeLoadedImageUploadMedia({
   bytes,
+  cap = transportLimits.image,
   source,
   fileName,
   mimeType,
 }: {
   bytes: Buffer;
+  cap?: number;
   source: "sourceUrl" | "dataUrl" | "fileBase64";
   fileName?: string;
   mimeType?: string;
@@ -1261,9 +1223,8 @@ function finalizeLoadedImageUploadMedia({
   if (bytes.byteLength <= 0) {
     throw new Error("Image upload data was empty.");
   }
-  if (bytes.byteLength > maxImageUploadBytes) {
-    throw new Error("Images must be under 25 MB.");
-  }
+  const refusal = checkFileSize("image", bytes.byteLength, Math.min(cap, transportLimits.image));
+  if (refusal) throw Object.assign(new Error(refusal.message), { payload: { error: refusal } });
   const detectedMimeType = sniffImageMimeType(bytes);
   if (!detectedMimeType) {
     throw new Error(
@@ -1384,7 +1345,7 @@ function parseDerivativeUploads(value: unknown) {
     const normalized = assertImageDerivativeUploadFileShape({
       mimeType: requestedMimeType,
       sizeBytes,
-    });
+    }, Number.MAX_SAFE_INTEGER);
     const parsed = {
       variant: requiredDerivativeVariant(derivative.variant),
       mimeType: normalized.mimeType,
@@ -1514,4 +1475,67 @@ function errorStatus(error: unknown) {
   if (message.includes("not found") || message.includes("not active")) return 404;
   if (message.includes("idempotency")) return 409;
   return 400;
+}
+
+/** Existing API-key batch aliases enter here; no file is stored before admission. */
+async function handleUploadBatch(ctx: ActionCtx, args: RestRequestInput): Promise<RestResponse> {
+  if (!hasBearer(args.authorization)) return unknownAuthError();
+  const body = bodyObject(args.body);
+  const moveId = requiredId<"moves">(body.moveId, "moveId is required.");
+  const authResult = await authenticateAction(ctx, args, moveId);
+  if (!authResult.ok || !authResult.auth) return authResult.response ?? unknownAuthError();
+  const auth = { ...(authResult.auth as ApiActionAuth), moveId };
+  return withActionRateLimit(ctx, args, auth, async () => {
+    const images = Array.isArray(body.images) ? body.images : [];
+    const policy = await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.householdId });
+    const results: Array<{ index: number; ok: boolean; photoId?: string; error?: string; code?: string; result?: unknown }> = images.map((_, index) => ({ index, ok: false }));
+    const prepared: Array<{ index: number; metadata: Record<string, unknown>; media: Awaited<ReturnType<typeof loadDirectImageUploadMedia>>; operationId: string }> = [];
+    if (!optionalString(body.operationId) && !args.idempotencyKey && policy.requiresOperationId) return { status: 400, body: { error: { code: "OPERATION_ID_REQUIRED", message: "Send an operationId or idempotency key and reuse it when retrying this batch." } } };
+    const operationId = optionalString(body.operationId) ?? args.idempotencyKey ?? crypto.randomUUID();
+    const apiActor = { apiKeyId: String(auth.apiKeyId), createdByUserId: auth.createdByUserId, acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined, restorePrivately: body.restorePrivately as boolean | undefined };
+    const heldByThisCall: Array<Id<"uploadReservations">> = [];
+    for (const [index, image] of images.entries()) {
+      const metadata: Record<string, unknown> = { ...body, ...bodyObject(image), moveId };
+      let fetchId: Id<"uploadReservations"> | undefined;
+      try {
+        const itemOperationId = optionalString(metadata.idempotencyKey) ?? `${operationId}:${index}`;
+        const media = await loadDirectImageUploadMedia(metadata, policy.maxFileBytes.image, async declared => {
+          const held = await ctx.runMutation(internal.usageLimits.reserveFetch, { householdId: auth.householdId, key: `${moveId}:${auth.createdByUserId}:${itemOperationId}`, bytes: declared ?? 1 });
+          if (held.refusal) throw Object.assign(new Error(held.refusal.message), { payload: { error: held.refusal } });
+          fetchId = held.reservationId;
+          if (held.created && fetchId) heldByThisCall.push(fetchId);
+        });
+        if (fetchId) { const resized = await ctx.runMutation(internal.usageLimits.finishFetch, { householdId: auth.householdId, reservationId: fetchId, bytes: media.bytes.byteLength }); if (resized.refusal) throw Object.assign(new Error(resized.refusal.message), { payload: { error: resized.refusal } }); }
+
+        const refusal = checkFileSize("image", media.bytes.byteLength, policy.maxFileBytes.image);
+        if (refusal) { results[index] = { index, ok: false, code: refusal.code, error: refusal.message }; continue; }
+        prepared.push({ index, metadata, media, operationId: optionalString(metadata.idempotencyKey) ?? `${operationId}:${index}` });
+      } catch (error) {
+        if (fetchId && heldByThisCall.includes(fetchId)) await ctx.runMutation(internal.usageLimits.releaseFetch, { id: fetchId });
+        const refusal = (error as { payload?: { error?: UploadRefusal } }).payload?.error;
+        if (refusal?.code === "USAGE_LIMIT_REACHED") {
+          let ownHeld = 0;
+          for (const id of heldByThisCall) { const held = await ctx.runQuery(internal.usageLimits.reservationInternal, { id }); if (held?.status === "reserved") ownHeld += held.bytes; }
+          for (const id of heldByThisCall) await ctx.runMutation(internal.usageLimits.releaseFetch, { id });
+          return { status: 413, body: { error: usageLimitError({ ...refusal, used: Math.max(0, refusal.used - ownHeld), remaining: refusal.remaining + ownHeld, requested: prepared.reduce((sum, p) => sum + p.media.bytes.byteLength, 0) + refusal.requested }), results } };
+        }
+        results[index] = { index, ok: false, code: refusal?.code, error: refusal?.message ?? (error instanceof Error ? error.message : "Invalid media.") };
+      }
+    }
+    const bucket = requireB2Config().bucketName;
+    const admission = await ctx.runMutation(internal.photos.tryCreateUploadBatch, {
+      requestBytes: new TextEncoder().encode(JSON.stringify(images)).length,
+      files: prepared.map(p => ({ householdId: auth.householdId, moveId, operationId: p.operationId, itemId: optionalId<"items">(p.metadata.itemId), boxId: optionalId<"boxes">(p.metadata.boxId), spaceId: optionalId<"moveSpaces">(p.metadata.spaceId), originalStorageKey: uploadObjectKey({ moveId, mimeType: p.media.mimeType }), originalBucket: bucket, expectedMimeType: p.media.mimeType, expectedSizeBytes: p.media.bytes.byteLength, derivativeUploads: [], expiresAt: Date.now() + uploadSessionTtlMs, apiActor })),
+    });
+    if (admission.refusal) { for (const id of heldByThisCall) await ctx.runMutation(internal.usageLimits.releaseFetch, { id }); return { status: 413, body: { error: admission.refusal, results } }; }
+    for (const [position, p] of prepared.entries()) {
+      const slot = admission.results![position];
+      if (!slot.uploadSessionId) { results[p.index] = { index: p.index, ok: false, code: slot.code, error: slot.error }; continue; }
+      const response = await handlePhotoUpload(ctx, { ...args, path: "photos/upload", idempotencyKey: p.operationId, body: { ...p.metadata, sourceUrl: undefined, dataUrl: undefined, fileBase64: p.media.bytes.toString("base64"), mimeType: p.media.mimeType, operationId: p.operationId } });
+      const payload = bodyObject(response.body);
+      const data = bodyObject(payload.data), error = bodyObject(payload.error);
+      results[p.index] = response.status < 300 ? { index: p.index, ok: true, photoId: optionalString(data.photoId), result: data } : { index: p.index, ok: false, code: optionalString(error.code), error: optionalString(error.message) };
+    }
+    return restOk({ data: { uploadLimits: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.householdId }), imageCount: images.length, uploadedCount: results.filter(r => r.ok).length, failedCount: results.filter(r => !r.ok).length, results, storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }) } });
+  });
 }

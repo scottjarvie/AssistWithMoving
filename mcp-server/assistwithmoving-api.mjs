@@ -1,4 +1,5 @@
-import { siteDefaults } from "../shared/media-limits.mjs";
+import { mcpLimitText } from "../shared/usage-limits.mjs";
+import { transportLimits } from "../shared/media-limits.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 const publicationInput = new AsyncLocalStorage();
 export function withPublicationInput(input, work) { return publicationInput.run({ acknowledgeContactDetails: input?.acknowledgeContactDetails, restorePrivately: input?.restorePrivately }, work); }
@@ -279,6 +280,9 @@ export function textResult(data) {
 }
 
 export function toolErrorResult(error) {
+  const refusal = error?.payload?.error ?? error?.data ?? error?.structuredContent;
+  if (refusal?.code === "USAGE_LIMIT_REACHED") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: mcpLimitText(refusal) }] };
+  if (["FILE_TOO_LARGE", "REQUEST_TOO_LARGE", "OPERATION_ID_REQUIRED", "OPERATION_CONFLICT"].includes(refusal?.code)) return { isError: true, structuredContent: refusal, content: [{ type: "text", text: refusal.message }] };
   return {
     isError: true,
     content: [
@@ -1393,7 +1397,8 @@ export async function startPhotoUpload(config, input) {
   return await assistWithMovingRequest(config, {
     method: "POST",
     path: "/uploads/init",
-    body: input,
+    body: { ...input, operationId: input.operationId ?? input.idempotencyKey },
+    idempotencyKey: input.idempotencyKey,
   });
 }
 
@@ -1425,6 +1430,7 @@ export async function uploadEvidenceFile(config, input) {
   const originalHash =
     input.originalHash ?? createHash("sha256").update(media.bytes).digest("hex");
   const sessionBody = {
+    operationId: input.operationId ?? input.idempotencyKey,
     moveId: input.moveId,
     itemId: input.itemId,
     boxId: input.boxId,
@@ -1480,7 +1486,7 @@ export async function uploadEvidenceFile(config, input) {
 
   const session = await startPhotoUpload(config, sessionBody);
   const data = session.data ?? session;
-  await putEvidenceBytes({
+  if (!data.replayedPhotoId && !data.alreadyUploaded) await putEvidenceBytes({
     uploadUrl: data.uploadUrl,
     contentType: data.headers?.["Content-Type"] ?? mimeType,
     bytes: media.bytes,
@@ -1648,69 +1654,28 @@ export async function uploadEvidenceImage(config, input) {
 
 export async function uploadEvidenceImages(config, input) {
   const images = Array.isArray(input.images) ? input.images : [];
-  if (images.length === 0) {
-    throw new Error("Provide at least one image.");
+  if (!images.length) throw new Error("Provide at least one image.");
+  if (images.length === 1) {
+    const imageInput = { ...input, ...images[0], idempotencyKey: images[0].idempotencyKey ?? (input.idempotencyKey ? `${input.idempotencyKey}-1` : undefined) };
+    delete imageInput.images;
+    const results = [];
+    try { const result = await uploadEvidenceImage(config, imageInput); results.push({ index: 0, ok: true, ...result, result }); }
+    catch (error) { if (error?.payload?.error?.code === "USAGE_LIMIT_REACHED") throw error; results.push({ index: 0, ok: false, error: error instanceof Error ? error.message : "Image upload failed." }); }
+    return { imageCount: 1, uploadedCount: results.filter(r => r.ok).length, failedCount: results.filter(r => !r.ok).length, results, storage: results[0]?.storage, derivativeNote: "Each image was sent as one original upload. Assist With Moving creates web-ready derivatives server-side for uploaded images.", derivativeVariants: derivativeVariantsForStatus("pending"), agentReview: imageBatchAgentReview({ input, results }) };
   }
-
-  const defaults = { ...input };
-  delete defaults.images;
-  delete defaults.continueOnError;
-  delete defaults.idempotencyKey;
-  delete defaults.originalHash;
-  const { continueOnError, idempotencyKey } = input;
-  const results = [];
-
-  for (const [index, image] of images.entries()) {
-    const imageInput = removeUndefined({
-      ...defaults,
-      ...image,
-      moveId: input.moveId,
-      idempotencyKey:
-        image.idempotencyKey ??
-        (idempotencyKey ? `${idempotencyKey}-${index + 1}` : undefined),
-    });
-
-    try {
-      const result = await uploadEvidenceImage(config, imageInput);
-      results.push({
-        index,
-        ok: true,
-        photoId: result.photoId,
-        uploadSessionId: result.uploadSessionId,
-        derivativeStatus: result.derivativeStatus,
-        derivativeError: result.derivativeError,
-        derivativeVariants: result.derivativeVariants,
-        media: result.media,
-        agentReview: result.agentReview,
-        result,
-      });
-    } catch (error) {
-      const failure = {
-        index,
-        ok: false,
-        error: error instanceof Error ? error.message : "Image upload failed.",
-      };
-      results.push(failure);
-      if (!continueOnError) {
-        const batchError = new Error(
-          `Image upload ${index + 1} of ${images.length} failed: ${failure.error}`
-        );
-        batchError.partialResults = results;
-        throw batchError;
-      }
-    }
+  if (input.dryRun) return { imageCount: images.length, dryRun: true, results: images.map((_, index) => ({ index, ok: true, dryRun: true })) };
+  const defaults = { ...input }; delete defaults.images; delete defaults.idempotencyKey;
+  const prepared = [];
+  for (const image of images) {
+    if (image.filePath) {
+      try { const local = await loadLocalImageForDirectUpload(config, image); prepared.push({ ...defaults, ...image, filePath: undefined, fileBase64: local.bytes.toString("base64"), mimeType: local.mimeType, fileName: local.fileName, source: image.source ?? input.source ?? "mcp", exifHandlingStatus: image.exifHandlingStatus ?? input.exifHandlingStatus ?? "pending" }); }
+      catch (error) { prepared.push({ ...image, preparationError: error instanceof Error ? error.message : "Invalid local media." }); }
+    } else prepared.push({ ...defaults, ...image });
   }
-
-  return {
-    imageCount: images.length,
-    uploadedCount: results.filter((result) => result.ok).length,
-    failedCount: results.filter((result) => !result.ok).length,
-    results,
-    derivativeNote:
-      "Each image was sent as one original upload. Assist With Moving creates web-ready derivatives server-side for uploaded images.",
-    derivativeVariants: derivativeVariantsForStatus("pending"),
-    agentReview: imageBatchAgentReview({ input, results }),
-  };
+  const response = await assistWithMovingRequest(config, { method: "POST", path: "/uploads/batch", body: { ...defaults, images: prepared }, idempotencyKey: input.idempotencyKey });
+  const data = response.data ?? response;
+  const results = (data.results ?? []).map(row => ({ ...row, ...(row.result ? { photoId: row.result.photoId, uploadSessionId: row.result.uploadSessionId, derivativeStatus: row.result.derivativeStatus, derivativeError: row.result.derivativeError, derivativeVariants: normalizedDerivativeVariants({ data: row.result, status: row.result.derivativeStatus }), media: row.result.media, agentReview: row.result.agentReview ?? imageUploadAgentReview({ input: { ...defaults, ...images[row.index] }, data: row.result, media: row.result.media, derivativeNote: derivativeNoteForStatus(row.result.derivativeStatus) }) } : {}) }));
+  return { ...data, results, derivativeNote: "Each image was sent as one original upload. Assist With Moving creates web-ready derivatives server-side for uploaded images.", derivativeVariants: derivativeVariantsForStatus("pending"), agentReview: imageBatchAgentReview({ input, results }) };
 }
 
 async function loadLocalImageForDirectUpload(config, input) {
@@ -1718,7 +1683,7 @@ async function loadLocalImageForDirectUpload(config, input) {
     filePath: input.filePath,
     transport: config.mediaIngress?.transport,
     allowedFileRoots: config.mediaIngress?.allowedFileRoots,
-    maxBytes: siteDefaults.image,
+    maxBytes: transportLimits.image,
   });
   const fileName = input.fileName ?? path.basename(input.filePath);
   const requestedMimeType = normalizeMimeType(
@@ -2017,7 +1982,7 @@ async function loadEvidenceMedia(config, input) {
       filePath: input.filePath,
       transport: config.mediaIngress?.transport,
       allowedFileRoots: config.mediaIngress?.allowedFileRoots,
-      maxBytes: siteDefaults.video,
+      maxBytes: transportLimits.video,
     });
     return {
       bytes,
@@ -2031,7 +1996,7 @@ async function loadEvidenceMedia(config, input) {
   }
 
   const remote = await downloadPublicHttpsMedia(input.sourceUrl, {
-    maxBytes: siteDefaults.image,
+    maxBytes: transportLimits.image,
   });
   const bytes = remote.bytes;
   const url = remote.finalUrl;

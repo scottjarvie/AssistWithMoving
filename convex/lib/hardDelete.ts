@@ -1,3 +1,4 @@
+import { retainPhotoForDeletion } from "./storageDeletion";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
@@ -10,6 +11,8 @@ const liveQueueStatuses = new Set<Doc<"ingestionQueueEntries">["status"]>([
 export type CascadeDeleteItemResult = {
   deletedPhotoIds: Id<"itemPhotos">[];
   deletedPhotoCount: number;
+  retainedPhotoIds: Id<"itemPhotos">[];
+  retainedPhotoCount: number;
   deletedMembershipCount: number;
   deletedListingCount: number;
   deletedPlacementCount: number;
@@ -20,6 +23,8 @@ export type CascadeDeleteItemResult = {
 export type CascadeDeleteBoxResult = {
   deletedPhotoIds: Id<"itemPhotos">[];
   deletedPhotoCount: number;
+  retainedPhotoIds: Id<"itemPhotos">[];
+  retainedPhotoCount: number;
   unpackedItemCount: number;
   deletedPlacementCount: number;
   updatedQueueEntryCount: number;
@@ -88,19 +93,16 @@ export async function cascadeDeleteItem(
     },
   );
 
-  // Keep a retryable storage tombstone. Originals and copies remain charged until
-  // an object deletion worker confirms removal; archiving never refunds storage.
-  for (const doc of photos) await ctx.db.patch(doc._id, {
-    itemId: undefined, boxId: undefined, archivedAt: args.now,
-    pendingStorageDeletion: true, updatedAt: args.now,
-  });
+  for (const doc of photos) await retainPhotoForDeletion(ctx, doc, args.now);
   for (const doc of memberships) await ctx.db.delete(doc._id);
   for (const doc of listings) await ctx.db.delete(doc._id);
   for (const doc of placements) await ctx.db.delete(doc._id);
 
   return {
-    deletedPhotoIds,
-    deletedPhotoCount: photos.length,
+    deletedPhotoIds: [],
+    deletedPhotoCount: 0,
+    retainedPhotoIds: deletedPhotoIds,
+    retainedPhotoCount: photos.length,
     deletedMembershipCount: memberships.length,
     deletedListingCount: listings.length,
     deletedPlacementCount: placements.length,
@@ -146,18 +148,15 @@ export async function cascadeDeleteBox(
     },
   );
 
-  // Keep a retryable storage tombstone. Originals and copies remain charged until
-  // an object deletion worker confirms removal; archiving never refunds storage.
-  for (const doc of photos) await ctx.db.patch(doc._id, {
-    itemId: undefined, boxId: undefined, archivedAt: args.now,
-    pendingStorageDeletion: true, updatedAt: args.now,
-  });
+  for (const doc of photos) await retainPhotoForDeletion(ctx, doc, args.now);
   for (const doc of memberships) await ctx.db.delete(doc._id);
   for (const doc of placements) await ctx.db.delete(doc._id);
 
   return {
-    deletedPhotoIds,
-    deletedPhotoCount: photos.length,
+    deletedPhotoIds: [],
+    deletedPhotoCount: 0,
+    retainedPhotoIds: deletedPhotoIds,
+    retainedPhotoCount: photos.length,
     unpackedItemCount: memberships.length,
     deletedPlacementCount: placements.length,
     updatedQueueEntryCount,

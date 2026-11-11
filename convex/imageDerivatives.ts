@@ -151,6 +151,7 @@ export const generateFromOriginal = internalAction({
         prefix: "photo-derivatives",
       });
 
+      if (args.photoId) await ctx.runMutation(internal.photos.prepareStoredDerivative, { photoId: args.photoId, storageKey, bytes: data.byteLength });
       await client.send(
         new PutObjectCommand({
           Bucket: args.bucketName,

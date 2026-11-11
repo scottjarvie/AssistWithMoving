@@ -26,6 +26,15 @@ crons.interval(
 
 crons.interval("expire upload reservations", { minutes: 5 }, internal.usageLimits.expireReservations, {});
 
-crons.interval("clean abandoned upload objects", { minutes: 30 }, internal.photos.cleanupExpiredInternal, {});
+crons.interval("dry run abandoned upload objects", { minutes: 30 }, internal.photos.cleanupExpiredInternal, {});
+
+crons.interval("recover generated object intents", { minutes: 30 }, internal.storageDeletion.recoverGenerated, {});
+
+crons.interval("expire temporary data exports", { hours: 1 }, internal.exportCleanup.expireArtifacts, {});
+
+crons.interval("process retained photo deletions (dry run until enabled)", { minutes: 30 }, internal.storageDeletion.sweep, {});
+crons.interval("process abandoned sessions (dry run until enabled)", { minutes: 30 }, internal.storageDeletion.sweepSessions, {});
+
+crons.weekly("read-only storage reconciliation", { dayOfWeek: "sunday", hourUTC: 4, minuteUTC: 0 }, internal.usageRecount.start, { dryRun: true });
 
 export default crons;

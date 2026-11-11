@@ -2535,30 +2535,7 @@ describe("Assist With Moving MCP API client", () => {
     );
     await writeFile(firstPath, pngBytes);
     await writeFile(secondPath, pngBytes);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({
-          data: {
-            photoId: "photo-shelf",
-            uploadSessionId: "session-shelf",
-            derivativeStatus: "ready",
-          },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({
-          data: {
-            photoId: "photo-workbench",
-            uploadSessionId: "session-workbench",
-            derivativeStatus: "pending",
-          },
-        }),
-      });
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, headers: new Headers({ "content-type": "application/json" }), json: async () => ({ data: { imageCount: 2, uploadedCount: 2, failedCount: 0, results: [ { index: 0, ok: true, result: { photoId: "photo-shelf", uploadSessionId: "session-shelf", derivativeStatus: "ready" } }, { index: 1, ok: true, result: { photoId: "photo-workbench", uploadSessionId: "session-workbench", derivativeStatus: "pending" } } ] } }) });
     vi.stubGlobal("fetch", fetchMock);
 
     try {
@@ -2641,45 +2618,16 @@ describe("Assist With Moving MCP API client", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const [firstUrl, firstInit] = fetchMock.mock.calls[0] as unknown as [
-      URL,
-      { headers: Record<string, string>; body: Buffer },
-    ];
-    const [secondUrl, secondInit] = fetchMock.mock.calls[1] as unknown as [
-      URL,
-      { headers: Record<string, string>; body: Buffer },
-    ];
-
-    expect(firstUrl.pathname).toBe("/api/v1/photos/upload");
-    expect(Object.fromEntries(firstUrl.searchParams)).toMatchObject({
-      moveId: "move1",
-      fileName: "garage-shelf.png",
-      mimeType: "image/png",
-      room: "Garage",
-      caption: "Garage shelf before packing",
-      photoType: "room",
-      privacyLevel: "normal",
-      source: "mcp",
-      exifHandlingStatus: "pending",
-    });
-    expect(firstInit.headers["idempotency-key"]).toBe("garage-photo-batch-1");
-    expect(firstInit.body).toEqual(pngBytes);
-
-    expect(secondUrl.pathname).toBe("/api/v1/photos/upload");
-    expect(Object.fromEntries(secondUrl.searchParams)).toMatchObject({
-      moveId: "move1",
-      fileName: "garage-workbench.png",
-      mimeType: "image/png",
-      room: "Garage workbench",
-      caption: "Garage workbench before packing",
-      photoType: "room",
-      privacyLevel: "normal",
-      source: "mcp",
-      exifHandlingStatus: "pending",
-    });
-    expect(secondInit.headers["idempotency-key"]).toBe("garage-photo-batch-2");
-    expect(secondInit.body).toEqual(pngBytes);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, { headers: Record<string, string>; body: string }];
+    expect(url.pathname).toBe("/api/v1/uploads/batch");
+    expect(init.headers["idempotency-key"]).toBe("garage-photo-batch");
+    const payload = JSON.parse(init.body);
+    expect(payload.images).toHaveLength(2);
+    expect(payload.images[0]).toMatchObject({ moveId: "move1", room: "Garage", caption: "Garage shelf before packing", mimeType: "image/png" });
+    expect(payload.images[1]).toMatchObject({ moveId: "move1", room: "Garage workbench", caption: "Garage workbench before packing", mimeType: "image/png" });
+    expect(Buffer.from(payload.images[0].fileBase64, "base64")).toEqual(pngBytes);
+    expect(Buffer.from(payload.images[1].fileBase64, "base64")).toEqual(pngBytes);
   });
 
   it("keeps one-call image upload dry runs free of image bytes", async () => {

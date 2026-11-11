@@ -82,6 +82,10 @@ describe("uploadMediaFile retry", () => {
     expect(photoId).toBe("photo_1");
     // One init per attempt (3), and the stale session cancelled after each fail (2).
     expect(deps.initUpload).toHaveBeenCalledTimes(3);
+    const declarations = deps.initUpload.mock.calls as unknown as Array<[{ operationId: string; sizeBytes: number }]>;
+    expect(new Set(declarations.map(([args]) => args.operationId)).size).toBe(1);
+    expect(declarations[0][0].operationId).toBeTruthy();
+    expect(declarations.every(([args]) => args.sizeBytes === 2)).toBe(true);
     expect(deps.cancelUploadSession).toHaveBeenCalledTimes(2);
     expect(onRetry).toHaveBeenCalledTimes(2);
     expect(UPLOAD_MAX_ATTEMPTS).toBe(4);

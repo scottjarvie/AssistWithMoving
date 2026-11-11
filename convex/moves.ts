@@ -1,3 +1,4 @@
+import { retainPhotoForDeletion, retainSessionForDeletion } from "./lib/storageDeletion";
 import { v } from "convex/values";
 
 import type { Doc } from "./_generated/dataModel";
@@ -528,7 +529,9 @@ async function purgeMoveData(
     total += docs.length;
     if (!dryRun) {
       for (const doc of docs) {
-        await ctx.db.delete(doc._id);
+        if (table === "itemPhotos") await retainPhotoForDeletion(ctx, await ctx.db.get(doc._id));
+        else if (table === "photoUploadSessions") await retainSessionForDeletion(ctx, await ctx.db.get(doc._id));
+        else await ctx.db.delete(doc._id);
       }
     }
   }

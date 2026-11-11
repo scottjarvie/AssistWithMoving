@@ -31,7 +31,7 @@ describe("Moving storage adapter", () => {
     const f = await fixture();
     const id = await f.t.run(ctx => reserveUpload(ctx, f.household, "op", 80, "image"));
     expect(await f.t.run(ctx => reserveUpload(ctx, f.household, "op", 80, "image"))).toBe(id);
-    await expect(f.t.run(ctx => commitUpload(ctx, f.household, id, 110))).rejects.toThrow();
+    await expect(f.t.run(ctx => commitUpload(ctx, f.household, id, 110))).rejects.toThrow(/remaining/);
     await f.t.run(ctx => commitUpload(ctx, f.household, id, 75));
     await f.t.run(ctx => commitUpload(ctx, f.household, id, 75));
     await f.t.run(ctx => addStoredCopy(ctx, f.household, 20));
@@ -44,7 +44,9 @@ describe("Moving storage adapter", () => {
   it.each([["warn", true], ["on", false], ["off", true]] as const)("never refuses %s, ready %s", async (mode, ready) => {
     const f = await fixture(mode, ready);
     await f.t.run(ctx => reserveUpload(ctx, f.household, "over", 200, "image"));
-    expect((await f.t.run(ctx => summaryFor(ctx, f.household))).usedBytes).toBe(200);
+    const summary = await f.t.run(ctx => summaryFor(ctx, f.household));
+    if (ready) expect(summary.usedBytes).toBe(200);
+    else { expect(summary.ready).toBe(false); expect(summary).not.toHaveProperty("usedBytes"); }
   });
   it("expires reservations and permits retry without a second attempt charge", async () => {
     const f = await fixture();
@@ -91,8 +93,37 @@ it("keeps family storage allowance literals out of site logic", async () => {
   const { readdirSync, statSync } = await import("node:fs");
   const { join } = await import("node:path");
   function files(dir: string): string[] { return readdirSync(dir).flatMap(name => { const path = join(dir, name); return statSync(path).isDirectory() ? files(path) : /\.[cm]?[jt]sx?$/.test(path) ? [path] : []; }); }
-  for (const path of [...files("convex"), ...files("src"), ...files("mcp-server")]) {
-    if (path === "convex/lib/usageLimits/core.ts" || /\.(test|spec)\./.test(path)) continue;
-    expect(readFileSync(path, "utf8"), path).not.toMatch(/\b(?:1_000_000_000|10_000_000_000|1000000000|10000000000|1073741824|10737418240)\b/);
+  const ts = await import("typescript");
+  function constant(node: import("typescript").Node): number | null {
+    if (ts.isNumericLiteral(node)) return Number(node.text.replaceAll("_", ""));
+    if (ts.isParenthesizedExpression(node)) return constant(node.expression);
+    if (!ts.isBinaryExpression(node)) return null;
+    const a = constant(node.left), b = constant(node.right); if (a === null || b === null) return null;
+    switch (node.operatorToken.kind) { case ts.SyntaxKind.AsteriskToken: return a * b; case ts.SyntaxKind.AsteriskAsteriskToken: return a ** b; case ts.SyntaxKind.PlusToken: return a + b; case ts.SyntaxKind.MinusToken: return a - b; case ts.SyntaxKind.SlashToken: return a / b; case ts.SyntaxKind.LessThanLessThanToken: return a << b; default: return null; }
   }
+  function storageLiteral(code: string, path = "fixture.ts") {
+    const found: number[] = []; const forbidden = new Set([1e9, 10e9, 1024 ** 3, 10 * 1024 ** 3, 50 * 1024 ** 3, 150 * 1024 ** 3, 500 * 1024 ** 3]);
+    if (path === "convex/lib/observability.ts") forbidden.delete(500 * 1024 ** 3); // Existing operational alert, never an account allowance.
+    function visit(node: import("typescript").Node) { const value = constant(node); if (value !== null && forbidden.has(value)) found.push(value); ts.forEachChild(node, visit); }
+    visit(ts.createSourceFile(path, code, ts.ScriptTarget.Latest, true)); return found;
+  }
+  for (const code of ["const x = 1e9", "const x = 2 ** 30", "const x = 1024 ** 3", "const x = 10 * 1_000 * 1_000 * 1_000", "const x = 1 << 30"]) expect(storageLiteral(code).length, code).toBeGreaterThan(0);
+  for (const path of [...files("convex"), ...files("src"), ...files("mcp-server"), ...files("shared"), ...files("infra")]) {
+    if (path === "convex/lib/usageLimits/core.ts" || path === "shared/usage-limits.mjs" || /\.(test|spec)\./.test(path)) continue;
+    expect(storageLiteral(readFileSync(path, "utf8"), path), path).toEqual([]);
+  }
+});
+
+it("ships the cleanup cron as a read-only dry run with no storage delete", () => {
+  const code = readFileSync("convex/photos.ts", "utf8");
+  const sweep = code.slice(code.indexOf("export const claimExpiredCleanup"), code.indexOf("export const tryCreateUploadSession"));
+  expect(sweep).toContain("completedPhotoId");
+  expect(sweep).toContain("referencedObject");
+  expect(sweep).not.toContain("deleteStorageObject");
+  expect(sweep).not.toContain("ctx.db.patch");
+});
+
+it("keeps the stdio runtime identical to the synced core", async () => {
+  const { execFileSync } = await import("node:child_process");
+  expect(() => execFileSync(process.execPath, ["scripts/sync-usage-limits-runtime.mjs", "--check"])).not.toThrow();
 });

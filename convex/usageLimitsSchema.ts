@@ -26,6 +26,8 @@ export const limitPatchValidator = v.object(limitFields);
 /** Personal limits: a number sets one, null goes back to the site value. */
 const nullableNumber = v.optional(v.union(v.number(), v.null()));
 export const nullableLimitPatch = v.object({
+  planStoredBytes: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
+  maxFileBytes: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
   storedBytesPerUser: nullableNumber,
   uploadsPerHour: nullableNumber,
   uploadsPerDay: nullableNumber,
@@ -37,10 +39,19 @@ export const nullableLimitPatch = v.object({
 });
 
 export const usageLimitTables = {
+  uploadObjectClaims: defineTable({ storageKey: v.string(), sessionId: v.id("photoUploadSessions") }).index("by_key", ["storageKey"]).index("by_session", ["sessionId"]),
+  usageRecountProofs: defineTable({ runId: v.id("usageRecountRuns"), ownerId: v.id("users"), storedBytes: v.number(), observedBytes: v.optional(v.number()) }).index("by_run_owner", ["runId", "ownerId"]),
+  sessionDeletionJobs: defineTable({ sessionId: v.id("photoUploadSessions"), originalStorageKey: v.string(), ownerId: v.id("users"), refs: v.array(v.object({ bucket: v.string(), storageKey: v.string(), versionId: v.optional(v.string()), bytes: v.optional(v.number()), deleted: v.boolean() })), status: v.union(v.literal("pending"), v.literal("done")), updatedAt: v.number() }).index("by_session", ["sessionId"]).index("by_owner_status", ["ownerId", "status"]),
+  generatedObjects: defineTable({ ownerId: v.id("users"), photoId: v.id("itemPhotos"), bucket: v.string(), storageKey: v.string(), bytes: v.number(), state: v.union(v.literal("pending"), v.literal("active"), v.literal("failed")), createdAt: v.number() }).index("by_owner", ["ownerId"]).index("by_photo", ["photoId"]).index("by_key", ["storageKey"]).index("by_state_created", ["state", "createdAt"]),
+  usageRecountRuns: defineTable({ dryRun: v.boolean(), status: v.union(v.literal("running"), v.literal("blocked"), v.literal("done")), phase: v.number(), verifyRevision: v.optional(v.number()), ownersCursor: v.union(v.string(), v.null()), ownerId: v.optional(v.id("users")), sourceCursor: v.union(v.string(), v.null()), nextOwnerCursor: v.optional(v.string()), lastOwner: v.optional(v.boolean()), ownerBytes: v.number(), accountsSeen: v.number(), bytesCounted: v.number(), unknownSizeFiles: v.number(), unattributedFiles: v.number(), uncountedFiles: v.optional(v.number()), counterMismatches: v.optional(v.number()), message: v.optional(v.string()), missingObjects: v.number(), updatedAt: v.number() }),
+  storageDeletionJobs: defineTable({ photoId: v.id("itemPhotos"), ownerId: v.id("users"), bytes: v.number(), refs: v.array(v.object({ bucket: v.string(), storageKey: v.string(), versionId: v.optional(v.string()), bytes: v.optional(v.number()), deleted: v.boolean() })), status: v.union(v.literal("pending"), v.literal("done")), updatedAt: v.number(), error: v.optional(v.string()) }).index("by_photo", ["photoId"]).index("by_owner_status", ["ownerId", "status"]).index("by_status_updated", ["status", "updatedAt"]),
   uploadReservations: defineTable({ ownerId: v.string(), key: v.string(), bytes: v.number(), day: v.string(), status: v.union(v.literal("reserved"), v.literal("committed"), v.literal("released")), expiresAt: v.number() }).index("by_owner_key", ["ownerId", "key"]).index("by_status_expires", ["status", "expiresAt"]),
   /** One row, key "site". Absent row = family defaults with enforcement off. */
   usageLimitSettings: defineTable({
     key: v.literal("site"),
+    storageRevision: v.optional(v.number()),
+    backfillCompletedAt: v.optional(v.number()),
+    storageDeletionEnabled: v.optional(v.boolean()),
     ...limitFields,
     enforcement: enforcementValidator,
     downloadEnforcement: v.optional(enforcementValidator),
@@ -93,7 +104,7 @@ export const usageLimitTables = {
       revision: v.number(),
       restarts: v.number(),
     })),
-  }).index("by_owner", ["ownerId"]),
+  }).index("by_owner", ["ownerId"]).index("by_ready", ["ready"]),
 
   /** What a limit refused or would have refused (warn/off), for the operator page. */
   usageLimitEvents: defineTable({
