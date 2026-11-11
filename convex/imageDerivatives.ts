@@ -8,6 +8,7 @@ import {
 import { v } from "convex/values";
 import sharp from "sharp";
 
+import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import {
   fileExtensionForMediaMimeType,
@@ -112,12 +113,13 @@ async function objectBodyToBuffer(body: unknown) {
 
 export const generateFromOriginal = internalAction({
   args: {
+    photoId: v.optional(v.id("itemPhotos")),
     bucketName: v.string(),
     moveId: v.id("moves"),
     originalStorageKey: v.string(),
   },
   handler: async (
-    _ctx,
+    ctx,
     args,
   ): Promise<{
     derivativeRefs: Partial<Record<PhotoDerivativeVariant, string>>;
@@ -163,6 +165,7 @@ export const generateFromOriginal = internalAction({
           },
         }),
       );
+      if (args.photoId) await ctx.runMutation(internal.photos.recordStoredDerivative, { photoId: args.photoId, variant: spec.variant, storageKey, bytes: data.byteLength });
       derivativeRefs[spec.variant] = storageKey;
     }
 

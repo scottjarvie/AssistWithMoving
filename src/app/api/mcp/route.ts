@@ -38,6 +38,7 @@ const SERVER_INSTRUCTIONS = [connectionPolicy.instructions,
   "New API keys use the limits chosen by the person, with no forced end date. reduce_connection can narrow only this calling key; only the person in Settings can widen or restore it.",
   "Start every session with get_api_context to confirm the key's scopes and any move restriction, then list_moves or setup_move.",
   "Typical workflow: setup_move → create_move_space (rooms) → batch_upsert_items / add_item_from_photo → create_box + add_items_to_box → upload photos → suggest_assignments → get_move_summary.",
+  "Read storage.line in move context and upload replies. A storage refusal leaves this connection working; retain the file and retry after room is available.",
   "Prefer batch tools over repeated single calls. Most write tools accept dryRun for a safe preview and an idempotencyKey for retries.",
 ].join(" ");
 

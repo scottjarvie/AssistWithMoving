@@ -1,3 +1,4 @@
+import { usageLimitTables } from "./usageLimitsSchema";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -860,6 +861,7 @@ const aiGrantFields = {
 };
 
 export default defineSchema({
+  ...usageLimitTables,
   users: defineTable({
     clerkUserId: v.string(),
     email: v.optional(v.string()),
@@ -1838,6 +1840,8 @@ export default defineSchema({
     .index("by_household", ["householdId"]),
 
   itemPhotos: defineTable({
+    storedBytes: v.optional(v.number()),
+    pendingStorageDeletion: v.optional(v.boolean()),
     householdId: v.id("households"),
     moveId: v.id("moves"),
     itemId: v.optional(v.id("items")),
@@ -1897,6 +1901,7 @@ export default defineSchema({
     .index("by_household", ["householdId"]),
 
   photoUploadSessions: defineTable({
+    usageReservationId: v.optional(v.id("uploadReservations")),
     householdId: v.id("households"),
     moveId: v.id("moves"),
     itemId: v.optional(v.id("items")),
@@ -1943,6 +1948,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_move_status", ["moveId", "status"])
+    .index("by_status_cleanup_expires", ["status", "cleanupCompletedAt", "expiresAt"])
     .index("by_status_expires", ["status", "expiresAt"])
     .index("by_expires", ["expiresAt"])
     .index("by_household", ["householdId"]),

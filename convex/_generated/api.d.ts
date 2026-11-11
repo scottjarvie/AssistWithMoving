@@ -126,6 +126,7 @@ import type * as lib_sharedPublishing from "../lib/sharedPublishing.js";
 import type * as lib_subManifest from "../lib/subManifest.js";
 import type * as lib_textIntakeParser from "../lib/textIntakeParser.js";
 import type * as lib_transportPresets from "../lib/transportPresets.js";
+import type * as lib_usageLimits_core from "../lib/usageLimits/core.js";
 import type * as mcp from "../mcp.js";
 import type * as mcpArchive from "../mcpArchive.js";
 import type * as mcpClientMetadata from "../mcpClientMetadata.js";
@@ -165,6 +166,9 @@ import type * as testSupport from "../testSupport.js";
 import type * as transportResources from "../transportResources.js";
 import type * as transportTrips from "../transportTrips.js";
 import type * as transportZones from "../transportZones.js";
+import type * as usageLimits from "../usageLimits.js";
+import type * as usageLimitsSchema from "../usageLimitsSchema.js";
+import type * as usageLimitsStorage from "../usageLimitsStorage.js";
 import type * as userReconcile from "../userReconcile.js";
 import type * as users from "../users.js";
 
@@ -293,6 +297,7 @@ declare const fullApi: ApiFromModules<{
   "lib/subManifest": typeof lib_subManifest;
   "lib/textIntakeParser": typeof lib_textIntakeParser;
   "lib/transportPresets": typeof lib_transportPresets;
+  "lib/usageLimits/core": typeof lib_usageLimits_core;
   mcp: typeof mcp;
   mcpArchive: typeof mcpArchive;
   mcpClientMetadata: typeof mcpClientMetadata;
@@ -332,6 +337,9 @@ declare const fullApi: ApiFromModules<{
   transportResources: typeof transportResources;
   transportTrips: typeof transportTrips;
   transportZones: typeof transportZones;
+  usageLimits: typeof usageLimits;
+  usageLimitsSchema: typeof usageLimitsSchema;
+  usageLimitsStorage: typeof usageLimitsStorage;
   userReconcile: typeof userReconcile;
   users: typeof users;
 }>;

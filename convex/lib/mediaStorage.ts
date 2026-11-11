@@ -29,9 +29,11 @@ export const allowedMediaMimeTypes = [
   ...allowedVideoMimeTypes,
 ] as const;
 
-export const maxImageUploadBytes = 25 * 1024 * 1024;
-export const maxAudioUploadBytes = 100 * 1024 * 1024;
-export const maxVideoUploadBytes = 500 * 1024 * 1024;
+export { siteDefaults } from "../../shared/media-limits.mjs";
+import { siteDefaults } from "../../shared/media-limits.mjs";
+export const maxImageUploadBytes = siteDefaults.image;
+export const maxAudioUploadBytes = siteDefaults.audio;
+export const maxVideoUploadBytes = siteDefaults.video;
 
 export type UploadFileShape = {
   mimeType: string;

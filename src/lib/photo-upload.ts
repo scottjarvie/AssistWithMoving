@@ -1,3 +1,4 @@
+import { siteDefaults } from "../../convex/lib/mediaStorage";
 export const allowedPhotoMimeTypes = [
   "image/jpeg",
   "image/png",
@@ -25,9 +26,9 @@ export const allowedMediaMimeTypes = [
   ...allowedVideoMimeTypes,
 ] as const;
 
-export const maxPhotoUploadBytes = 25 * 1024 * 1024;
-export const maxAudioUploadBytes = 100 * 1024 * 1024;
-export const maxVideoUploadBytes = 500 * 1024 * 1024;
+export const maxPhotoUploadBytes = siteDefaults.image;
+export const maxAudioUploadBytes = siteDefaults.audio;
+export const maxVideoUploadBytes = siteDefaults.video;
 
 export const photoDerivativeSpecs = [
   { variant: "thumb", width: 200, height: 200, fit: "cover", quality: 0.78 },

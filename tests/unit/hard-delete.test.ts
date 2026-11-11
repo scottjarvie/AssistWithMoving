@@ -89,7 +89,8 @@ describe("hard delete cascades", () => {
       now: 100,
     });
 
-    expect(deletes).toEqual(["photo_1", "photo_2", "membership_1", "listing_1", "placement_1"]);
+    for (const id of ["photo_1", "photo_2"]) expect(patches).toContainEqual({ id, patch: { itemId: undefined, boxId: undefined, archivedAt: 100, pendingStorageDeletion: true, updatedAt: 100 } });
+    expect(deletes).toEqual(["membership_1", "listing_1", "placement_1"]);
     expect(patches).toContainEqual({
       id: "entry_live",
       patch: {
@@ -141,7 +142,7 @@ describe("hard delete cascades", () => {
       now: 200,
     });
 
-    expect(deletes).toEqual(["photo_box", "membership_box", "placement_box"]);
+    expect(deletes).toEqual(["membership_box", "placement_box"]);
     expect(patches).toContainEqual({
       id: "entry_box",
       patch: {

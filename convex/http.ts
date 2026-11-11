@@ -1,3 +1,4 @@
+import { siteDefaults } from "../shared/media-limits.mjs";
 import { internal as generatedInternal } from "./_generated/api";
 import connectionPolicy from "../shared/ai-connection-policy.json";
 import { anyApi, httpRouter } from "convex/server";
@@ -41,7 +42,7 @@ const allowedDirectImageMimeTypes = new Set([
   "image/png",
   "image/webp",
 ]);
-const maxDirectImageUploadBytes = 25 * 1024 * 1024;
+const maxDirectImageUploadBytes = siteDefaults.image;
 const directImageFileFieldNames = new Set(["file", "image", "photo"]);
 const directImageMetadataFields = new Set([
   "moveId",

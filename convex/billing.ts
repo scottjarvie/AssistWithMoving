@@ -1,3 +1,5 @@
+import { summaryFor, storagePlan } from "./usageLimits";
+import { effectiveLimits } from "./lib/usageLimits/core";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
@@ -29,7 +31,9 @@ export const statusForHousehold = query({
       billingGatesEnabled(ctx),
     ]);
     const tier = effectiveBillingTier(profile);
-    const definition = billingTierDefinition(tier);
+    const storage = await summaryFor(ctx, args.householdId);
+    const baseDefinition = billingTierDefinition(tier);
+    const definition = { ...baseDefinition, limits: { ...baseDefinition.limits, photoStorageBytes: storage.capBytes } };
 
     return {
       profile: profile
@@ -51,7 +55,7 @@ export const statusForHousehold = query({
       providerDecision: billingProviderDecision,
       dimensions: usageDimensions.map((dimension) => ({
         dimension,
-        used: usage[dimension],
+        used: dimension === "photoStorageBytes" ? storage.usedBytes : usage[dimension],
         limit: definition.limits[dimension],
         evaluation: evaluateEntitlement(usage, definition.limits, dimension, 0),
       })),
@@ -112,10 +116,11 @@ export const setHouseholdTier = mutation({
 
 export const tiers = query({
   args: {},
-  handler: async () => {
-    return billingTiers.map((tier) => ({
-      tier,
-      ...billingTierDefinition(tier),
-    }));
+  handler: async (ctx) => {
+    const site = await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique();
+    return billingTiers.map((tier) => {
+      const definition = billingTierDefinition(tier);
+      return { tier, ...definition, limits: { ...definition.limits, photoStorageBytes: effectiveLimits(site, null, storagePlan(tier, false)).limits.storedBytesPerUser } };
+    });
   },
 });

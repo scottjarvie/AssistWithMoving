@@ -8,7 +8,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import sharp from "sharp";
 
 import { downloadPublicHttpsMedia } from "../mcp-server/media-ingress.mjs";
@@ -303,6 +303,7 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
       return restOk(
         {
           data: {
+            storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }),
             uploadSessionId,
             uploadUrl,
             method: "PUT",
@@ -314,6 +315,7 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
         201
       );
     } catch (error) {
+      if (error instanceof ConvexError && typeof error.data === "object" && error.data?.code === "USAGE_LIMIT_REACHED") return { status: 413, body: { error: error.data } };
       return restError({
         status: errorStatus(error),
         code: "upload_init_failed",
@@ -430,6 +432,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
       let derivativeError: string | undefined;
       try {
         const generated = await generateAndStoreImageDerivatives({
+          onStored: (variant, storageKey, bytes) => ctx.runMutation(internal.photos.recordStoredDerivative, { photoId, variant, storageKey, bytes }),
           bucketName: config.bucketName,
           moveId,
           originalStorageKey: objectKey,
@@ -488,6 +491,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
       return restOk(
         {
           data: {
+            storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }),
             photoId,
             uploadSessionId,
             derivativeStatus,
@@ -515,6 +519,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
           },
         });
       }
+      if (error instanceof ConvexError && typeof error.data === "object" && error.data?.code === "USAGE_LIMIT_REACHED") return { status: 413, body: { error: error.data } };
       return restError({
         status: errorStatus(error),
         code: "photo_upload_failed",
@@ -635,6 +640,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
       if (shouldGenerateServerDerivatives(session)) {
         try {
           const generated = await generateAndStoreImageDerivatives({
+          onStored: (variant, storageKey, bytes) => ctx.runMutation(internal.photos.recordStoredDerivative, { photoId, variant, storageKey, bytes }),
             bucketName: session.originalBucket ?? config.bucketName,
             moveId,
             originalStorageKey: session.originalStorageKey,
@@ -699,6 +705,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
       return restOk(
         {
           data: {
+            storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }),
             photoId,
             derivativeStatus,
             derivativeError,
@@ -722,6 +729,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
           createdByUserId: auth.createdByUserId,
         },
       });
+      if (error instanceof ConvexError && typeof error.data === "object" && error.data?.code === "USAGE_LIMIT_REACHED") return { status: 413, body: { error: error.data } };
       return restError({
         status: errorStatus(error),
         code: "upload_finalize_failed",
@@ -887,10 +895,12 @@ function shouldGenerateServerDerivatives(session: {
 }
 
 async function generateAndStoreImageDerivatives({
+  onStored,
   bucketName,
   moveId,
   originalStorageKey,
 }: {
+  onStored: (variant: PhotoDerivativeVariant, storageKey: string, bytes: number) => Promise<unknown>;
   bucketName: string;
   moveId: Id<"moves">;
   originalStorageKey: string;
@@ -936,6 +946,7 @@ async function generateAndStoreImageDerivatives({
         },
       })
     );
+    await onStored(spec.variant, storageKey, data.byteLength);
     derivativeRefs[spec.variant] = storageKey;
   }
 

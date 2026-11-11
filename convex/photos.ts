@@ -1,3 +1,4 @@
+import { reserveUpload, commitUpload, releaseUpload, addStoredCopy } from "./usageLimits";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 import { ConvexError, v } from "convex/values";
@@ -16,6 +17,7 @@ import {
   type ActionCtx,
   action,
   internalAction,
+  internalMutation,
   internalQuery,
   mutation,
   type MutationCtx,
@@ -560,6 +562,7 @@ type InitUploadResult = {
     headers: { "Content-Type": string };
   }>;
   expiresAt: number;
+  storage?: Awaited<ReturnType<typeof import("./usageLimits").summaryFor>>;
 };
 
 // Extracted body of initUpload. When `apiActor` is undefined this behaves
@@ -663,6 +666,7 @@ async function runInitUpload(
     );
 
     return {
+      storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }),
       uploadSessionId,
       uploadUrl,
       method: "PUT",
@@ -736,6 +740,7 @@ type FinalizeUploadResult = {
   derivativeStatus?: "pending" | "ready" | "failed";
   derivativeError?: string;
   derivativeNote: string;
+  storage?: Awaited<ReturnType<typeof import("./usageLimits").summaryFor>>;
 };
 
 // Extracted body of finalizeUpload. When `apiActor` is undefined this behaves
@@ -835,6 +840,7 @@ async function runFinalizeUpload(
             bucketName: session.originalBucket ?? config.bucketName,
             moveId: args.moveId,
             originalStorageKey: session.originalStorageKey,
+            photoId,
           },
         );
         await ctx.runMutation(internal.photos.markGeneratedDerivativesReady, {
@@ -859,6 +865,7 @@ async function runFinalizeUpload(
     }
 
     return {
+      storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }),
       photoId,
       derivativeStatus,
       derivativeError,
@@ -1505,7 +1512,9 @@ export const createUploadSession = aiMutation({
     await assertPhotoTargets(ctx, args);
 
     const now = Date.now();
+    const usageReservationId = await reserveUpload(ctx, args.householdId, args.originalStorageKey, original.sizeBytes + derivativeUploads.reduce((sum, d) => sum + d.expectedSizeBytes, 0), original.mediaKind, original.sizeBytes);
     return await ctx.db.insert("photoUploadSessions", {
+      usageReservationId,
       householdId: args.householdId,
       moveId: args.moveId,
       itemId: args.itemId,
@@ -1683,6 +1692,8 @@ export const markUploadSessionFailed = aiMutation({
       session.householdId === args.householdId &&
       session.moveId === args.moveId
     ) {
+      if (session.status === "completed") return;
+      await releaseUpload(ctx, session.usageReservationId);
       await ctx.db.patch(args.uploadSessionId, {
         status: "failed",
         updatedAt: Date.now(),
@@ -1753,11 +1764,8 @@ export const completeUploadSession = aiMutation({
       householdId: args.householdId,
       dimension: "photoCount",
     });
-    await assertHouseholdEntitlement(ctx, {
-      householdId: args.householdId,
-      dimension: "photoStorageBytes",
-      increment: session.expectedSizeBytes,
-    });
+    const storedBytes = session.expectedSizeBytes + (session.derivativeUploads ?? []).reduce((sum, d) => sum + d.expectedSizeBytes, 0);
+    await commitUpload(ctx, args.householdId, session.usageReservationId, storedBytes);
 
     const now = Date.now();
     const derivativeRefs = (session.derivativeUploads ?? []).reduce<
@@ -1773,6 +1781,7 @@ export const completeUploadSession = aiMutation({
           : "pending"
         : undefined;
     const photoId = await ctx.db.insert("itemPhotos", {
+      storedBytes,
       householdId: args.householdId,
       moveId: args.moveId,
       itemId: session.itemId,
@@ -1938,6 +1947,7 @@ export const cancelUploadSession = mutation({
     ) {
       return;
     }
+    await releaseUpload(ctx, session.usageReservationId);
     await ctx.db.patch(args.uploadSessionId, {
       status: "cancelled",
       updatedAt: Date.now(),
@@ -2085,5 +2095,53 @@ export const archive = mutation({
       objectTable: "itemPhotos",
       objectId: args.photoId,
     });
+  },
+});
+
+// Record each successful PUT, including partial derivative generation failures.
+export const recordStoredDerivative = internalMutation({
+  args: { photoId: v.id("itemPhotos"), variant: photoDerivativeVariantValidator, storageKey: v.string(), bytes: v.number() },
+  handler: async (ctx, args) => {
+    const photo = await ctx.db.get(args.photoId);
+    if (!photo) throw new ConvexError("Photo not found.");
+    if (photo.derivativeRefs[args.variant] === args.storageKey) return;
+    await addStoredCopy(ctx, photo.householdId, args.bytes);
+    await ctx.db.patch(photo._id, { storedBytes: (photo.storedBytes ?? photo.sizeBytes) + args.bytes, derivativeRefs: { ...photo.derivativeRefs, [args.variant]: args.storageKey } });
+  },
+});
+
+export const claimExpiredCleanup = internalMutation({
+  args: {},
+  handler: async ctx => {
+    const candidates = [];
+    for (const status of ["authorized", "failed", "cancelled"] as const) {
+      const sessions = await ctx.db.query("photoUploadSessions").withIndex("by_status_cleanup_expires", q => q.eq("status", status).eq("cleanupCompletedAt", undefined).lt("expiresAt", Date.now() - defaultPhotoUploadCleanupGraceMs)).take(30);
+      for (const session of sessions) {
+        await releaseUpload(ctx, session.usageReservationId);
+        await ctx.db.patch(session._id, { status: "failed", updatedAt: Date.now() });
+        candidates.push({ id: session._id, refs: uploadSessionStorageRefs(session) });
+      }
+    }
+    return candidates;
+  },
+});
+export const confirmExpiredCleanup = internalMutation({
+  args: { id: uploadSessionIdValidator, error: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.id);
+    if (!session || session.status === "completed") return;
+    await ctx.db.patch(args.id, { cleanupAttemptedAt: Date.now(), cleanupCompletedAt: args.error ? undefined : Date.now(), cleanupError: args.error });
+  },
+});
+export const cleanupExpiredInternal = internalAction({
+  args: {},
+  handler: async ctx => {
+    const candidates = await ctx.runMutation(internal.photos.claimExpiredCleanup, {});
+    for (const candidate of candidates) {
+      let error: string | undefined;
+      try { for (const ref of candidate.refs) await deleteStorageObject(ref); }
+      catch (failure) { error = cleanupStorageError(failure); }
+      await ctx.runMutation(internal.photos.confirmExpiredCleanup, { id: candidate.id, error });
+    }
   },
 });

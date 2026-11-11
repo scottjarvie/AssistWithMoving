@@ -1,5 +1,6 @@
 "use client";
 
+import { StorageAdmin, StorageFailSoft } from "./storage-allowance";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
@@ -376,6 +377,7 @@ export function AdminDashboard() {
         </div>
       ) : overview ? (
         <>
+          <StorageFailSoft><StorageAdmin /></StorageFailSoft>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {coreMetrics.map(([key, label, Icon]) => (
               <MetricTile

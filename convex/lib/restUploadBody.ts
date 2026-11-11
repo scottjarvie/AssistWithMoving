@@ -1,5 +1,6 @@
+import { siteDefaults } from "../../shared/media-limits.mjs";
 const directImageUploadPaths = new Set(["photos/upload", "images/upload"]);
-const maxDirectImageUploadBytes = 25 * 1024 * 1024;
+const maxDirectImageUploadBytes = siteDefaults.image;
 const allowedRawImageMimeTypes = new Set([
   "image/jpeg",
   "image/png",

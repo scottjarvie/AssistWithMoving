@@ -557,6 +557,7 @@ export function createMovingServer(
           ? `Connection state: ${connectionState?.status ?? "limited"}; changed ${connectionState?.changedAt ?? "date unavailable"}; end date ${connectionState?.expiresAt ?? "none"}. Only the person can restore it at https://movingmanifest.com/settings/ai. describe_connection remains available.`
           : `This connection holds ${[...granted].join(", ")}. Only tools inside those are listed.`,
         "New AI connections get all entitled current and future scopes, all owned moves, and no end date unless restricted, unreleased OAuth connections set a narrower floor. API keys have their own person-chosen limits. Use reduce_connection to narrow only your own access; only the person in Settings can widen or restore it.",
+        "Read storage.line from get_move_brief. Storage refusals leave your connection working; this OAuth door has no upload tool.",
         "Call get_move_brief first and use only returned move and record IDs.",
         "Search before creating duplicates; hydrate only the records needed for the work.",
         "Use get_evidence_media for private photos rather than normal web fetch.",

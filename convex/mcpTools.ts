@@ -1,3 +1,4 @@
+import { summaryFor } from "./usageLimits";
 // Convex functions exposed to the user's AI agent through the OAuth MCP gateway
 // (convex/mcp.ts registers them; convex/http.ts mounts the gateway). Each takes
 // the gateway-injected `caller` and resolves the user from `caller.subject` via
@@ -43,6 +44,7 @@ export const getAgentContext = internalQuery({
             return null;
           }
           return {
+            storage: await summaryFor(ctx, household._id),
             householdId: household._id,
             name: household.name,
             role: membership.role,

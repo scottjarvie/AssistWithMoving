@@ -24,4 +24,8 @@ crons.interval(
   {},
 );
 
+crons.interval("expire upload reservations", { minutes: 5 }, internal.usageLimits.expireReservations, {});
+
+crons.interval("clean abandoned upload objects", { minutes: 30 }, internal.photos.cleanupExpiredInternal, {});
+
 export default crons;

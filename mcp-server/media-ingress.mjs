@@ -1,10 +1,11 @@
+import { siteDefaults } from "../shared/media-limits.mjs";
 import { lookup } from "node:dns/promises";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import path from "node:path";
 
-export const DEFAULT_REMOTE_MEDIA_BYTES = 25 * 1024 * 1024;
+export const DEFAULT_REMOTE_MEDIA_BYTES = siteDefaults.image;
 export const DEFAULT_REMOTE_MEDIA_TIMEOUT_MS = 10_000;
 export const DEFAULT_REMOTE_MEDIA_REDIRECTS = 3;
 

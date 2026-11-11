@@ -1,3 +1,4 @@
+import { summaryFor } from "./usageLimits";
 import { captureNeedsInput, ingestionStatusToQueueState } from "./lib/queue";
 import { queueIsWork, queueNeedsInput, effectiveQueueState, queueWorkFilter } from "./lib/queue";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
@@ -372,6 +373,7 @@ export const getMoveBrief = internalQuery({
         product: "Assist With Moving",
         roleSplit:
           "Assist With Moving keeps the durable move record; your AI reasons and saves authorized move work.",
+        storage: await Promise.all(access.rows.map(async move => ({ householdId: move.householdId, ...await summaryFor(ctx, move.householdId) }))),
         moves,
         truncated: access.truncated,
         next: moves.length
@@ -508,6 +510,7 @@ export const getMoveBrief = internalQuery({
     const livePhotos = photos.filter((photo) => photo.archivedAt === undefined);
     return {
       product: "Assist With Moving",
+      storage: await summaryFor(ctx, move.householdId),
       move: {
         moveId: move._id,
         title: move.title,

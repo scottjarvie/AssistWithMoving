@@ -1,3 +1,4 @@
+import { summaryFor } from "./usageLimits";
 import {queueNeedsInput} from "./lib/queue";
 import {queueWorkFilter} from "./lib/queue";
 import { createQueueItem, readQueueSuggestions, reviewQueueSuggestion, type QueueResultRef } from "./lib/queueService";
@@ -1643,6 +1644,7 @@ async function routeMe(
   ]);
   return restOk({
     data: {
+      storage: auth.status === "active" && auth.scopes.includes("photos/write") ? await summaryFor(ctx, auth.householdId) : null,
       household: household
         ? {
             householdId: household._id,
@@ -2150,6 +2152,7 @@ async function routeAgentContext(
 
   return restOk({
     data: {
+      storage: await summaryFor(ctx, move.householdId),
       move: safeMove(move),
       aiContract: {
         preferredSetupOrder: [

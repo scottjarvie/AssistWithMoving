@@ -1,3 +1,4 @@
+import { siteDefaults } from "../shared/media-limits.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 const publicationInput = new AsyncLocalStorage();
 export function withPublicationInput(input, work) { return publicationInput.run({ acknowledgeContactDetails: input?.acknowledgeContactDetails, restorePrivately: input?.restorePrivately }, work); }
@@ -1717,7 +1718,7 @@ async function loadLocalImageForDirectUpload(config, input) {
     filePath: input.filePath,
     transport: config.mediaIngress?.transport,
     allowedFileRoots: config.mediaIngress?.allowedFileRoots,
-    maxBytes: 25 * 1024 * 1024,
+    maxBytes: siteDefaults.image,
   });
   const fileName = input.fileName ?? path.basename(input.filePath);
   const requestedMimeType = normalizeMimeType(
@@ -2016,7 +2017,7 @@ async function loadEvidenceMedia(config, input) {
       filePath: input.filePath,
       transport: config.mediaIngress?.transport,
       allowedFileRoots: config.mediaIngress?.allowedFileRoots,
-      maxBytes: 500 * 1024 * 1024,
+      maxBytes: siteDefaults.video,
     });
     return {
       bytes,
@@ -2030,7 +2031,7 @@ async function loadEvidenceMedia(config, input) {
   }
 
   const remote = await downloadPublicHttpsMedia(input.sourceUrl, {
-    maxBytes: 25 * 1024 * 1024,
+    maxBytes: siteDefaults.image,
   });
   const bytes = remote.bytes;
   const url = remote.finalUrl;

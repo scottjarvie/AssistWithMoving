@@ -88,7 +88,12 @@ export async function cascadeDeleteItem(
     },
   );
 
-  for (const doc of photos) await ctx.db.delete(doc._id);
+  // Keep a retryable storage tombstone. Originals and copies remain charged until
+  // an object deletion worker confirms removal; archiving never refunds storage.
+  for (const doc of photos) await ctx.db.patch(doc._id, {
+    itemId: undefined, boxId: undefined, archivedAt: args.now,
+    pendingStorageDeletion: true, updatedAt: args.now,
+  });
   for (const doc of memberships) await ctx.db.delete(doc._id);
   for (const doc of listings) await ctx.db.delete(doc._id);
   for (const doc of placements) await ctx.db.delete(doc._id);
@@ -141,7 +146,12 @@ export async function cascadeDeleteBox(
     },
   );
 
-  for (const doc of photos) await ctx.db.delete(doc._id);
+  // Keep a retryable storage tombstone. Originals and copies remain charged until
+  // an object deletion worker confirms removal; archiving never refunds storage.
+  for (const doc of photos) await ctx.db.patch(doc._id, {
+    itemId: undefined, boxId: undefined, archivedAt: args.now,
+    pendingStorageDeletion: true, updatedAt: args.now,
+  });
   for (const doc of memberships) await ctx.db.delete(doc._id);
   for (const doc of placements) await ctx.db.delete(doc._id);
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { siteDefaults } from "../shared/media-limits.mjs";
 import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
 import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
 import { pathToFileURL } from "node:url";
@@ -948,7 +949,7 @@ export function createAssistWithMovingMcpServer(apiConfig, options = {}) {
     name: "assistwithmoving",
     version: "0.2.0",
     websiteUrl: "https://movingmanifest.com",
-  }, { instructions: connectionPolicy.instructions });
+  }, { instructions: connectionPolicy.instructions + " Read storage.line in move context and upload replies. Storage refusals affect one upload and leave your connection working; retain the source file." });
   registerTools(target, apiConfig, options);
   return target;
 }
@@ -2082,13 +2083,13 @@ export function registerTools(target, apiConfig, options = {}) {
       transportZoneId: z.string().optional(),
       room: z.string().optional(),
       mimeType: z.enum(allowedOriginalMediaMimeTypes),
-      sizeBytes: z.number().int().positive().max(500 * 1024 * 1024),
+      sizeBytes: z.number().int().positive().max(siteDefaults.video),
       derivatives: z
         .array(
           z.object({
             variant: z.enum(["thumb", "card", "detail", "full"]),
             mimeType: z.enum(allowedDerivativeImageMimeTypes),
-            sizeBytes: z.number().int().positive().max(25 * 1024 * 1024),
+            sizeBytes: z.number().int().positive().max(siteDefaults.image),
             width: z.number().int().positive(),
             height: z.number().int().positive(),
           })

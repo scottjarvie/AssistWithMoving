@@ -1,5 +1,6 @@
 "use client";
 
+import { StorageFailSoft, StorageMeter } from "./storage-allowance";
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { useAuth } from "@clerk/nextjs";
@@ -85,6 +86,7 @@ export function SettingsFeatureSections() {
       />
 
       <TabsContent value="overview">
+        {households?.map(h => <StorageFailSoft key={h.household._id}><StorageMeter householdId={h.household._id} /></StorageFailSoft>)}
         <SettingsPostureOverview
           currentUser={currentUser}
           households={households}
