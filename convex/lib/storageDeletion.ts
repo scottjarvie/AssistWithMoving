@@ -48,13 +48,20 @@ async function eraseSession(ctx: MutationCtx, session: Doc<"photoUploadSessions"
     const notBefore = Math.max(session.expiresAt + defaultPhotoUploadCleanupGraceMs, ...pending.map(job => job.notBefore ?? 0));
     const fields = { erased: true as const, refs, notBefore, bytes: closed.quarantinedBytes ?? pending[0]?.bytes ?? 0, status: "pending" as const, updatedAt: Date.now() };
     const primary = pending[0];
+    let adoptedId = primary?._id;
     if (primary) {
       await ctx.db.patch(primary._id, fields);
       for (const job of pending.slice(1)) {
         for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_deletion_job", q => q.eq("deletionJobId", String(job._id))).collect()) await ctx.db.patch(claim._id, { deletionJobId: String(primary._id) });
         await ctx.db.delete(job._id);
       }
-    } else await ctx.db.insert("sessionDeletionJobs", { ...fields, sessionId: session._id, originalStorageKey: session.originalStorageKey, ownerId, derivativeRefs: Object.fromEntries((session.derivativeUploads ?? []).map(ref => [ref.variant, ref.storageKey])) });
+    } else adoptedId = await ctx.db.insert("sessionDeletionJobs", { ...fields, sessionId: session._id, originalStorageKey: session.originalStorageKey, ownerId, derivativeRefs: Object.fromEntries((session.derivativeUploads ?? []).map(ref => [ref.variant, ref.storageKey])) });
+    // Index every adopted key, including references absent from the session's
+    // current original/derivative slots, so other workers see its write lease.
+    for (const ref of refs) {
+      const claim = await ctx.db.query("uploadObjectClaims").withIndex("by_deletion_job", q => q.eq("deletionJobId", String(adoptedId))).filter(q => q.eq(q.field("storageKey"), ref.storageKey)).first();
+      if (!claim) await ctx.db.insert("uploadObjectClaims", { sessionId: session._id, deletionJobId: String(adoptedId), storageKey: ref.storageKey });
+    }
   }
   for (const job of jobs.filter(job => job.status === "done")) {
     for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_deletion_job", q => q.eq("deletionJobId", String(job._id))).collect()) await ctx.db.delete(claim._id);

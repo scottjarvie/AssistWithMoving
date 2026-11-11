@@ -25,6 +25,11 @@ export async function referencedObject(ctx: Pick<QueryCtx, "db">, storageKey: st
   }
   if (await cleanupKeyClaim(ctx, storageKey, true)) return true;
   for await (const claim of ctx.db.query("uploadObjectClaims").withIndex("by_key", q => q.eq("storageKey", storageKey))) {
+    if (claim.deletionJobId) {
+      const id = ctx.db.normalizeId("sessionDeletionJobs", claim.deletionJobId);
+      const job = id ? await ctx.db.get(id) : null;
+      if (job?.status === "pending" && (job.notBefore ?? 0) > Date.now()) return true;
+    }
     const session = claim.sessionId ? await ctx.db.get(claim.sessionId) : null;
     if (session && session.status === "authorized" && !session.completedPhotoId && (session._id !== exceptSession || session.expiresAt > Date.now())) return true;
   }

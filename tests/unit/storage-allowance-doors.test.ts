@@ -1314,7 +1314,7 @@ it("R5 recount does not count an ordinary failed session again through its pendi
 });
 
 it("R5 erasure adopts a previously failed cleanup job, preserves its receipt and longest lease, and retries it to completion", async () => {
-  const f = await fixture(); const id = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("adopt", 20));
+  const f = await fixture(); await f.upload("adopted-photo"); const id = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("adopt", 20));
   await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id });
   vi.setSystemTime(Date.now() + 25 * 3600000);
   storage.objects.set("adopt-original", { bytes: new Uint8Array(20), mime: "image/png", version: "receipt-version" });
@@ -1333,6 +1333,9 @@ it("R5 erasure adopts a previously failed cleanup job, preserves its receipt and
   const jobs = await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").collect());
   expect(jobs).toHaveLength(1); expect(jobs[0]).toMatchObject({ _id: old._id, erased: true, notBefore: later, refs: [{ bucket: "synthetic", storageKey: "adopt-original", versionId: "receipt-version", bytes: 20, deleted: false }, { bucket: "synthetic", storageKey: "adopt-second", versionId: "second-version", bytes: 7, deleted: false }] });
   expect(await f.t.run(ctx => ctx.db.get(id))).toBeNull();
+  const photoJob = (await f.t.run(ctx => ctx.db.query("storageDeletionJobs").first()))!;
+  await f.t.run(ctx => ctx.db.patch(photoJob._id, { refs: [...photoJob.refs, { bucket: "synthetic", storageKey: "adopt-second", bytes: 7, deleted: false }] }));
+  expect(await f.t.mutation(internal.storageDeletion.recordVersion, { jobId: photoJob._id, index: photoJob.refs.length, bytes: 7, deleted: false })).toBe(false);
   storage.failDelete = false; vi.setSystemTime(later + 1);
   await f.t.action(internal.storageDeletion.sweep, {}); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(storage.objects.size).toBe(0); expect(await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").collect())).toEqual([]);
