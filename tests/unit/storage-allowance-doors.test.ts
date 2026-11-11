@@ -1063,7 +1063,7 @@ it.each([1001, 100000])("R3 the purge door pages %i photos with platform transac
   const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">;
   const template = (await f.t.run(ctx => ctx.db.get(photoId)))!;
   const { _id, _creationTime, ...fields } = template; void _id; void _creationTime;
-  for (let n = 1; n < count; n += 500) await f.t.run(async ctx => { for (let i = n; i < Math.min(n + 500, count); i++) await ctx.db.insert("itemPhotos", { ...fields, originalStorageKey: `synthetic-legacy-${i}`, caption: "Synthetic private caption" }); });
+  for (let n = 1; n < count; n += 500) await f.t.run(async ctx => { for (let i = n; i < Math.min(n + 500, count); i++) { vi.setSystemTime(template.createdAt + i); await ctx.db.insert("itemPhotos", { ...fields, originalStorageKey: `synthetic-legacy-${i}`, caption: "Synthetic private caption" }); } });
   expect(await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" })).toMatchObject({ pending: true });
   expect(await f.t.run(ctx => ctx.db.get(f.moveId))).toBeNull();
   let next: { householdId: typeof f.householdId; moveId: typeof f.moveId; table: number; cursor: string | null } | null = { householdId: f.householdId, moveId: f.moveId, table: 0, cursor: null };
