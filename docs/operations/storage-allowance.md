@@ -204,7 +204,7 @@ Move purges remove the move immediately, then continue through bounded,
 resumable indexed pages of up to five hundred photo records or one hundred other
 records, bounded to 1 MB of page input. The missing move prevents new
 uploads. Each authorized purge has one durable table/cursor checkpoint. The existing
-cleanup tick resumes failed checkpoints only while bucket deletion is enabled; successful completion deletes the
+cleanup tick resumes a person-requested purge even while bucket deletion is off; successful completion deletes the
 checkpoint. User media rows are deleted, rather than replaced with altered photo
 or session rows. Completed sessions, claims and reservations are retired; minimal
 cleanup jobs are removed after confirmed object cleanup. Shared erasures do not
@@ -256,12 +256,15 @@ or reveals identifiers or content. Photo/session previews above remain read-only
 The two switches are independent; omit a flag to leave it unchanged. There is no
 public mutation or administrator form that can enable either switch.
 
-With switches off, automatic workers remove no stored files, photo/session rows,
-or export artifacts beyond main's automatic behavior. Explicitly requested user
-erasure still removes the same private database rows as main and records minimal
-cleanup obligations. New automatic recovery of a stalled purge waits for the
-bucket switch; the already authorized purge's own cursor continuation proceeds.
-Counters for reset data stay charged until deletion is enabled and confirmed.
+With switches off, new automatic bucket removal and export expiry remain
+disabled. Explicitly requested user erasure still removes the same private
+database rows as main and records minimal
+cleanup obligations. Public purge records its authorization on the checkpoint;
+its cursor chain and interrupted-page retries finish the same row erasure with
+switches off. Recovery of unmarked old work still waits for the bucket switch.
+Recounts always publish distinct observed object bytes, independently of either
+switch. Reset objects still in the bucket count once; stale or duplicate charges
+are corrected even while deletion is off. Physical bucket removal remains gated.
 A session erasure adopts its existing unfinished cleanup jobs, preserving exact
 version receipts and the longest write lease, then retires every adopted job and
 claim on confirmation.

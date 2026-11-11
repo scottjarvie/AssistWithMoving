@@ -34,7 +34,7 @@ vi.mock("../../mcp-server/media-ingress.mjs", async importOriginal => {
 const modules = import.meta.glob("../../convex/**/*.ts");
 let png: Uint8Array;
 beforeEach(async () => {
-  vi.useFakeTimers(); storage.objects.clear(); storage.puts.length = 0; storage.deletes.length = 0; storage.failDelete = false; storage.failPut = false; storage.failHead.clear(); storage.revealOlder = false; storage.onHead = null; storage.onSourceRead = null; storage.sourceReads.length = 0;
+  vi.useFakeTimers(); vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z")); storage.objects.clear(); storage.puts.length = 0; storage.deletes.length = 0; storage.failDelete = false; storage.failPut = false; storage.failHead.clear(); storage.revealOlder = false; storage.onHead = null; storage.onSourceRead = null; storage.sourceReads.length = 0;
   for (const [name, value] of Object.entries({ B2_ENDPOINT: "https://synthetic-storage.invalid", B2_BUCKET_NAME: "synthetic", B2_APPLICATION_KEY_ID: "synthetic-test-only", B2_APPLICATION_KEY: "synthetic-test-only" })) vi.stubEnv(name, value);
   png = await sharp({ create: { width: 2, height: 2, channels: 3, background: "red" } }).png().toBuffer();
   vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
@@ -850,7 +850,8 @@ it("never-stored declared bytes return at expiry without deleting anything, and 
   expect((await f.summary()).usedBytes).toBe(20);
 });
 
-it("restoring a partially stored upload rechecks the missing bytes and holds the full declared size", async () => {
+it.each([false, true])("restoring a partially stored upload keeps the declared hold across UTC midnight=%s", async crossesMidnight => {
+  if (crossesMidnight) vi.setSystemTime(new Date("2026-01-15T23:50:00.000Z"));
   const f = await fixture({ cap: 40 });
   const args = { ...f.sessionArgs("partial-stored", 20), derivativeUploads: [{ variant: "thumb" as const, bucket: "synthetic", storageKey: "partial-copy", expectedMimeType: "image/png", expectedSizeBytes: 20, width: 2, height: 2 }] };
   const id = await f.person.mutation(internal.photos.createUploadSession, args);
@@ -862,7 +863,7 @@ it("restoring a partially stored upload rechecks the missing bytes and holds the
   expect(blocked.refusal).toMatchObject({ code: "USAGE_LIMIT_REACHED", requested: 20, remaining: 10 });
   await f.t.run(ctx => ctx.db.patch(f.settings, { planStoredBytes: { free: 40, pro: 40 } }));
   await f.person.mutation(internal.photos.createUploadSession, { ...args, expiresAt: Date.now() + 900000 });
-  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ storedBytes: 0, reservedBytes: 40, dayUploads: 1 }); expect(storage.deletes).toEqual([]);
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ storedBytes: 0, reservedBytes: 40, dayUploads: crossesMidnight ? 0 : 1, dayKey: crossesMidnight ? "2026-01-16" : "2026-01-15" }); expect(storage.deletes).toEqual([]);
 });
 
 it("expiry records one failure per row and never repeats its charge on the next sweep", async () => {
@@ -1401,10 +1402,65 @@ it("R5 export expiry rechecks its switch in the clearing transaction", async () 
   expect(await f.t.run(ctx => ctx.db.get(exported.exportJobId))).not.toHaveProperty("artifactText");
 });
 
-it("R5 reset-data counters stay charged with deletion off and fall after enabled confirmed cleanup", async () => {
+it("R6 reset objects remain counted with deletion off; confirmed absence repairs the counter without enabling deletion", async () => {
   const f = await fixture(); const { done } = await f.upload(); const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">; const before = (await f.summary()).usedBytes;
   await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" }); await drainPurge(f);
+  await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect((await f.summary()).usedBytes).toBe(before); expect(storage.deletes).toEqual([]);
   storage.objects.clear(); await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
-  expect((await f.summary()).usedBytes).toBe(before);
+  expect((await f.summary()).usedBytes).toBe(0); expect(storage.deletes).toEqual([]);
   await deletePhotoAndSettle(f, { photoId, dryRun: false }); expect((await f.summary()).usedBytes).toBe(0);
+});
+
+
+it.each(["absent-row", "absent-flags", "off", "on"] as const)("R6 recount repairs inflated shared/reset and unrelated stale charges with deletion %s", async mode => {
+  const f = await fixture({ cap: 100 });
+  const photoId = await f.t.run(async ctx => {
+    const id = await ctx.db.insert("itemPhotos", { householdId: f.householdId, moveId: f.moveId, originalStorageKey: "distinct-original", originalBucket: "synthetic", derivativeRefs: {}, documentationProfileTypes: [], mimeType: "image/png", sizeBytes: 60, photoType: "other", privacyLevel: "normal", visibilityScope: "moveCollaborators", source: "manualUpload", exifHandlingStatus: "pending", confidence: "none", verificationStatus: "unreviewed", aiProcessed: false, uploadedByUserId: f.owner, createdAt: Date.now(), updatedAt: Date.now() });
+    for (let i = 0; i < 2; i++) await ctx.db.insert("storageDeletionJobs", { ownerId: f.owner, photoId: id, originalStorageKey: "distinct-original", derivativeRefs: {}, refs: [{ bucket: "synthetic", storageKey: "distinct-original", bytes: 60, deleted: false }], bytes: 60, status: "pending", updatedAt: Date.now() });
+    await ctx.db.insert("usageCounters", { ownerId: f.owner, storedBytes: 137, reservedBytes: 0, inFlight: 0, dayUploads: 0, dayUploadBytes: 0, dayDownloadBytes: 0, hourUploads: 0, dayKey: "2026-01-15", hourKey: "2026-01-15T12", ready: true, revision: 0, updatedAt: Date.now() });
+    if (mode === "absent-row") await ctx.db.delete(f.settings);
+    else if (mode !== "absent-flags") await ctx.db.patch(f.settings, { storageDeletionEnabled: mode === "on", exportExpiryEnabled: false });
+    return id;
+  });
+  storage.objects.set("distinct-original", { bytes: new Uint8Array(60), mime: "image/png", version: "distinct-version" });
+  expect(await physicalInventory(f)).toEqual({ bytes: 60, objects: 1 });
+  await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect((await f.summary()).usedBytes).toBe(60); expect(storage.deletes).toEqual([]); expect(storage.objects.size).toBe(1);
+  // Erasing the live row leaves two reset obligations for the same object;
+  // it still counts exactly once, and an unrelated stale charge is repaired.
+  await f.t.run(async ctx => { await ctx.db.delete(photoId); const row = (await ctx.db.query("usageCounters").first())!; await ctx.db.patch(row._id, { storedBytes: 199, revision: row.revision + 1 }); });
+  await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ storedBytes: 60 }); expect(storage.deletes).toEqual([]);
+  if (mode !== "absent-row") {
+    await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("remaining-room", 40));
+    await expect(f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("no-room", 1))).rejects.toThrow(/USAGE_LIMIT_REACHED/);
+  }
+});
+
+it.each([false, true])("R6 an interrupted person-requested purge completes with deletion off, initially absent settings=%s", async absentSettings => {
+  const f = await fixture({ transactionLimits: true }); const { done } = await f.upload(); const before = (await f.summary()).usedBytes;
+  await f.t.run(async ctx => {
+    if (absentSettings) await ctx.db.delete(f.settings);
+    // More than a recovery page of unmarked old work may not hide authorized work.
+    for (let i = 0; i < 31; i++) await ctx.db.insert("movePurges", { householdId: f.householdId, moveId: f.moveId, table: 0, cursor: null, updatedAt: 0 });
+  });
+  await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" });
+  const run = (await f.t.run(ctx => ctx.db.query("movePurges").withIndex("by_person_updated", q => q.eq("requestedByPerson", true)).first()))!;
+  expect(run.requestedByPerson).toBe(true); expect(await f.t.run(ctx => ctx.db.get(f.moveId))).toBeNull();
+  await f.t.mutation(internal.moves.purgePage, { runId: run._id });
+  const saved = await f.t.run(ctx => ctx.db.get(run._id));
+  await f.t.run(async ctx => { for (const job of await ctx.db.system.query("_scheduled_functions").collect()) if (job.name.includes("moves:purgePage") && job.state.kind === "pending") await ctx.scheduler.cancel(job._id); });
+  await expect(f.t.mutation(async ctx => ctx.runMutation(internal.moves.purgePage, { runId: run._id }, { transactionLimits: { documentsWritten: 0 } }))).rejects.toThrow(/Wrote too many documents/);
+  expect(await f.t.run(ctx => ctx.db.get(run._id))).toEqual(saved);
+  expect(await f.t.run(ctx => ctx.db.get(done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">))).not.toBeNull();
+  vi.setSystemTime(Date.now() + 31 * 60000);
+  await f.t.action(internal.storageDeletion.sweep, {}); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(await f.t.run(ctx => ctx.db.get(run._id))).toBeNull();
+  expect(await f.t.run(ctx => ctx.db.query("movePurges").collect())).toHaveLength(31);
+  expect(await f.t.run(ctx => ctx.db.query("itemPhotos").collect())).toEqual([]); expect(await f.t.run(ctx => ctx.db.query("photoUploadSessions").collect())).toEqual([]);
+  expect(await f.t.run(ctx => ctx.db.query("storageDeletionJobs").collect())).toHaveLength(1);
+  await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect((await f.summary()).usedBytes).toBe(before); expect(storage.objects.size).toBe(5); expect(storage.deletes).toEqual([]);
+  expect((await f.t.run(ctx => ctx.db.query("usageLimitSettings").first()))?.storageDeletionEnabled).not.toBe(true);
 });

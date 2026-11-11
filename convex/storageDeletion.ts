@@ -304,7 +304,7 @@ export const runPhotoDeletion = internalAction({ args: { photoId: v.id("itemPhot
   return ctx.runAction(internal.storageDeletion.deletePhoto, { ...args, dryRun: !enabled });
 } });
 export const sweep = internalAction({ args: { cursor: v.optional(v.union(v.string(), v.null())), sessions: v.optional(v.boolean()), before: v.optional(v.number()) }, handler: async (ctx, args): Promise<void> => {
-  if (!args.cursor && !args.sessions && await ctx.runQuery(internal.storageDeletion.deletionEnabled, {})) await ctx.runMutation(internal.moves.resumePurges, {});
+  if (!args.cursor && !args.sessions) await ctx.runMutation(internal.moves.resumePurges, {});
   const page = await ctx.runQuery(internal.storageDeletion.plan, { cursor: args.cursor ?? null, sessions: args.sessions, before: args.before });
   for (const photoId of page.ids) try { await ctx.runAction(internal.storageDeletion.runPhotoDeletion, { photoId }); } catch { /* Existing sweep retries pending jobs. */ }
   for (const sessionId of page.sessionIds) try { await ctx.runAction(internal.storageDeletion.runSessionDeletion, { sessionId }); } catch { /* Same retry path. */ }

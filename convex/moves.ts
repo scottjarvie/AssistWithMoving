@@ -563,9 +563,9 @@ function purgeTables() {
 export const purgePage = internalMutation({
   args: { runId: v.id("movePurges"), automatic: v.optional(v.boolean()) },
   handler: async (ctx, { runId, automatic }) => {
-    if (automatic && !(await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique())?.storageDeletionEnabled) return null;
     const args = await ctx.db.get(runId);
     if (!args) return null;
+    if (automatic && !args.requestedByPerson && !(await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique())?.storageDeletionEnabled) return null;
     // Retire sessions first, transferring active write leases to their photos.
     const tables = purgeTables();
     const entry = tables[args.table];
@@ -600,8 +600,13 @@ export const purgePage = internalMutation({
 
 /* eslint-enable @typescript-eslint/no-explicit-any */
 export const resumePurges = internalMutation({ args: {}, handler: async ctx => {
-  if (!(await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique())?.storageDeletionEnabled) return;
-  const runs = await ctx.db.query("movePurges").withIndex("by_updated", q => q.lt("updatedAt", Date.now() - 15 * 60 * 1000)).take(30);
+  const enabled = Boolean((await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique())?.storageDeletionEnabled);
+  const before = Date.now() - 15 * 60 * 1000;
+  // A person's authorized row erasure must finish even while bucket removal
+  // is off. The separate index keeps unmarked old work from starving it.
+  const runs = enabled
+    ? await ctx.db.query("movePurges").withIndex("by_updated", q => q.lt("updatedAt", before)).take(30)
+    : await ctx.db.query("movePurges").withIndex("by_person_updated", q => q.eq("requestedByPerson", true).lt("updatedAt", before)).take(30);
   for (const run of runs) { await ctx.db.patch(run._id, { updatedAt: Date.now() }); await ctx.scheduler.runAfter(0, internal.moves.purgePage, { runId: run._id, automatic: true }); }
 } });
 export const purge = mutation({
@@ -645,7 +650,7 @@ export const purge = mutation({
       const { counts, total } = await purgeMoveData(ctx, { householdId: args.householdId, moveId: args.moveId });
       return { dryRun: true as const, moveTitle: move.title, deletedRecordCount: total, counts };
     }
-    const runId = await ctx.db.insert("movePurges", { householdId: args.householdId, moveId: args.moveId, table: 0, cursor: null, updatedAt: Date.now() });
+    const runId = await ctx.db.insert("movePurges", { requestedByPerson: true, householdId: args.householdId, moveId: args.moveId, table: 0, cursor: null, updatedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.moves.purgePage, { runId });
     await ctx.db.delete(args.moveId);
 

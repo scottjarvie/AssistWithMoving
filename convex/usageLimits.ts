@@ -297,8 +297,7 @@ export const finishRecountPage = internalMutation({ args: { ownerId: v.id("users
   const site = args.done ? await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique() : null;
   const unknown = row.repair.phase + (args.unknownSizeFiles ?? 0);
   const keepEnforced = Boolean(site?.backfillCompletedAt && row.ready);
-  const resetHeld = args.done && !site?.storageDeletionEnabled && (await ctx.db.query("storageDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "pending")).first() || await ctx.db.query("sessionDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "pending")).filter(q => q.eq(q.field("erased"), true)).first());
-  if (args.done) await ctx.db.patch(row._id, { storedBytes: resetHeld ? Math.max(row.storedBytes, bytes) : keepEnforced && unknown > 0 ? row.storedBytes : bytes, ...(!backedHold ? { reservedBytes: 0, inFlight: 0 } : {}), ready: keepEnforced || unknown === 0, repair: undefined, revision: row.revision + 1, updatedAt: Date.now() });
+  if (args.done) await ctx.db.patch(row._id, { storedBytes: keepEnforced && unknown > 0 ? row.storedBytes : bytes, ...(!backedHold ? { reservedBytes: 0, inFlight: 0 } : {}), ready: keepEnforced || unknown === 0, repair: undefined, revision: row.revision + 1, updatedAt: Date.now() });
   else await ctx.db.patch(row._id, { repair: { ...row.repair, phase: row.repair.phase + (args.unknownSizeFiles ?? 0), bytes, cursor: args.nextCursor } });
   if (args.done) await touchStorageRevision(ctx);
   return { done: args.done, restarted: false };
