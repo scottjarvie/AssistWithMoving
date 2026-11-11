@@ -11,6 +11,7 @@ import {
 type Row = Record<string, unknown> & { _id: string };
 
 function createCtx(tables: Record<string, Row[]>) {
+  tables.itemPhotos = (tables.itemPhotos ?? []).map(row => ({ originalStorageKey: `${row._id}-key`, originalBucket: "synthetic", derivativeRefs: {}, sizeBytes: 1, uploadedByUserId: "synthetic-owner", ...row }));
   const patches: Array<{ id: string; patch: Record<string, unknown> }> = [];
   const deletes: string[] = [];
   return {
@@ -37,6 +38,7 @@ function createCtx(tables: Record<string, Row[]>) {
             };
           },
         }),
+        insert: async () => "synthetic-cleanup-job",
         replace: async (id: string, patch: Record<string, unknown>) => { patches.push({ id, patch }); },
         patch: async (id: string, patch: Record<string, unknown>) => {
           patches.push({ id, patch });
@@ -94,8 +96,7 @@ describe("hard delete cascades", () => {
       now: 100,
     });
 
-    for (const id of ["photo_1", "photo_2"]) expect(patches).toContainEqual({ id, patch: expect.objectContaining({ usageOwnerId: "synthetic-owner", archivedAt: 100, pendingStorageDeletion: true, erasurePending: true, updatedAt: 100 }) });
-    expect(deletes).toEqual(["membership_1", "listing_1", "placement_1"]);
+    expect(deletes).toEqual(["photo_1", "photo_2", "membership_1", "listing_1", "placement_1"]);
     expect(patches).toContainEqual({
       id: "entry_live",
       patch: {
@@ -111,8 +112,7 @@ describe("hard delete cascades", () => {
     });
     expect(patches.some((patch) => patch.id === "entry_terminal")).toBe(false);
     expect(result).toMatchObject({
-      deletedPhotoCount: 0,
-      retainedPhotoCount: 2,
+      deletedPhotoCount: 2,
       deletedMembershipCount: 1,
       deletedListingCount: 1,
       deletedPlacementCount: 1,
@@ -148,7 +148,7 @@ describe("hard delete cascades", () => {
       now: 200,
     });
 
-    expect(deletes).toEqual(["membership_box", "placement_box"]);
+    expect(deletes).toEqual(["photo_box", "membership_box", "placement_box"]);
     expect(patches).toContainEqual({
       id: "entry_box",
       patch: {
@@ -163,8 +163,7 @@ describe("hard delete cascades", () => {
       patch: { boxId: undefined, updatedAt: 200 },
     });
     expect(result).toMatchObject({
-      deletedPhotoCount: 0,
-      retainedPhotoCount: 1,
+      deletedPhotoCount: 1,
       unpackedItemCount: 1,
       deletedPlacementCount: 1,
       updatedQueueEntryCount: 1,

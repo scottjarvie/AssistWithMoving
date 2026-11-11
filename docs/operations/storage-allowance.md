@@ -124,9 +124,10 @@ The worker snapshots durable jobs, checks every reference immediately before a
 version-specific delete, then confirms both that version and the current object
 are gone. Missing version IDs, revealed older versions, active upload leases,
 pending generated writes or another reference block removal. Errors preserve the
-record and charge for retry. Only confirmed completion removes photo rows and
-subtracts bytes. Archive subtracts nothing. Parent purges, seeds and test cleanup
-retain owned photo/session records until this process succeeds.
+cleanup job and charge for retry. User photo/session rows are erased as on main.
+Only confirmed storage state lowers counters, through the existing paged recount;
+archive subtracts nothing. Parent purges, seeds and test cleanup transfer only
+ownership, keys, charge and lease state into deletion jobs.
 
 A closing/cancelled/failed/expired session releases its upload slot in the same
 transaction, moving its held bytes to a charged cleanup ledger. Retry restores the
@@ -194,19 +195,39 @@ The current shared formatter can round a file and a nearby cap to the same decim
 figure. AI file-cap refusals therefore retain exact byte counts in their text and
 structured fields. Person-facing rounding remains a shared-core wording follow-up.
 
-Large move purges remove the move immediately, then continue through bounded,
+Move purges remove the move immediately, then continue through bounded,
 resumable indexed pages of up to five hundred photo records or one hundred other
 records, bounded to 1 MB of page input. The missing move prevents new
-uploads. Small purges retain their synchronous reply. Erased media records are
-replaced atomically with stripped storage cleanup records: private captions,
-notes, filenames, room labels, hashes and uploader attribution are removed.
-Required schema classification fields use neutral constants. Completed sessions,
-claims and reservations are retired; unfinished cleanup records and their jobs
-are removed after confirmed object cleanup. Counts do not fall before confirmation.
+uploads. Each authorized purge has one durable table/cursor checkpoint. The existing
+cleanup tick resumes failed checkpoints; successful completion deletes the
+checkpoint. User media rows are deleted, rather than replaced with altered photo
+or session rows. Completed sessions, claims and reservations are retired; minimal
+cleanup jobs are removed after confirmed object cleanup. Shared erasures do not
+protect each other as live references. Counts do not fall before confirmation.
 Normal upload replay receipts outside an erasure remain unchanged.
 
-An early URL-source refusal marks `requestedTotalKnown: false` and `requested: null`
-when the complete byte total has not been read. Its text explicitly says the total
+An early URL-source refusal adds `batchTotalUnknown: true` while keeping numeric
+`requested`, `used`, `remaining` and `cap` fields. The requested amount is a lower
+bound when the complete byte total has not been read. Its text explicitly says the total
 is unknown. Prepared batches still report exact totals. Stop-on-error batches keep
 partial results and release this call's unused reservations before returning an
 error; `continueOnError: true` retains individual outcomes and continues.
+
+## Purge baseline and accounting design
+
+On main, move purge requires the household owner and exact title confirmation.
+It synchronously deletes the move's dependent database rows, including photos and
+upload sessions, then deletes the move and writes a household audit. It neither
+removes bucket objects nor schedules one function per photo. A 1,001-photo move
+therefore does not hit a scheduling limit. At 100,000 legacy photos the same
+loop fails the transaction read limit; the regression fixture verifies both cases. Household demo reset likewise deletes
+its media rows and household. Account deletion is different: it anonymizes the
+account and revokes access; it does not purge household media. These scopes stay.
+
+The counting change must remove those same user rows. Minimal deletion jobs carry
+only ownership, object references, charge and write-lease state until storage
+confirms removal. Jobs are cleanup obligations, not live references; two erasures
+may therefore share a key without blocking each other. Actual live references
+still protect their objects. Move erasures use one durable table/cursor
+checkpoint; the existing cleanup sweep resumes interrupted checkpoints and removes
+the checkpoint at completion. The same cursor loop is used at every size; every page is transactional.

@@ -2,7 +2,7 @@ import * as convexHooks from "convex/react";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConvexError } from "convex/values";
-import { checkFileSize, usageLimitError, AI_STORAGE_NOTE } from "../../convex/lib/usageLimits/core";
+import { checkFileSize, usageLimitError, mcpLimitText, AI_STORAGE_NOTE } from "../../convex/lib/usageLimits/core";
 import { friendlyUploadError } from "../../src/components/media-upload-provider";
 import { photoUploadFailureMessage } from "../../src/components/photo-upload-control";
 import { isRetryableUploadError } from "../../src/lib/media-upload";
@@ -116,4 +116,19 @@ it("map editors show saved keys alone and do not submit them until edited", asyn
   expect(screen.getByLabelText(/Plan table changes/)).toHaveValue('{"pro":300}');
   fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Synthetic reason" } }); fireEvent.click(screen.getByRole("button", { name: "Save limits" })); await waitFor(() => expect(save).toHaveBeenCalledOnce()); expect(save.mock.calls[0][0].limits).toEqual({});
   fireEvent.change(screen.getByLabelText(/Plan table changes/), { target: { value: '{"pro":400}' } }); fireEvent.click(screen.getByRole("button", { name: "Save limits" })); await waitFor(() => expect(save).toHaveBeenCalledTimes(2)); expect(save.mock.calls[1][0].limits).toEqual({ planStoredBytes: { pro: 400 } });
+});
+
+it("R4 unknown batch totals preserve numeric compatibility through real person and AI readers", async () => {
+  const numeric = usageLimitError({ limit: "storedBytesPerUser", unit: "bytes", used: 0, cap: 100, requested: 120, remaining: 100, resetsAt: null });
+  const refusal = { ...numeric, batchTotalUnknown: true, message: numeric.message.replace("this needs ", "this needs at least ") + " The full batch total is unknown. Retry a smaller batch once there is room." };
+  for (const field of ["used", "cap", "requested", "remaining"] as const) expect(typeof refusal[field]).toBe("number");
+  const error = new ConvexError(refusal); error.message = "Server Error";
+  for (const reader of [friendlyUploadError, photoUploadFailureMessage]) { const message = reader(error); expect(message).toContain("full batch total is unknown"); expect(message).toContain("100"); expect(message).toContain("Retry"); expect(message).not.toContain("null"); }
+  // An older numeric reader remains valid; the additive-aware client also
+  // preserves uncertainty and the family's allowance/connection guidance.
+  expect(mcpLimitText(refusal)).not.toContain("null");
+  const { toolErrorResult } = await import("../../mcp-server/assistwithmoving-api.mjs");
+  const reply = toolErrorResult({ payload: { error: refusal } });
+  expect(reply.structuredContent).toEqual(refusal); expect(reply.isError).toBe(true);
+  expect(reply.content[0].text).toContain("full batch total is unknown"); expect(reply.content[0].text).toContain("100"); expect(reply.content[0].text).toBe(mcpLimitText(refusal).replace("needs ", "needs at least ") + " The full batch total is unknown.");
 });

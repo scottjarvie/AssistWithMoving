@@ -3,7 +3,7 @@ import { readConnection, oauthIdentity } from "./lib/carriedAccess";
 import { recordAuditEvent } from "./lib/audit";
 import { getCurrentUser } from "./lib/auth";
 import { uploadPolicyLine } from "../shared/upload-policy.mjs";
-import { photoStorageRefs, uploadSessionStorageRefs } from "./lib/photoCleanup";
+import { defaultPhotoUploadCleanupGraceMs, photoStorageRefs, uploadSessionStorageRefs } from "./lib/photoCleanup";
 import { referencedObject } from "./storageDeletion";
 import { refusalOf } from "./lib/usageLimits/refusal";
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
@@ -132,7 +132,7 @@ export async function addStoredCopy(ctx: MutationCtx, householdId: Id<"household
   await save(ctx, row, applyStoredAddition(counters, bytes), true);
 }
 /** Closing a slot frees its reservation but retains a charged cleanup ledger. */
-export async function closeUploadReservation(ctx: MutationCtx, session: Doc<"photoUploadSessions">) {
+export async function closeUploadReservation(ctx: MutationCtx, session: Doc<"photoUploadSessions">, scheduleSettlement = true) {
   if (!session.usageReservationId || session.completedPhotoId) return;
   const reservation = await ctx.db.get(session.usageReservationId);
   if (!reservation || reservation.status !== "reserved") return;
@@ -140,7 +140,7 @@ export async function closeUploadReservation(ctx: MutationCtx, session: Doc<"pho
   await save(ctx, row, applyCommit(counters, reservation.bytes, reservation.bytes, reservation.day === counters.dayKey), true);
   await ctx.db.patch(reservation._id, { status: "released" });
   await ctx.db.patch(session._id, { quarantinedBytes: (session.quarantinedBytes ?? 0) + reservation.bytes, processingUntil: undefined });
-  await ctx.scheduler.runAt(Math.max(Date.now(), session.expiresAt), internal.storageDeletion.settleSession, { sessionId: session._id });
+  if (scheduleSettlement) await ctx.scheduler.runAt(Math.max(Date.now(), session.expiresAt), internal.storageDeletion.settleSession, { sessionId: session._id });
 }
 export async function restoreUploadReservation(ctx: MutationCtx, session: Doc<"photoUploadSessions">, expiresAt: number) {
   if (!session.usageReservationId || session.quarantinedBytes === undefined) return;
@@ -210,16 +210,29 @@ async function storedPage(ctx: Ctx, ownerId: string, cursor: string | null) {
     else at = { ...at, householdId: households.page[0]._id, nextHousehold: households.continueCursor, lastHousehold: households.isDone };
     return { bytes: 0, pendingBytes: 0, unknown: 0, pendingLegacyFiles: 0, objects: [], cursor: JSON.stringify(at), isDone: false };
   }
+  if (at.phase === 7 || at.phase === 8) {
+    const jobs = at.phase === 7
+      ? await ctx.db.query("storageDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", ownerId as Id<"users">).eq("status", "pending")).paginate({ cursor: at.cursor, numItems: 100 })
+      : await ctx.db.query("sessionDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", ownerId as Id<"users">).eq("status", "pending")).paginate({ cursor: at.cursor, numItems: 100 });
+    const objects: Array<{ bucket: string; storageKey: string }> = []; let pendingBytes = 0, pendingLegacyFiles = 0;
+    for (const job of jobs.page) {
+      const writeUntil = "sessionId" in job ? (job.notBefore ?? 0) - defaultPhotoUploadCleanupGraceMs : job.notBefore ?? 0;
+      if (writeUntil > Date.now()) { pendingBytes += job.bytes ?? 0; pendingLegacyFiles++; }
+      else objects.push(...job.refs.filter(ref => !ref.deleted).map(ref => ({ bucket: ref.bucket, storageKey: ref.storageKey })));
+    }
+    return { bytes: pendingBytes, pendingBytes, pendingLegacyFiles, unknown: 0, objects, cursor: JSON.stringify({ ...at, phase: jobs.isDone && at.phase === 7 ? 8 : at.phase, cursor: jobs.isDone && at.phase === 7 ? null : jobs.continueCursor }), isDone: jobs.isDone && at.phase === 8 };
+  }
   if (at.phase === 6) {
     const generated = await ctx.db.query("generatedObjects").withIndex("by_owner", q => q.eq("ownerId", ownerId as Id<"users">)).paginate({ cursor: at.cursor, numItems: 100, maximumBytesRead: 350_000 });
     const objects = []; let pendingBytes = 0;
     for (const intent of generated.page) {
+      if (await ctx.db.query("storageDeletionJobs").withIndex("by_photo", q => q.eq("photoId", intent.photoId)).filter(q => q.eq(q.field("status"), "pending")).first()) continue;
       const photo = await ctx.db.get(intent.photoId);
       if (photo && photoStorageRefs(photo).some(ref => ref.storageKey === intent.storageKey)) continue;
       if (intent.state === "pending") pendingBytes += intent.bytes;
       else objects.push({ bucket: intent.bucket, storageKey: intent.storageKey });
     }
-    return { bytes: pendingBytes, pendingBytes, pendingLegacyFiles: 0, unknown: 0, objects, cursor: JSON.stringify({ ...at, cursor: generated.continueCursor }), isDone: generated.isDone };
+    return { bytes: pendingBytes, pendingBytes, pendingLegacyFiles: 0, unknown: 0, objects, cursor: JSON.stringify({ ...at, phase: generated.isDone ? 7 : 6, cursor: generated.isDone ? null : generated.continueCursor }), isDone: false };
   }
   const isSession = at.phase === 1 || at.phase >= 4;
   const page = at.phase <= 1
@@ -271,8 +284,6 @@ export const beginRecountPage = internalMutation({ args: { ownerId: v.id("users"
 export const finishRecountPage = internalMutation({ args: { ownerId: v.id("users"), revision: v.number(), cursor: v.union(v.string(), v.null()), nextCursor: v.string(), bytes: v.number(), done: v.boolean(), unknownSizeFiles: v.optional(v.number()) }, handler: async (ctx, args) => {
   const row = await rowFor(ctx, args.ownerId);
   if (!row?.repair || row.revision !== args.revision || row.repair.cursor !== args.cursor) return { done: false, restarted: true };
-  if (await ctx.db.query("storageDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "pending")).first()) return { done: false, restarted: true };
-  if (await ctx.db.query("sessionDeletionJobs").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "pending")).first()) return { done: false, restarted: true };
   const bytes = row.repair.bytes + args.bytes;
   const backedHold = args.done ? await ctx.db.query("uploadReservations").withIndex("by_owner_status", q => q.eq("ownerId", args.ownerId).eq("status", "reserved")).first() : null;
   const site = args.done ? await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique() : null;

@@ -3212,3 +3212,13 @@ it("R3 batch client forwards stop-on-error and preserves server partial results"
   await expect(uploadEvidenceImages({ baseUrl: "https://synthetic.invalid/api/v1", apiKey: "synthetic-test-only" }, { moveId: "synthetic-move", continueOnError: false, images: [{ fileBase64: "YmFk" }, { fileBase64: "YmFk" }] })).rejects.toMatchObject({ partialResults });
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ continueOnError: false });
 });
+
+it("R4 local stop-on-error sends no later local image after preparation fails", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "moving-stop-test-"));
+  const partialResults = [{ index: 0, ok: false, error: "Synthetic missing file" }];
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: "batch_upload_failed", message: "Synthetic missing file" }, partialResults }), { status: 400, headers: { "content-type": "application/json" } })); vi.stubGlobal("fetch", fetch);
+  try {
+    await expect(uploadEvidenceImages(localMediaApiConfig(root), { moveId: "synthetic", continueOnError: false, images: [{ filePath: path.join(root, "missing.png") }, { filePath: path.join(root, "later.png") }] })).rejects.toMatchObject({ partialResults });
+    expect(JSON.parse(fetch.mock.calls[0][1].body).images).toHaveLength(1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

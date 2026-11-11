@@ -1842,7 +1842,6 @@ export default defineSchema({
     .index("by_household", ["householdId"]),
 
   itemPhotos: defineTable({
-    erasurePending: v.optional(v.boolean()),
     storageWriteUntil: v.optional(v.number()),
     usageOwnerId: v.optional(v.id("users")),
     storedBytes: v.optional(v.number()),
@@ -1915,7 +1914,6 @@ export default defineSchema({
     .index("by_full_key", ["derivativeRefs.full"]),
 
   photoUploadSessions: defineTable({
-    erasurePending: v.optional(v.boolean()),
     objectClaimsRegistered: v.optional(v.boolean()),
     usageOwnerId: v.optional(v.id("users")),
     operationId: v.optional(v.string()),

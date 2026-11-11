@@ -27,6 +27,7 @@ import {
   internalQuery,
   mutation,
   type MutationCtx,
+  type QueryCtx,
   query,
 } from "./_generated/server";
 import { requireAppAdmin } from "./lib/admin";
@@ -227,7 +228,7 @@ function uploadObjectKey({
 }
 
 async function assertPhotoTargets(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, "db">,
   args: {
     moveId: Doc<"moves">["_id"];
     itemId?: Doc<"items">["_id"] | null;
@@ -272,6 +273,10 @@ async function assertPhotoTargets(
     }
   }
 }
+
+// Read-only preparation preserves stop-on-error before later sources are read;
+// admission and completion still recheck targets before storing anything.
+export const checkUploadTargets = internalQuery({ args: { moveId: v.id("moves"), itemId: v.optional(v.id("items")), boxId: v.optional(v.id("boxes")), spaceId: v.optional(v.id("moveSpaces")), transportResourceId: v.optional(v.id("transportResources")), transportZoneId: v.optional(v.id("transportZones")) }, handler: async (ctx, args) => { await assertPhotoTargets(ctx, args); return null; } });
 
 async function assertMoveInHousehold(
   ctx: MutationCtx,

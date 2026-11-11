@@ -11,8 +11,6 @@ const liveQueueStatuses = new Set<Doc<"ingestionQueueEntries">["status"]>([
 export type CascadeDeleteItemResult = {
   deletedPhotoIds: Id<"itemPhotos">[];
   deletedPhotoCount: number;
-  retainedPhotoIds: Id<"itemPhotos">[];
-  retainedPhotoCount: number;
   deletedMembershipCount: number;
   deletedListingCount: number;
   deletedPlacementCount: number;
@@ -23,8 +21,6 @@ export type CascadeDeleteItemResult = {
 export type CascadeDeleteBoxResult = {
   deletedPhotoIds: Id<"itemPhotos">[];
   deletedPhotoCount: number;
-  retainedPhotoIds: Id<"itemPhotos">[];
-  retainedPhotoCount: number;
   unpackedItemCount: number;
   deletedPlacementCount: number;
   updatedQueueEntryCount: number;
@@ -99,10 +95,8 @@ export async function cascadeDeleteItem(
   for (const doc of placements) await ctx.db.delete(doc._id);
 
   return {
-    deletedPhotoIds: [],
-    deletedPhotoCount: 0,
-    retainedPhotoIds: deletedPhotoIds,
-    retainedPhotoCount: photos.length,
+    deletedPhotoIds,
+    deletedPhotoCount: photos.length,
     deletedMembershipCount: memberships.length,
     deletedListingCount: listings.length,
     deletedPlacementCount: placements.length,
@@ -153,10 +147,8 @@ export async function cascadeDeleteBox(
   for (const doc of placements) await ctx.db.delete(doc._id);
 
   return {
-    deletedPhotoIds: [],
-    deletedPhotoCount: 0,
-    retainedPhotoIds: deletedPhotoIds,
-    retainedPhotoCount: photos.length,
+    deletedPhotoIds,
+    deletedPhotoCount: photos.length,
     unpackedItemCount: memberships.length,
     deletedPlacementCount: placements.length,
     updatedQueueEntryCount,

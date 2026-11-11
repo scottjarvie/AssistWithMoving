@@ -283,7 +283,7 @@ export function textResult(data) {
 
 export function toolErrorResult(error) {
   const refusal = error?.payload?.error ?? error?.data ?? error?.structuredContent;
-  if (refusal?.code === "USAGE_LIMIT_REACHED") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: (refusal.requestedTotalKnown === false ? refusal.message : mcpLimitText(refusal)) }] };
+  if (refusal?.code === "USAGE_LIMIT_REACHED") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: (refusal.batchTotalUnknown ? mcpLimitText(refusal).replace("needs ", "needs at least ") + " The full batch total is unknown." : mcpLimitText(refusal)) }] };
   if (refusal?.code === "FILE_TOO_LARGE") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: `${refusal.kind} file too large: ${refusal.got} bytes; maximum ${refusal.max} bytes.` }] };
   if (["REQUEST_TOO_LARGE", "OPERATION_ID_REQUIRED", "OPERATION_CONFLICT"].includes(refusal?.code)) return { isError: true, structuredContent: refusal, content: [{ type: "text", text: refusal.message }] };
   return {
@@ -1672,7 +1672,7 @@ export async function uploadEvidenceImages(config, input) {
   for (const image of images) {
     if (image.filePath) {
       try { const local = await loadLocalImageForDirectUpload(config, image); prepared.push({ ...defaults, ...image, filePath: undefined, fileBase64: local.bytes.toString("base64"), mimeType: local.mimeType, fileName: local.fileName, source: image.source ?? input.source ?? "mcp", exifHandlingStatus: image.exifHandlingStatus ?? input.exifHandlingStatus ?? "pending" }); }
-      catch (error) { prepared.push({ ...image, preparationError: error instanceof Error ? error.message : "Invalid local media." }); }
+      catch (error) { prepared.push({ ...image, preparationError: error instanceof Error ? error.message : "Invalid local media." }); if (!input.continueOnError) break; }
     } else prepared.push({ ...defaults, ...image });
   }
   const response = await assistWithMovingRequest(config, { method: "POST", path: "/uploads/batch", body: { ...defaults, images: prepared }, idempotencyKey: input.idempotencyKey });
