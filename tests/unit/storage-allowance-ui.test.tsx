@@ -109,3 +109,11 @@ it("the actual admin section displays a recorded storage refusal with readable u
   const mutation = vi.mocked(convexHooks.useMutation).mockReturnValue(vi.fn() as never);
   try { render(<StorageAdmin />); expect(screen.getByText(/90 bytes used; 20 bytes requested; 10 bytes remaining/)).toBeInTheDocument(); } finally { query.mockReset(); mutation.mockReset(); }
 });
+
+it("map editors show saved keys alone and do not submit them until edited", async () => {
+  const save = vi.fn().mockResolvedValue(undefined);
+  render(<StorageLimitsForm personal={false} savedLimits={{ planStoredBytes: { pro: 300 } }} onSave={save} />);
+  expect(screen.getByLabelText(/Plan table changes/)).toHaveValue('{"pro":300}');
+  fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Synthetic reason" } }); fireEvent.click(screen.getByRole("button", { name: "Save limits" })); await waitFor(() => expect(save).toHaveBeenCalledOnce()); expect(save.mock.calls[0][0].limits).toEqual({});
+  fireEvent.change(screen.getByLabelText(/Plan table changes/), { target: { value: '{"pro":400}' } }); fireEvent.click(screen.getByRole("button", { name: "Save limits" })); await waitFor(() => expect(save).toHaveBeenCalledTimes(2)); expect(save.mock.calls[1][0].limits).toEqual({ planStoredBytes: { pro: 400 } });
+});

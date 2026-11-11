@@ -43,11 +43,18 @@ export const plan = internalQuery({
     return { ids: page.page.map(p => p._id), cursor: page.continueCursor, isDone: page.isDone, dryRun: true };
   },
 });
+async function photoWriteLeaseEnd(ctx: Pick<QueryCtx, "db">, photoId: Id<"itemPhotos">, key: string) {
+  let until = 0;
+  for await (const session of ctx.db.query("photoUploadSessions").withIndex("by_original_key", q => q.eq("originalStorageKey", key))) if (session.completedPhotoId === photoId) until = Math.max(until, session.expiresAt + (session.objectClaimsRegistered ? 0 : defaultPhotoUploadCleanupGraceMs));
+  return until;
+}
 export const prepare = internalMutation({
   args: { photoId: v.id("itemPhotos") },
   handler: async (ctx, args) => {
     const photo = await ctx.db.get(args.photoId);
     if (!photo?.pendingStorageDeletion) return null;
+    const writeLease = await photoWriteLeaseEnd(ctx, photo._id, photo.originalStorageKey);
+    if (writeLease > Date.now()) { await ctx.scheduler.runAt(writeLease, internal.storageDeletion.runPhotoDeletion, { photoId: photo._id }); return null; }
     const previous = await ctx.db.query("storageDeletionJobs").withIndex("by_photo", q => q.eq("photoId", photo._id)).unique();
     if (previous) return previous;
     const ownerId = photo.usageOwnerId ?? (await ctx.db.get(photo.householdId))?.ownerUserId ?? photo.uploadedByUserId;
@@ -127,7 +134,7 @@ export const deletePhoto = internalAction({
   },
 });
 
-export const pendingGenerated = internalQuery({ args: { cursor: v.union(v.string(), v.null()) }, handler: async (ctx, args) => ctx.db.query("generatedObjects").withIndex("by_state_created", q => q.eq("state", "pending").lt("createdAt", Date.now() - 15 * 60 * 1000)).paginate({ cursor: args.cursor, numItems: 30 }) });
+export const pendingGenerated = internalQuery({ args: { cursor: v.union(v.string(), v.null()), before: v.number() }, handler: async (ctx, args) => ctx.db.query("generatedObjects").withIndex("by_state_created", q => q.eq("state", "pending").lt("createdAt", args.before)).paginate({ cursor: args.cursor, numItems: 30 }) });
 export const recoveredGenerated = internalMutation({ args: { id: v.id("generatedObjects"), exists: v.boolean() }, handler: async (ctx, args) => {
   const object = await ctx.db.get(args.id);
   if (!object || object.state !== "pending") return;
@@ -136,14 +143,15 @@ export const recoveredGenerated = internalMutation({ args: { id: v.id("generated
   await ctx.db.patch(object._id, { state: args.exists ? "active" : "failed" });
   await bumpOwnerRevision(ctx, object.ownerId);
 } });
-export const recoverGenerated = internalAction({ args: { cursor: v.optional(v.union(v.string(), v.null())) }, handler: async (ctx, args): Promise<void> => {
-  const page = await ctx.runQuery(internal.storageDeletion.pendingGenerated, { cursor: args.cursor ?? null });
+export const recoverGenerated = internalAction({ args: { cursor: v.optional(v.union(v.string(), v.null())), before: v.optional(v.number()) }, handler: async (ctx, args): Promise<void> => {
+  const before = args.before ?? Date.now() - 15 * 60 * 1000;
+  const page = await ctx.runQuery(internal.storageDeletion.pendingGenerated, { cursor: args.cursor ?? null, before });
   const storage = client();
   for (const object of page.page) {
     try { await storage.send(new HeadObjectCommand({ Bucket: object.bucket, Key: object.storageKey })); await ctx.runMutation(internal.storageDeletion.recoveredGenerated, { id: object._id, exists: true }); }
     catch (error) { if (missing(error)) await ctx.runMutation(internal.storageDeletion.recoveredGenerated, { id: object._id, exists: false }); }
   }
-  if (!page.isDone) await ctx.scheduler.runAfter(0, internal.storageDeletion.recoverGenerated, { cursor: page.continueCursor });
+  if (!page.isDone) await ctx.scheduler.runAfter(0, internal.storageDeletion.recoverGenerated, { cursor: page.continueCursor, before });
 } });
 
 /** Settle declared bytes after the presign expires. This never deletes an
@@ -251,14 +259,14 @@ export const sweep = internalAction({ args: { cursor: v.optional(v.union(v.strin
   }
   if (!page.isDone) await ctx.scheduler.runAfter(0, internal.storageDeletion.sweep, { cursor: page.cursor });
 } });
-export const sweepSessions = internalAction({ args: { cursor: v.optional(v.union(v.string(), v.null())) }, handler: async (ctx, args): Promise<void> => {
-  const page = await ctx.runQuery(internal.photos.claimExpiredCleanup, { cursor: args.cursor ?? null });
+export const sweepSessions = internalAction({ args: { cursor: v.optional(v.union(v.string(), v.null())), before: v.optional(v.number()) }, handler: async (ctx, args): Promise<void> => {
+  const page = await ctx.runQuery(internal.photos.claimExpiredCleanup, { cursor: args.cursor ?? null, before: args.before });
   const enabled = await ctx.runQuery(internal.storageDeletion.deletionEnabled, {});
   if (enabled) for (const candidate of page.candidates) {
     try { await ctx.runAction(internal.storageDeletion.deleteSession, { sessionId: candidate.id, dryRun: false }); }
     catch { /* A failed owner cannot starve the rest of the paginated sweep. */ }
   }
-  if (!page.isDone) await ctx.scheduler.runAfter(0, internal.storageDeletion.sweepSessions, { cursor: page.cursor });
+  if (!page.isDone) await ctx.scheduler.runAfter(0, internal.storageDeletion.sweepSessions, { cursor: page.cursor, before: page.before });
 } });
 
 export const runSessionDeletion = internalAction({ args: { sessionId: v.id("photoUploadSessions") }, handler: async (ctx, args): Promise<unknown> => {
@@ -271,7 +279,8 @@ export const previewPhoto = internalQuery({ args: { photoId: v.id("itemPhotos") 
   if (!photo?.pendingStorageDeletion) return [];
   const generated = await ctx.db.query("generatedObjects").withIndex("by_photo", q => q.eq("photoId", photo._id)).collect();
   const refs = [...photoStorageRefs(photo), ...generated.map(g => ({ bucket: g.bucket, storageKey: g.storageKey }))].filter((ref, i, all) => all.findIndex(other => other.bucket === ref.bucket && other.storageKey === ref.storageKey) === i);
-  return Promise.all(refs.map(async ref => ({ ...ref, referenced: await referencedObject(ctx, ref.storageKey, photo._id) })));
+  const pendingWrite = await photoWriteLeaseEnd(ctx, photo._id, photo.originalStorageKey) > Date.now();
+  return Promise.all(refs.map(async ref => ({ ...ref, referenced: pendingWrite || await referencedObject(ctx, ref.storageKey, photo._id) })));
 } });
 export const previewSession = internalQuery({ args: { sessionId: v.id("photoUploadSessions") }, handler: async (ctx, args) => {
   const session = await ctx.db.get(args.sessionId);

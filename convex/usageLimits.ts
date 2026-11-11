@@ -59,14 +59,19 @@ async function verdict(ctx: MutationCtx, info: Awaited<ReturnType<typeof limitsF
   if (!refusal) return;
   const mode = ownerEnforcement(info.effective, ownerReady(row, info.site));
   if (mode === "on") throw new ConvexError(usageLimitError(refusal));
-  await ctx.db.insert("usageLimitEvents", { ownerId: info.ownerId, at: Date.now(), mode, source: "upload", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining });
+  await recordLimitEvent(ctx, { ownerId: info.ownerId, at: Date.now(), mode, source: "upload", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining });
+}
+export async function recordLimitEvent(ctx: MutationCtx, event: Omit<Doc<"usageLimitEvents">, "_id" | "_creationTime">) {
+  try { await ctx.db.insert("usageLimitEvents", event); } catch { /* Logging cannot replace an admission result. */ }
 }
 export async function recordRefusalActivity(ctx: MutationCtx, householdId: Id<"households">, refusal: { code: string; message: string }, actor?: { createdByUserId: Id<"users">; oauthCaller?: { claims?: Record<string, unknown> } }) {
+  try {
   const person = actor ? null : await getCurrentUser(ctx);
   const clientId = oauthClientIdFromClaims(actor?.oauthCaller?.claims);
   const connection = actor && clientId ? await readConnection(ctx, actor.createdByUserId, oauthIdentity(clientId)) : null;
   if (connection?.grantId) await ctx.db.insert("aiGrantActivities", { grantId: connection.grantId, ownerUserId: actor!.createdByUserId, householdId, type: "refused", outcome: "refused", toolName: "add_images", refusalCode: refusal.code, message: refusal.message, createdAt: Date.now() });
   await recordAuditEvent(ctx, { householdId, actorType: actor ? "agent" : "user", actorUserId: actor?.createdByUserId ?? person?._id, category: actor ? "ai" : "photo", action: "upload.refused", metadata: { code: refusal.code, message: refusal.message } });
+  } catch { /* A refusal is authoritative even if its receipt cannot be written. */ }
 }
 export async function reserveUpload(ctx: MutationCtx, householdId: Id<"households">, key: string, bytes: number, kind: string, originalBytes = bytes) {
   const info = await limitsFor(ctx, householdId);
@@ -146,26 +151,28 @@ export async function restoreUploadReservation(ctx: MutationCtx, session: Doc<"p
   if (kept > reservation.bytes) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "Stored bytes do not match this upload. Use a new operationId while cleanup settles it." });
   const info = await limitsFor(ctx, session.householdId);
   await verdict(ctx, info, row, checkCommit(counters, info.effective.limits, 0, reservation.bytes - kept));
+  if (counters.inFlight >= info.effective.limits.maxUploadsInFlight) await verdict(ctx, info, row, { limit: "maxUploadsInFlight", unit: "uploads", used: counters.inFlight, cap: info.effective.limits.maxUploadsInFlight, requested: 1, remaining: 0, resetsAt: null });
   await save(ctx, row, { ...counters, storedBytes: Math.max(0, counters.storedBytes - kept), reservedBytes: counters.reservedBytes + reservation.bytes, inFlight: counters.inFlight + 1 }, true);
   await ctx.db.patch(reservation._id, { status: "reserved", expiresAt });
   await ctx.db.patch(session._id, { quarantinedBytes: undefined });
   await ctx.scheduler.runAt(expiresAt, internal.usageLimits.expireReservations, {});
 }
-export const expireReservations = internalMutation({ args: { cursor: v.optional(v.union(v.string(), v.null())) }, handler: async (ctx, args) => {
-  const page = await ctx.db.query("uploadReservations").withIndex("by_status_expires", q => q.eq("status", "reserved").lte("expiresAt", Date.now())).paginate({ cursor: args.cursor ?? null, numItems: 100 });
+export const expireReservations = internalMutation({ args: { cursor: v.optional(v.union(v.string(), v.null())), at: v.optional(v.number()) }, handler: async (ctx, args) => {
+  const at = args.at ?? Date.now();
+  const page = await ctx.db.query("uploadReservations").withIndex("by_status_expires", q => q.eq("status", "reserved").lte("expiresAt", at)).paginate({ cursor: args.cursor ?? null, numItems: 100 });
   let closed = 0, processing = 0, skipped = 0;
   for (const row of page.page) {
     const owner = ctx.db.normalizeId("users", row.ownerId);
     if (!owner || !await ctx.db.get(owner)) { skipped++; continue; }
     const session = await ctx.db.query("photoUploadSessions").withIndex("by_reservation", q => q.eq("usageReservationId", row._id)).first();
-    if (!session) { await releaseUpload(ctx, row._id); closed++; continue; }
+    if (!session || session.cleanupCompletedAt) { await releaseUpload(ctx, row._id); closed++; continue; }
     if (session.processingUntil && session.processingUntil > Date.now()) { processing++; continue; }
     if (session.completedPhotoId || session.expiresAt > Date.now()) { skipped++; continue; }
     await closeUploadReservation(ctx, session);
     await ctx.db.patch(session._id, { status: "failed", failureCode: "UPLOAD_EXPIRED", failureReason: "The upload session expired.", updatedAt: Date.now() }); closed++;
   }
-  if (!page.isDone) await ctx.scheduler.runAfter(0, internal.usageLimits.expireReservations, { cursor: page.continueCursor });
-  return { closed, processing, skipped, cursor: page.continueCursor, isDone: page.isDone };
+  if (!page.isDone) await ctx.scheduler.runAfter(0, internal.usageLimits.expireReservations, { cursor: page.continueCursor, at });
+  return { at, closed, processing, skipped, cursor: page.continueCursor, isDone: page.isDone };
 } });
 export async function summaryRawFor(ctx: Ctx, householdId: Id<"households">) {
   const info = await limitsFor(ctx, householdId);
@@ -235,7 +242,7 @@ async function storedPage(ctx: Ctx, ownerId: string, cursor: string | null) {
       if (row.status === "authorized" && row.expiresAt > Date.now()) { pendingLegacyFiles++; continue; }
       // Legacy abandoned objects have no hold. Count only refs not already owned
       // by a photo, including historically failed completed sessions.
-      for (const ref of uploadSessionStorageRefs(row)) if (!await referencedObject(ctx, ref.storageKey)) objects.push(ref);
+      for (const ref of uploadSessionStorageRefs(row)) if (!await referencedObject(ctx, ref.storageKey, undefined, row._id)) objects.push(ref);
     } else {
       objects.push(...photoStorageRefs(row));
       bytes += row.storedBytes ?? row.sizeBytes;
@@ -306,22 +313,40 @@ export const adminSetLimits = mutation({
 export const recordActionRefusal = internalMutation({ args: { householdId: v.id("households"), actorUserId: v.id("users"), code: v.string(), message: v.string() }, handler: (ctx, args) => recordRefusalActivity(ctx, args.householdId, args, { createdByUserId: args.actorUserId }) });
 
 export const reserveFetch = internalMutation({
-  args: { householdId: v.id("households"), key: v.string(), bytes: v.number() },
+  args: { householdId: v.id("households"), key: v.string(), bytes: v.number(), unknownLength: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    try { const info = await limitsFor(ctx, args.householdId); const previous = await ctx.db.query("uploadReservations").withIndex("by_owner_key", q => q.eq("ownerId", info.ownerId).eq("key", args.key)).unique(); return { reservationId: await reserveUpload(ctx, args.householdId, args.key, args.bytes, "image"), created: !previous || previous.status === "released" }; }
-    catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; await recordRefusalActivity(ctx, args.householdId, refusal, { createdByUserId: await ownerFor(ctx, args.householdId) }); return { refusal }; }
+    try {
+      const info = await limitsFor(ctx, args.householdId);
+      const previous = await ctx.db.query("uploadReservations").withIndex("by_owner_key", q => q.eq("ownerId", info.ownerId).eq("key", args.key)).unique();
+      const session = previous ? await ctx.db.query("photoUploadSessions").withIndex("by_reservation", q => q.eq("usageReservationId", previous._id)).first() : null;
+      if (session && session.householdId !== args.householdId) throw new ConvexError("Wrong upload household.");
+      const bytes = args.unknownLength && previous ? previous.bytes : args.bytes;
+      const sizeFailure = checkFileSize("image", bytes, effectiveFileCap("image", siteDefaults, info.site, info.override));
+      if (sizeFailure) throw new ConvexError(sizeFailure);
+      if (previous && previous.bytes !== bytes) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operation id already names a different source size." });
+      if (session?.quarantinedBytes !== undefined && !session.cleanupCompletedAt) {
+        const deletion = await ctx.db.query("sessionDeletionJobs").withIndex("by_session", q => q.eq("sessionId", session._id)).order("desc").first();
+        if (deletion?.status === "pending") throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This upload is being cleaned up. Use a new operationId." });
+        const expiresAt = Date.now() + 15 * 60 * 1000;
+        await restoreUploadReservation(ctx, session, expiresAt);
+        await ctx.db.patch(session._id, { status: "authorized", expiresAt, updatedAt: Date.now() });
+        await ctx.scheduler.runAt(expiresAt + 24 * 60 * 60 * 1000, internal.storageDeletion.runSessionDeletion, { sessionId: session._id });
+      }
+      return { reservationId: await reserveUpload(ctx, args.householdId, args.key, bytes, "image"), created: !previous || (previous.status === "released" && !session) };
+    } catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; if (refusal.code === "USAGE_LIMIT_REACHED") await recordLimitEvent(ctx, { ownerId: await ownerFor(ctx, args.householdId), at: Date.now(), mode: "on", source: "fetch", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining }); return { refusal }; }
   },
 });
 export const finishFetch = internalMutation({
   args: { householdId: v.id("households"), reservationId: v.id("uploadReservations"), bytes: v.number() },
   handler: async (ctx, args) => {
     const reservation = await ctx.db.get(args.reservationId);
+    if (reservation?.status === "committed") return {};
     if (!reservation || reservation.status !== "reserved") throw new ConvexError("Fetch reservation is not active.");
     const info = await limitsFor(ctx, args.householdId);
     if (reservation.ownerId !== info.ownerId) throw new ConvexError("Wrong storage owner.");
     const { row, counters } = await load(ctx, info.ownerId);
     try { await verdict(ctx, info, row, checkCommit(counters, info.effective.limits, reservation.bytes, args.bytes)); }
-    catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; await recordRefusalActivity(ctx, args.householdId, refusal, { createdByUserId: await ownerFor(ctx, args.householdId) }); return { refusal }; }
+    catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; if (refusal.code === "USAGE_LIMIT_REACHED") await recordLimitEvent(ctx, { ownerId: await ownerFor(ctx, args.householdId), at: Date.now(), mode: "on", source: "fetch", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining }); return { refusal }; }
     const delta = args.bytes - reservation.bytes;
     await save(ctx, row, { ...counters, reservedBytes: counters.reservedBytes + delta, dayUploadBytes: counters.dayUploadBytes + (reservation.day === counters.dayKey ? delta : 0) });
     await ctx.db.patch(reservation._id, { bytes: args.bytes });
@@ -329,7 +354,8 @@ export const finishFetch = internalMutation({
   },
 });
 export const releaseFetch = internalMutation({ args: { id: v.id("uploadReservations") }, handler: async (ctx, args) => {
-  if (await ctx.db.query("photoUploadSessions").withIndex("by_reservation", q => q.eq("usageReservationId", args.id)).first()) return;
+  const session = await ctx.db.query("photoUploadSessions").withIndex("by_reservation", q => q.eq("usageReservationId", args.id)).first();
+  if (session && !session.cleanupCompletedAt) return;
   await releaseUpload(ctx, args.id);
 } });
 

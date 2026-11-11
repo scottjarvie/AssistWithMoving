@@ -116,6 +116,8 @@ These list exact objects and whether another reference protects them. Explicit
 New pending uploads hold indexed object claims in the reservation transaction;
 legacy pending references have a separate indexed fallback. A terminal cleanup
 claim freezes finalization and prevents another operation from adopting its keys.
+A requested photo deletion also waits for any remaining presigned PUT lease, so
+a late client retry cannot recreate its bytes after the cleanup receipt.
 The worker snapshots durable jobs, checks every reference immediately before a
 version-specific delete, then confirms both that version and the current object
 are gone. Missing version IDs, revealed older versions, active upload leases,
@@ -189,3 +191,12 @@ are appended; byte values in human-readable policy text use the core formatter.
 The current shared formatter can round a file and a nearby cap to the same decimal
 figure. AI file-cap refusals therefore retain exact byte counts in their text and
 structured fields. Person-facing rounding remains a shared-core wording follow-up.
+
+Large parent purges still use the existing single-transaction contract. This draft
+has not established a maximum-scale transaction-limit proof or paged parent-purge
+driver; independent review must keep that performance gap open.
+
+An early storage refusal while preparing URL sources can report only the bytes
+of sources sized so far. No batch object has been stored at that point; a later
+unknown-length source cannot contribute an exact size before it is read. Complete
+prepared batches use their full actual total. This reporting edge remains open.

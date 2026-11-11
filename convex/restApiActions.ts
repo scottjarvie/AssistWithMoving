@@ -250,6 +250,8 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
   return await withActionRateLimit(ctx, args, auth, async () => {
     let uploadSessionId: Id<"photoUploadSessions"> | undefined;
     try {
+      const callerOperation = optionalString(body.operationId) ?? args.idempotencyKey;
+      if (callerOperation) { const replay = await ctx.runQuery(internal.photos.completedOperation, { householdId: auth.householdId, moveId, actorUserId: auth.createdByUserId, operationId: callerOperation }); if (replay) return restOk({ data: { ...replay, storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }), uploadLimits: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.householdId }) } }, 201); }
       const policy = await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.householdId });
       const operationId = optionalString(body.operationId) ?? args.idempotencyKey ?? (policy.requiresOperationId ? undefined : crypto.randomUUID());
       if (!operationId) return { status: 400, body: { error: { code: "OPERATION_ID_REQUIRED", message: "Send an operationId or idempotency key and reuse it when retrying this upload." } } };
@@ -257,22 +259,22 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
       let media: Awaited<ReturnType<typeof loadDirectImageUploadMedia>>;
       try {
         media = await loadDirectImageUploadMedia(body, policy.maxFileBytes.image, async declared => {
-          const held = await ctx.runMutation(internal.usageLimits.reserveFetch, { householdId: auth.householdId, key: `${moveId}:${auth.createdByUserId}:${operationId}`, bytes: declared ?? 1 });
+          const held = await ctx.runMutation(internal.usageLimits.reserveFetch, { householdId: auth.householdId, key: `${moveId}:${auth.createdByUserId}:${operationId}`, bytes: declared ?? 1, unknownLength: declared === null });
           if (held.refusal) { const error = new Error(held.refusal.message); Object.assign(error, { payload: { error: held.refusal } }); throw error; }
           fetchReservation = held.reservationId;
         });
         if (fetchReservation) {
           const resized = await ctx.runMutation(internal.usageLimits.finishFetch, { householdId: auth.householdId, reservationId: fetchReservation, bytes: media.bytes.byteLength });
-          if (resized.refusal) { await ctx.runMutation(internal.usageLimits.releaseFetch, { id: fetchReservation }); return { status: 413, body: { error: resized.refusal } }; }
+          if (resized.refusal) { await ctx.runMutation(internal.usageLimits.releaseFetch, { id: fetchReservation }); await ctx.runMutation(internal.usageLimits.recordActionRefusal, { householdId: auth.householdId, actorUserId: auth.createdByUserId, code: resized.refusal.code, message: resized.refusal.message }).catch(() => null); return { status: 413, body: { error: resized.refusal } }; }
         }
       } catch (error) {
         if (fetchReservation) await ctx.runMutation(internal.usageLimits.releaseFetch, { id: fetchReservation });
         const refusal = (error as { payload?: { error?: UploadRefusal } }).payload?.error;
-        if (refusal) { await ctx.runMutation(internal.usageLimits.recordActionRefusal, { householdId: auth.householdId, actorUserId: auth.createdByUserId, code: refusal.code, message: refusal.message }); return { status: 413, body: { error: refusal } }; }
+        if (refusal) { await ctx.runMutation(internal.usageLimits.recordActionRefusal, { householdId: auth.householdId, actorUserId: auth.createdByUserId, code: refusal.code, message: refusal.message }).catch(() => null); return { status: 413, body: { error: refusal } }; }
         throw error;
       }
       const sizeRefusal = checkFileSize("image", media.bytes.byteLength, policy.maxFileBytes.image);
-      if (sizeRefusal) { await ctx.runMutation(internal.usageLimits.recordActionRefusal, { householdId: auth.householdId, actorUserId: auth.createdByUserId, code: sizeRefusal.code, message: sizeRefusal.message }); return { status: 413, body: { error: sizeRefusal } }; }
+      if (sizeRefusal) { await ctx.runMutation(internal.usageLimits.recordActionRefusal, { householdId: auth.householdId, actorUserId: auth.createdByUserId, code: sizeRefusal.code, message: sizeRefusal.message }).catch(() => null); return { status: 413, body: { error: sizeRefusal } }; }
       const original = assertOriginalUploadFileShape({
         mimeType: media.mimeType,
         sizeBytes: media.bytes.byteLength,
@@ -328,7 +330,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         }
       );
 
-      if (begun.refusal) return { status: 413, body: { error: begun.refusal } };
+      if (begun.refusal) { if (fetchReservation) await ctx.runMutation(internal.usageLimits.releaseFetch, { id: fetchReservation }); return { status: 413, body: { error: begun.refusal } }; }
       uploadSessionId = begun.uploadSessionId!;
       const persisted = await ctx.runQuery(internal.photos.getUploadSession, { householdId: auth.householdId, moveId, uploadSessionId, apiActor });
       if (persisted.completedPhotoId) return restOk({ data: { photoId: persisted.completedPhotoId, uploadSessionId, storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }) } }, 201);
@@ -1499,8 +1501,10 @@ async function handleUploadBatch(ctx: ActionCtx, args: RestRequestInput): Promis
       let fetchId: Id<"uploadReservations"> | undefined;
       try {
         const itemOperationId = optionalString(metadata.idempotencyKey) ?? `${operationId}:${index}`;
+        const replay = await ctx.runQuery(internal.photos.completedOperation, { householdId: auth.householdId, moveId, actorUserId: auth.createdByUserId, operationId: itemOperationId });
+        if (replay) { results[index] = { index, ok: true, photoId: replay.photoId, result: { data: replay } }; continue; }
         const media = await loadDirectImageUploadMedia(metadata, policy.maxFileBytes.image, async declared => {
-          const held = await ctx.runMutation(internal.usageLimits.reserveFetch, { householdId: auth.householdId, key: `${moveId}:${auth.createdByUserId}:${itemOperationId}`, bytes: declared ?? 1 });
+          const held = await ctx.runMutation(internal.usageLimits.reserveFetch, { householdId: auth.householdId, key: `${moveId}:${auth.createdByUserId}:${itemOperationId}`, bytes: declared ?? 1, unknownLength: declared === null });
           if (held.refusal) throw Object.assign(new Error(held.refusal.message), { payload: { error: held.refusal } });
           fetchId = held.reservationId;
           if (held.created && fetchId) heldByThisCall.push(fetchId);
@@ -1513,11 +1517,12 @@ async function handleUploadBatch(ctx: ActionCtx, args: RestRequestInput): Promis
       } catch (error) {
         if (fetchId && heldByThisCall.includes(fetchId)) await ctx.runMutation(internal.usageLimits.releaseFetch, { id: fetchId });
         const refusal = (error as { payload?: { error?: UploadRefusal } }).payload?.error;
+        if (refusal) await ctx.runMutation(internal.usageLimits.recordActionRefusal, { householdId: auth.householdId, actorUserId: auth.createdByUserId, code: refusal.code, message: refusal.message }).catch(() => null);
         if (refusal?.code === "USAGE_LIMIT_REACHED") {
           let ownHeld = 0;
-          for (const id of heldByThisCall) { const held = await ctx.runQuery(internal.usageLimits.reservationInternal, { id }); if (held?.status === "reserved") ownHeld += held.bytes; }
+          for (const id of heldByThisCall) { const held = await ctx.runQuery(internal.usageLimits.reservationInternal, { id }); if (held?.status === "reserved") ownHeld += refusal.unit === "bytes" ? held.bytes : 1; }
           for (const id of heldByThisCall) await ctx.runMutation(internal.usageLimits.releaseFetch, { id });
-          return { status: 413, body: { error: usageLimitError({ ...refusal, used: Math.max(0, refusal.used - ownHeld), remaining: refusal.remaining + ownHeld, requested: prepared.reduce((sum, p) => sum + p.media.bytes.byteLength, 0) + refusal.requested }), results } };
+          return { status: 413, body: { error: usageLimitError({ ...refusal, used: Math.max(0, refusal.used - ownHeld), remaining: refusal.remaining + ownHeld, requested: (refusal.unit === "bytes" ? prepared.reduce((sum, p) => sum + p.media.bytes.byteLength, 0) : prepared.length) + refusal.requested }), results } };
         }
         results[index] = { index, ok: false, code: refusal?.code, error: refusal?.message ?? (error instanceof Error ? error.message : "Invalid media.") };
       }

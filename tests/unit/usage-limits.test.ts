@@ -108,7 +108,7 @@ it("keeps family storage allowance literals out of site logic", async () => {
     visit(ts.createSourceFile(path, code, ts.ScriptTarget.Latest, true)); return found;
   }
   for (const code of ["const x = 1e9", "const x = 2 ** 30", "const x = 1024 ** 3", "const x = 10 * 1_000 * 1_000 * 1_000", "const x = 1 << 30"]) expect(storageLiteral(code).length, code).toBeGreaterThan(0);
-  for (const path of [...files("convex"), ...files("src"), ...files("mcp-server"), ...files("shared"), ...files("infra")]) {
+  for (const path of [...files("convex"), ...files("src"), ...files("mcp-server"), ...files("shared"), ...files("infra"), ...files("scripts")]) {
     if (path === "convex/lib/usageLimits/core.ts" || path === "shared/usage-limits.mjs" || /\.(test|spec)\./.test(path)) continue;
     expect(storageLiteral(readFileSync(path, "utf8"), path), path).toEqual([]);
   }
@@ -126,4 +126,12 @@ it("ships the cleanup cron as a read-only dry run with no storage delete", () =>
 it("keeps the stdio runtime identical to the synced core", async () => {
   const { execFileSync } = await import("node:child_process");
   expect(() => execFileSync(process.execPath, ["scripts/sync-usage-limits-runtime.mjs", "--check"])).not.toThrow();
+});
+
+it("refusal receipt failures cannot replace the admission result", async () => {
+  const { recordLimitEvent, recordRefusalActivity } = await import("../../convex/usageLimits");
+  const { vi } = await import("vitest"); const insert = vi.fn().mockRejectedValue(new Error("Synthetic receipt failure"));
+  const ctx = { auth: { getUserIdentity: async () => null }, db: { insert } } as never;
+  await expect(recordLimitEvent(ctx, { ownerId: "synthetic", at: 1, mode: "on", source: "begin", limit: "storedBytesPerUser", used: 0, cap: 1, requested: 2, remaining: 1 })).resolves.toBeUndefined();
+  await expect(recordRefusalActivity(ctx, "synthetic" as never, { code: "FILE_TOO_LARGE", message: "Synthetic refusal" })).resolves.toBeUndefined(); expect(insert).toHaveBeenCalledTimes(2);
 });

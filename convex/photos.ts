@@ -1,6 +1,6 @@
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
 import { refusalOf, personRefusal, type UploadRefusal } from "./lib/usageLimits/refusal";
-import { recordRefusalActivity, checkBatchAdmission } from "./usageLimits";
+import { recordLimitEvent, recordRefusalActivity, checkBatchAdmission } from "./usageLimits";
 import { checkFileSize, effectiveFileCap, type LimitSettings } from "./lib/usageLimits/core";
 import { siteDefaults } from "./lib/mediaStorage";
 function fileSizeFailure(kind: string, bytes: number, site: LimitSettings | null, override: LimitSettings | null) { return checkFileSize(kind, bytes, effectiveFileCap(kind, siteDefaults, site, override)); }
@@ -1566,6 +1566,10 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
         return previous._id;
       }
       await restoreUploadReservation(ctx, previous, args.expiresAt);
+      if (previous.usageReservationId && (await ctx.db.get(previous.usageReservationId))?.status === "reserved") {
+        await ctx.db.patch(previous.usageReservationId, { expiresAt: args.expiresAt });
+        await ctx.scheduler.runAt(args.expiresAt, internal.usageLimits.expireReservations, {});
+      }
       // Reuse the existing hold, keys and declared size. Late PUTs cannot create
       // a second untracked original. Cleanup never deletes live session objects.
       await ctx.scheduler.runAt(args.expiresAt + defaultPhotoUploadCleanupGraceMs, internal.storageDeletion.runSessionDeletion, { sessionId: previous._id });
@@ -1611,6 +1615,13 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
   }
 export const sessionValidator = v.object(createSessionArgs);
 export const createUploadSession = aiMutation({ args: createSessionArgs, handler: createSession });
+
+export const completedOperation = internalQuery({ args: { householdId: v.id("households"), moveId: v.id("moves"), actorUserId: v.id("users"), operationId: v.string() }, handler: async (ctx, args) => {
+  const key = `${args.moveId}:${args.actorUserId}:${args.operationId}`;
+  const session = await ctx.db.query("photoUploadSessions").withIndex("by_household_operation", q => q.eq("householdId", args.householdId).eq("operationId", key)).unique();
+  const photo = session?.completedPhotoId ? await ctx.db.get(session.completedPhotoId) : null;
+  return photo ? { photoId: photo._id, uploadSessionId: session!._id, derivativeStatus: photo.derivativeStatus, derivativeError: photo.derivativeError } : null;
+} });
 
 export const getUploadSession = internalQuery({
   args: {
@@ -1932,7 +1943,7 @@ async function completeSession(ctx: MutationCtx, args: Infer<typeof completeVali
   }
 export const completeValidator = v.object(completeSessionArgs);
 export const completeUploadSession = aiMutation({ args: completeSessionArgs, handler: completeSession });
-export const tryCompleteUploadSession = aiMutation({ args: completeSessionArgs, handler: async (ctx, args) => { try { return { photoId: await completeSession(ctx, args) }; } catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; await recordRefusalActivity(ctx, args.householdId, refusal, args.apiActor); const session = await ctx.db.get(args.uploadSessionId); if (session && !session.completedPhotoId) { await closeUploadReservation(ctx, session); await ctx.db.patch(session._id, { status: "failed", failureCode: refusal.code, failureReason: refusal.message, updatedAt: Date.now() }); await ctx.scheduler.runAt(Math.max(Date.now(), session.expiresAt + defaultPhotoUploadCleanupGraceMs), internal.storageDeletion.runSessionDeletion, { sessionId: session._id }); } if (refusal.code === "USAGE_LIMIT_REACHED") { const info = await limitsFor(ctx, args.householdId); await ctx.db.insert("usageLimitEvents", { ownerId: info.ownerId, at: Date.now(), mode: "on", source: "finish", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining }); } return { refusal }; } } });
+export const tryCompleteUploadSession = aiMutation({ args: completeSessionArgs, handler: async (ctx, args) => { try { return { photoId: await completeSession(ctx, args) }; } catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; await recordRefusalActivity(ctx, args.householdId, refusal, args.apiActor); const session = await ctx.db.get(args.uploadSessionId); if (session && !session.completedPhotoId) { await closeUploadReservation(ctx, session); await ctx.db.patch(session._id, { status: "failed", failureCode: refusal.code, failureReason: refusal.message, updatedAt: Date.now() }); await ctx.scheduler.runAt(Math.max(Date.now(), session.expiresAt + defaultPhotoUploadCleanupGraceMs), internal.storageDeletion.runSessionDeletion, { sessionId: session._id }); } if (refusal.code === "USAGE_LIMIT_REACHED") { const info = await limitsFor(ctx, args.householdId); await recordLimitEvent(ctx, { ownerId: info.ownerId, at: Date.now(), mode: "on", source: "finish", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining }); } return { refusal }; } } });
 
 export const markGeneratedDerivativesReady = aiMutation({
   args: {
@@ -2224,9 +2235,10 @@ export const recordStoredDerivative = internalMutation({
 
 /** Read-only preflight. The scheduled sweep never deletes storage objects. */
 export const claimExpiredCleanup = internalQuery({
-  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  args: { cursor: v.optional(v.union(v.string(), v.null())), before: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const page = await ctx.db.query("photoUploadSessions").withIndex("by_expires", q => q.lt("expiresAt", Date.now() - defaultPhotoUploadCleanupGraceMs)).paginate({ cursor: args.cursor ?? null, numItems: 30 });
+    const before = args.before ?? Date.now() - defaultPhotoUploadCleanupGraceMs;
+    const page = await ctx.db.query("photoUploadSessions").withIndex("by_expires", q => q.lt("expiresAt", before)).paginate({ cursor: args.cursor ?? null, numItems: 30 });
     const candidates = [];
     for (const session of page.page) {
       if (session.completedPhotoId || session.status === "completed" || session.cleanupCompletedAt) continue;
@@ -2234,11 +2246,11 @@ export const claimExpiredCleanup = internalQuery({
       for (const ref of uploadSessionStorageRefs(session)) if (!await referencedObject(ctx, ref.storageKey, undefined, session._id)) refs.push(ref);
       candidates.push({ id: session._id, refs });
     }
-    return { candidates, cursor: page.continueCursor, isDone: page.isDone, dryRun: true as const };
+    return { before, candidates, cursor: page.continueCursor, isDone: page.isDone, dryRun: true as const };
   },
 });
 export const cleanupExpiredInternal = internalAction({
-  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  args: { cursor: v.optional(v.union(v.string(), v.null())), before: v.optional(v.number()) },
   handler: async (ctx, args): Promise<unknown> => ctx.runQuery(internal.photos.claimExpiredCleanup, args),
 });
 
@@ -2289,14 +2301,14 @@ async function createBatch(ctx: MutationCtx, args: Infer<typeof batchValidator>)
   }
 export const batchValidator = v.object(batchSessionArgs);
 export const createUploadBatch = aiMutation({ args: batchSessionArgs, handler: createBatch });
-export const tryCreateUploadBatch = aiMutation({ args: batchSessionArgs, handler: async (ctx, args) => { try { return { results: await createBatch(ctx, args) }; } catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; if (args.files[0]) await recordRefusalActivity(ctx, args.files[0].householdId, refusal, args.files[0].apiActor); if (refusal.code === "USAGE_LIMIT_REACHED" && args.files[0]) { const info = await limitsFor(ctx, args.files[0].householdId); await ctx.db.insert("usageLimitEvents", { ownerId: info.ownerId, at: Date.now(), mode: "on", source: "batch", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining }); } return { refusal }; } } });
+export const tryCreateUploadBatch = aiMutation({ args: batchSessionArgs, handler: async (ctx, args) => { try { return { results: await createBatch(ctx, args) }; } catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; if (args.files[0]) await recordRefusalActivity(ctx, args.files[0].householdId, refusal, args.files[0].apiActor); if (refusal.code === "USAGE_LIMIT_REACHED" && args.files[0]) { const info = await limitsFor(ctx, args.files[0].householdId); await recordLimitEvent(ctx, { ownerId: info.ownerId, at: Date.now(), mode: "on", source: "batch", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining }); } return { refusal }; } } });
 
 export const tryCreateUploadSession = aiMutation({ args: createSessionArgs, handler: async (ctx, args) => {
   try { return { uploadSessionId: await createSession(ctx, args) }; }
   catch (error) { const refusal = refusalOf(error); if (!refusal) throw error;
     const info = await limitsFor(ctx, args.householdId);
     await recordRefusalActivity(ctx, args.householdId, refusal, args.apiActor);
-    if (refusal.code === "USAGE_LIMIT_REACHED") await ctx.db.insert("usageLimitEvents", { ownerId: info.ownerId, at: Date.now(), mode: "on", source: "begin", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining });
+    if (refusal.code === "USAGE_LIMIT_REACHED") await recordLimitEvent(ctx, { ownerId: info.ownerId, at: Date.now(), mode: "on", source: "begin", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining });
     return { refusal };
   }
 } });

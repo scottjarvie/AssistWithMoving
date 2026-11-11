@@ -59,7 +59,7 @@ export const sessionSource = internalQuery({ args: { cursor: v.union(v.string(),
   for (const session of page.page) {
     if (session.usageReservationId || session.completedPhotoId || session.status === "completed" || session.cleanupCompletedAt || (session.status === "authorized" && session.expiresAt > Date.now())) continue;
     const refs = [];
-    for (const ref of uploadSessionStorageRefs(session)) if (!await referencedObject(ctx, ref.storageKey)) refs.push(ref);
+    for (const ref of uploadSessionStorageRefs(session)) if (!await referencedObject(ctx, ref.storageKey, undefined, session._id)) refs.push(ref);
     rows.push({ session, refs });
   }
   return { ...page, rows };

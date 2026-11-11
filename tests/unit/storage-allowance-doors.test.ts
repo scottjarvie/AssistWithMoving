@@ -26,6 +26,10 @@ vi.mock("@aws-sdk/client-s3", async importOriginal => {
   } };
 });
 vi.mock("@aws-sdk/s3-request-presigner", () => ({ getSignedUrl: async (_client: unknown, command: { input: { Key: string } }) => `https://synthetic-put.invalid/${encodeURIComponent(command.input.Key)}` }));
+vi.mock("../../mcp-server/media-ingress.mjs", async importOriginal => {
+  const actual = await importOriginal<typeof import("../../mcp-server/media-ingress.mjs")>();
+  return { ...actual, downloadPublicHttpsMedia: (url: string, options: Parameters<typeof actual.downloadPublicHttpsMedia>[1]) => actual.downloadPublicHttpsMedia(url, { ...options, lookupFn: async () => [{ address: "93.184.216.34", family: 4 }], requestFn: async () => ({ status: 200, headers: new Headers({ "content-length": String(png.byteLength), "content-type": "image/png" }), body: [Buffer.from(png)], destroy: () => {} }) }) };
+});
 const modules = import.meta.glob("../../convex/**/*.ts");
 let png: Uint8Array;
 beforeEach(async () => {
@@ -64,6 +68,9 @@ async function fixture({ cap = 10000, backfilled = true, mode = "on" as "on" | "
     const key = decodeURIComponent(new URL(begin.uploadUrl).pathname.slice(1));
     storage.objects.set(key, { bytes: png, mime: "image/png", version: "original-version" });
     const done = await person.action(api.photos.finalizeUpload, { householdId: ids.householdId, moveId: ids.moveId, uploadSessionId: begin.uploadSessionId as typeof ids.moveId extends never ? never : import("../../convex/_generated/dataModel").Id<"photoUploadSessions">, width: 2, height: 2 });
+    // Completed fixture uploads have no remaining PUT lease; live leases have
+    // their own explicit survival test below.
+    await t.run(ctx => ctx.db.patch(begin.uploadSessionId as import("../../convex/_generated/dataModel").Id<"photoUploadSessions">, { expiresAt: 0 }));
     return { begin, done, key };
   }
   async function key() {
@@ -554,6 +561,7 @@ it.each(["audio/mpeg", "video/mp4"])("%s uses the same charged deletion ledger a
   const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">;
   expect((await f.summary()).usedBytes).toBe(20);
   await f.t.run(ctx => ctx.db.patch(photoId, { pendingStorageDeletion: true, archivedAt: Date.now() }));
+  vi.setSystemTime(begin.expiresAt + 1);
   expect(await f.t.action(internal.storageDeletion.deletePhoto, { photoId, dryRun: false })).toMatchObject({ deleted: true });
   expect((await f.summary()).usedBytes).toBe(0);
   await f.person.action(api.photos.initUpload, { ...f.beginArgs(`next-${mimeType}`, 20), mimeType });
@@ -879,4 +887,92 @@ it("AI file-cap transport text retains exact counts even when decimal formatting
   const refusal = checkFileSize("image", 104857601, 104857600)!;
   const result = toolErrorResult({ payload: { error: refusal } });
   expect(result.structuredContent).toEqual(refusal); expect(result.content[0].text).toContain("104857601 bytes"); expect(result.content[0].text).toContain("104857600 bytes");
+});
+
+it("reservation expiry preserves its first timestamp beyond one page", async () => {
+  const f = await fixture(), at = Date.now();
+  const future = await f.t.run(async ctx => { for (let n = 0; n < 205; n++) await ctx.db.insert("uploadReservations", { ownerId: f.owner, key: `past-${n}`, bytes: 1, day: "synthetic", status: "reserved", expiresAt: at - 1 }); return ctx.db.insert("uploadReservations", { ownerId: f.owner, key: "future", bytes: 1, day: "synthetic", status: "reserved", expiresAt: at + 1000 }); });
+  let page = await f.t.mutation(internal.usageLimits.expireReservations, {}), closed = page.closed;
+  expect(page.isDone).toBe(false); vi.setSystemTime(at + 60000);
+  while (!page.isDone) { page = await f.t.mutation(internal.usageLimits.expireReservations, { cursor: page.cursor, at: page.at }); closed += page.closed; }
+  expect(closed).toBe(205); expect((await f.t.run(ctx => ctx.db.get(future)))?.status).toBe("reserved");
+});
+
+it("generated-intent recovery keeps the original cutoff on scheduled pages", async () => {
+  const f = await fixture(); const { done } = await f.upload(); const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">, before = Date.now() - 15 * 60 * 1000;
+  const late = await f.t.run(async ctx => { for (let n = 0; n < 61; n++) await ctx.db.insert("generatedObjects", { ownerId: f.owner, photoId, bucket: "synthetic", storageKey: `old-intent-${n}`, bytes: 1, state: "pending", createdAt: before - 1 }); return ctx.db.insert("generatedObjects", { ownerId: f.owner, photoId, bucket: "synthetic", storageKey: "newer-intent", bytes: 1, state: "pending", createdAt: before + 1000 }); });
+  await f.t.action(internal.storageDeletion.recoverGenerated, {}); vi.setSystemTime(Date.now() + 60000); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  const intents = await f.t.run(ctx => ctx.db.query("generatedObjects").collect()); expect(intents.filter(row => row.state === "failed")).toHaveLength(61); expect((await f.t.run(ctx => ctx.db.get(late)))?.state).toBe("pending");
+});
+
+it("photo/session cleanup pagination preserves the original cutoff", async () => {
+  const f = await fixture({ mode: "off" }); const before = Date.now() - 24 * 60 * 60 * 1000;
+  const ids = [];
+  for (let n = 0; n < 35; n++) { const id = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs(`cutoff-${n}`, 1)); ids.push(id); await f.t.run(ctx => ctx.db.patch(id, { expiresAt: before - 1 })); }
+  const future = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("cutoff-future", 1)); await f.t.run(ctx => ctx.db.patch(future, { expiresAt: before + 1000 }));
+  const first = await f.t.query(internal.photos.claimExpiredCleanup, {}); expect(first.isDone).toBe(false); vi.setSystemTime(Date.now() + 60000);
+  const next = await f.t.query(internal.photos.claimExpiredCleanup, { cursor: first.cursor, before: first.before });
+  expect([...first.candidates, ...next.candidates].map(row => row.id)).toHaveLength(ids.length); expect(next.candidates.some(row => row.id === future)).toBe(false);
+});
+
+it("repeat attachment of the same stored photo changes no bytes", async () => {
+  const f = await fixture(); const { done } = await f.upload(); const itemId = await f.person.mutation(api.items.create, { householdId: f.householdId, moveId: f.moveId, name: "Synthetic replay target" });
+  await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: "synthetic-owner", clientId: "synthetic-ai" }); while (!(await f.t.run(ctx => ctx.db.query("aiAccessOwners").withIndex("by_owner", q => q.eq("ownerUserId", f.owner)).unique()))?.bootstrapped) await f.t.mutation(internal.aiGrants.continueBootstrap, { ownerUserId: f.owner });
+  const args = { householdId: f.householdId, moveId: f.moveId, caller: { subject: "synthetic-owner", claims: { client_id: "synthetic-ai" } }, photoIds: [done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">], attachTo: { itemId } };
+  const before = (await f.summary()).usedBytes; await f.t.mutation(internal.mcpToolsImages.attachPhotos, args); await f.t.mutation(internal.mcpToolsImages.attachPhotos, args); expect((await f.summary()).usedBytes).toBe(before);
+});
+
+it("hard deletion waits for a completed photo's remaining PUT lease so a late PUT cannot recreate uncounted bytes", async () => {
+  const f = await fixture(); const begin = await f.person.action(api.photos.initUpload, f.beginArgs("live-put-lease"));
+  const key = decodeURIComponent(new URL(begin.uploadUrl).pathname.slice(1)); storage.objects.set(key, { bytes: png, mime: "image/png", version: "live-lease-version" });
+  const done = await f.person.action(api.photos.finalizeUpload, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: begin.uploadSessionId as import("../../convex/_generated/dataModel").Id<"photoUploadSessions">, width: 2, height: 2 });
+  const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">; await f.t.run(ctx => ctx.db.patch(photoId, { pendingStorageDeletion: true, archivedAt: Date.now() }));
+  const before = (await f.summary()).usedBytes;
+  expect((await f.t.action(internal.storageDeletion.deletePhoto, { photoId })).objects?.every(ref => ref.referenced)).toBe(true);
+  expect(await f.t.action(internal.storageDeletion.deletePhoto, { photoId, dryRun: false })).toMatchObject({ deleted: false }); expect(storage.objects.has(key)).toBe(true); expect((await f.summary()).usedBytes).toBe(before);
+  vi.setSystemTime(begin.expiresAt + 1); expect(await f.t.action(internal.storageDeletion.deletePhoto, { photoId, dryRun: false })).toMatchObject({ deleted: true }); expect((await f.summary()).usedBytes).toBe(0);
+});
+
+it("an unknown-length URL retry restores its existing declared hold without reserving again", async () => {
+  const f = await fixture({ cap: 20 }); const sessionId = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("unknown-retry", 20));
+  await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: sessionId });
+  await f.t.run(ctx => ctx.db.patch(f.settings, { maxFileBytes: { image: 10 } }));
+  expect(await f.t.mutation(internal.usageLimits.reserveFetch, { householdId: f.householdId, key: `${f.moveId}:${f.owner}:unknown-retry`, bytes: 1, unknownLength: true })).toMatchObject({ refusal: { code: "FILE_TOO_LARGE" } });
+  expect((await f.t.run(ctx => ctx.db.get(sessionId)))?.quarantinedBytes).toBe(20);
+  await f.t.run(ctx => ctx.db.patch(f.settings, { maxFileBytes: { image: 1000000 } }));
+  const restored = await f.t.mutation(internal.usageLimits.reserveFetch, { householdId: f.householdId, key: `${f.moveId}:${f.owner}:unknown-retry`, bytes: 1, unknownLength: true });
+  expect(restored.refusal).toBeUndefined(); expect(restored.reservationId).toBe((await f.t.run(ctx => ctx.db.get(sessionId)))?.usageReservationId); expect((await f.summary()).usedBytes).toBe(20);
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ storedBytes: 0, reservedBytes: 20, dayUploads: 1 });
+});
+
+it("a completed operation replays through REST before changed file caps or a remote fetch", async () => {
+  const f = await fixture(); const key = await f.key(); const args = { method: "POST" as const, path: "photos/upload", authorization: `Bearer ${key.raw}`, query: {}, body: { moveId: f.moveId, operationId: "operation-only", fileBase64: Buffer.from(png).toString("base64"), mimeType: "image/png" } };
+  const first = await f.t.action(internal.restApiActions.handle, args); expect(first.status).toBe(201); const count = storage.puts.length;
+  await f.t.run(ctx => ctx.db.patch(f.settings, { maxFileBytes: { image: 1 }, planStoredBytes: { free: 0, pro: 0 } }));
+  const replay = await f.t.action(internal.restApiActions.handle, { ...args, body: { moveId: f.moveId, operationId: "operation-only", sourceUrl: "https://synthetic.invalid/must-not-fetch" } });
+  expect(replay).toMatchObject({ status: 201, body: { data: { photoId: (first.body as { data: { photoId: string } }).data.photoId } } }); expect(storage.puts).toHaveLength(count);
+});
+
+it("reopening a closed upload also respects the in-flight slot budget without changing its retained bytes", async () => {
+  const f = await fixture(); const first = await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("first-slot", 20));
+  await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: first });
+  await f.person.mutation(internal.photos.createUploadSession, f.sessionArgs("other-slot", 20));
+  await f.t.run(ctx => ctx.db.patch(f.settings, { maxUploadsInFlight: 1 }));
+  const result = await f.person.mutation(internal.photos.tryCreateUploadSession, f.sessionArgs("first-slot", 20));
+  expect(result.refusal).toMatchObject({ code: "USAGE_LIMIT_REACHED", limit: "maxUploadsInFlight", requested: 1 });
+  expect((await f.t.run(ctx => ctx.db.get(first)))?.quarantinedBytes).toBe(20); expect((await f.summary()).usedBytes).toBe(40);
+});
+
+it("a source-URL refusal survives the real REST mapper and records one activity receipt", async () => {
+  const f = await fixture({ cap: 1 }); const key = await f.key();
+  const result = await f.t.action(internal.restApiActions.handle, { method: "POST", path: "photos/upload", authorization: `Bearer ${key.raw}`, idempotencyKey: "source-refused", query: {}, body: { moveId: f.moveId, sourceUrl: "https://synthetic.invalid/source.png" } });
+  expect(result).toMatchObject({ status: 413, body: { error: { code: "USAGE_LIMIT_REACHED", requested: png.byteLength, remaining: 1 } } }); expect(storage.puts).toEqual([]);
+  const activity = await f.person.query(api.audit.listForHousehold, { householdId: f.householdId }); expect(activity.filter(row => row.action === "upload.refused")).toHaveLength(1);
+  expect((await f.admin.query(api.usageLimits.adminOverview, {})).events.filter(row => row.source === "fetch")).toHaveLength(1);
+});
+
+it("an early URL batch count refusal reports uploads rather than byte counts", async () => {
+  const f = await fixture(); const key = await f.key(); await f.t.run(ctx => ctx.db.patch(f.settings, { uploadsPerHour: 1 }));
+  const result = await f.t.action(internal.restApiActions.handle, { method: "POST", path: "uploads/batch", authorization: `Bearer ${key.raw}`, idempotencyKey: "url-count", query: {}, body: { moveId: f.moveId, images: [{ sourceUrl: "https://synthetic.invalid/a.png" }, { sourceUrl: "https://synthetic.invalid/b.png" }] } });
+  expect(result).toMatchObject({ status: 413, body: { error: { code: "USAGE_LIMIT_REACHED", limit: "uploadsPerHour", unit: "uploads", used: 0, requested: 2, cap: 1, remaining: 1 } } }); expect(storage.puts).toEqual([]);
 });
