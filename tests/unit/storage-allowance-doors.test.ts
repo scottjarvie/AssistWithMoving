@@ -1109,3 +1109,13 @@ it("R3 application failure stops later writes and releases unused batch slots", 
   expect(response).toMatchObject({ status: 400, body: { partialResults: [{ index: 0, ok: false }] } });
   expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ inFlight: 0, reservedBytes: 0 }); expect(storage.puts).toEqual([]);
 });
+
+it("R3 the REST batch door exposes a cleaned target conflict per item and keeps only receipted reservations", async () => {
+  const f = await fixture(); const key = await f.key();
+  const id = await f.t.mutation(internal.photos.createUploadSession, { ...f.sessionArgs("rest-cleaned"), room: "A", apiActor: { apiKeyId: String(key.id), createdByUserId: f.owner } });
+  await f.t.mutation(internal.photos.markUploadSessionFailed, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id, apiActor: { apiKeyId: String(key.id), createdByUserId: f.owner } });
+  vi.setSystemTime(Date.now() + 25 * 3600000); await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false });
+  const response = await f.t.action(internal.restApiActions.handle, { method: "POST", path: "uploads/batch", authorization: `Bearer ${key.raw}`, idempotencyKey: "mixed-cleaned-rest", query: {}, body: { moveId: f.moveId, continueOnError: true, images: [{ fileBase64: Buffer.from(png).toString("base64"), mimeType: "image/png", room: "A", idempotencyKey: "rest-fresh" }, { fileBase64: Buffer.from(png).toString("base64"), mimeType: "image/png", room: "B", idempotencyKey: "rest-cleaned" }] } });
+  expect(response).toMatchObject({ status: 200, body: { data: { uploadedCount: 1, failedCount: 1, results: [{ index: 0, ok: true }, { index: 1, ok: false, code: "OPERATION_CONFLICT" }] } } });
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ inFlight: 0, reservedBytes: 0 });
+});

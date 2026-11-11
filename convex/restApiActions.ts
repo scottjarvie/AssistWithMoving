@@ -1535,7 +1535,7 @@ async function handleUploadBatch(ctx: ActionCtx, args: RestRequestInput): Promis
     const bucket = requireB2Config().bucketName;
     const admission = await ctx.runMutation(internal.photos.tryCreateUploadBatch, {
       requestBytes: new TextEncoder().encode(JSON.stringify(images)).length,
-      files: prepared.map(p => ({ householdId: auth.householdId, moveId, operationId: p.operationId, itemId: optionalId<"items">(p.metadata.itemId), boxId: optionalId<"boxes">(p.metadata.boxId), spaceId: optionalId<"moveSpaces">(p.metadata.spaceId), originalStorageKey: uploadObjectKey({ moveId, mimeType: p.media.mimeType }), originalBucket: bucket, expectedMimeType: p.media.mimeType, expectedSizeBytes: p.media.bytes.byteLength, derivativeUploads: [], expiresAt: Date.now() + uploadSessionTtlMs, apiActor })),
+      files: prepared.map(p => ({ householdId: auth.householdId, moveId, operationId: p.operationId, itemId: optionalId<"items">(p.metadata.itemId), boxId: optionalId<"boxes">(p.metadata.boxId), spaceId: optionalId<"moveSpaces">(p.metadata.spaceId), room: optionalString(p.metadata.room), transportResourceId: optionalId<"transportResources">(p.metadata.transportResourceId), transportZoneId: optionalId<"transportZones">(p.metadata.transportZoneId), originalStorageKey: uploadObjectKey({ moveId, mimeType: p.media.mimeType }), originalBucket: bucket, expectedMimeType: p.media.mimeType, expectedSizeBytes: p.media.bytes.byteLength, derivativeUploads: [], expiresAt: Date.now() + uploadSessionTtlMs, apiActor })),
     });
     if (admission.refusal) { for (const id of heldByThisCall) await ctx.runMutation(internal.usageLimits.releaseFetch, { id }); return { status: 413, body: { error: admission.refusal, results } }; }
     let stopped = false;
