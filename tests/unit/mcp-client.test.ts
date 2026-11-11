@@ -3198,3 +3198,17 @@ describe("Assist With Moving MCP API client", () => {
     expect(result.images[0].base64).toBeUndefined();
   });
 });
+
+it.each([false, true])("R3 single-image client preserves stop-on-error=%s", async continueOnError => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: "photo_upload_failed", message: "Synthetic transfer failed" } }), { status: 400, headers: { "content-type": "application/json" } })));
+  const call = uploadEvidenceImages({ baseUrl: "https://synthetic.invalid/api/v1", apiKey: "synthetic-test-only" }, { moveId: "synthetic-move", continueOnError, images: [{ fileBase64: "YmFk", mimeType: "image/png" }] });
+  if (continueOnError) expect(await call).toMatchObject({ uploadedCount: 0, failedCount: 1 });
+  else await expect(call).rejects.toMatchObject({ partialResults: [{ index: 0, ok: false }] });
+});
+
+it("R3 batch client forwards stop-on-error and preserves server partial results", async () => {
+  const partialResults = [{ index: 0, ok: false, error: "Synthetic failure" }];
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: "batch_upload_failed", message: "Synthetic failure" }, partialResults }), { status: 400, headers: { "content-type": "application/json" } })); vi.stubGlobal("fetch", fetch);
+  await expect(uploadEvidenceImages({ baseUrl: "https://synthetic.invalid/api/v1", apiKey: "synthetic-test-only" }, { moveId: "synthetic-move", continueOnError: false, images: [{ fileBase64: "YmFk" }, { fileBase64: "YmFk" }] })).rejects.toMatchObject({ partialResults });
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ continueOnError: false });
+});

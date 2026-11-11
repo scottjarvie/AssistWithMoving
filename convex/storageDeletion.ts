@@ -53,7 +53,7 @@ export const prepare = internalMutation({
   handler: async (ctx, args) => {
     const photo = await ctx.db.get(args.photoId);
     if (!photo?.pendingStorageDeletion) return null;
-    const writeLease = await photoWriteLeaseEnd(ctx, photo._id, photo.originalStorageKey);
+    const writeLease = Math.max(photo.storageWriteUntil ?? 0, await photoWriteLeaseEnd(ctx, photo._id, photo.originalStorageKey));
     if (writeLease > Date.now()) { await ctx.scheduler.runAt(writeLease, internal.storageDeletion.runPhotoDeletion, { photoId: photo._id }); return null; }
     const previous = await ctx.db.query("storageDeletionJobs").withIndex("by_photo", q => q.eq("photoId", photo._id)).unique();
     if (previous) return previous;
@@ -88,7 +88,8 @@ export const finish = internalMutation({
     await removeStoredBytes(ctx, job.ownerId, job.refs.reduce((sum, ref) => sum + (ref.bytes ?? 0), 0));
     for (const generated of await ctx.db.query("generatedObjects").withIndex("by_photo", q => q.eq("photoId", photo._id)).collect()) await ctx.db.delete(generated._id);
     await ctx.db.delete(photo._id);
-    await ctx.db.patch(job._id, { status: "done", updatedAt: Date.now() });
+    if (photo.erasurePending) await ctx.db.delete(job._id);
+    else await ctx.db.patch(job._id, { status: "done", updatedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.usageLimitsStorage.recomputeStep, { ownerId: job.ownerId });
     return true;
   },
@@ -224,7 +225,10 @@ export const finishSession = internalMutation({ args: { jobId: v.id("sessionDele
   else await removeStoredBytes(ctx, job.ownerId, job.refs.reduce((sum, ref) => sum + (ref.bytes ?? 0), 0));
   await ctx.db.patch(session._id, { cleanupCompletedAt: Date.now(), quarantinedBytes: undefined, status: "failed" });
   for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_session", q => q.eq("sessionId", session._id)).collect()) await ctx.db.delete(claim._id);
-  await ctx.db.patch(job._id, { status: "done", updatedAt: Date.now() });
+  if (session.erasurePending) {
+    if (session.usageReservationId) await ctx.db.delete(session.usageReservationId);
+    await ctx.db.delete(session._id); await ctx.db.delete(job._id);
+  } else await ctx.db.patch(job._id, { status: "done", updatedAt: Date.now() });
   return true;
 } });
 export const deleteSession = internalAction({ args: { sessionId: v.id("photoUploadSessions"), dryRun: v.optional(v.boolean()) }, handler: async (ctx, args): Promise<{ deleted: boolean; dryRun: boolean; objects?: Array<{ bucket: string; storageKey: string; referenced: boolean }> }> => {

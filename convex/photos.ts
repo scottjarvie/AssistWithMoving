@@ -5,7 +5,7 @@ import { checkFileSize, effectiveFileCap, type LimitSettings } from "./lib/usage
 import { siteDefaults } from "./lib/mediaStorage";
 function fileSizeFailure(kind: string, bytes: number, site: LimitSettings | null, override: LimitSettings | null) { return checkFileSize(kind, bytes, effectiveFileCap(kind, siteDefaults, site, override)); }
 import { referencedObject, claimedUploadObject } from "./storageDeletion";
-import { reserveUpload, commitUpload, closeUploadReservation, restoreUploadReservation, addStoredCopy, ownerFor, limitsFor } from "./usageLimits";
+import { releaseUpload, reserveUpload, commitUpload, closeUploadReservation, restoreUploadReservation, addStoredCopy, ownerFor, limitsFor } from "./usageLimits";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 import { ConvexError, v, type Infer } from "convex/values";
@@ -1551,7 +1551,7 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
     const operationId = args.operationId ? `${args.moveId}:${userId}:${args.operationId}` : args.originalStorageKey;
     const previous = await ctx.db.query("photoUploadSessions").withIndex("by_household_operation", q => q.eq("householdId", args.householdId).eq("operationId", operationId)).unique();
     if (previous) {
-      if (["itemId", "boxId", "spaceId", "transportResourceId", "transportZoneId", "room"].some(field => (previous[field as keyof typeof previous] ?? null) !== (args[field as keyof typeof args] ?? null)) || previous.expectedSizeBytes !== original.sizeBytes || previous.expectedMimeType !== original.mimeType || JSON.stringify((previous.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes])) !== JSON.stringify(derivativeUploads.map(d => [d.variant, d.expectedSizeBytes]))) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId already names different media." });
+      if (sessionOperationConflict(previous, { ...args, expectedSizeBytes: original.sizeBytes, expectedMimeType: original.mimeType })) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId already names different media." });
       if (previous.status === "completed" || previous.completedPhotoId) return previous._id;
       const cleanup = await ctx.db.query("sessionDeletionJobs").withIndex("by_session", q => q.eq("sessionId", previous._id)).order("desc").first();
       if (cleanup?.status === "pending") throw new ConvexError("This upload is being cleaned up. Retry with a new operationId after cleanup completes.");
@@ -2255,11 +2255,17 @@ export const cleanupExpiredInternal = internalAction({
   handler: async (ctx, args): Promise<unknown> => ctx.runQuery(internal.photos.claimExpiredCleanup, args),
 });
 
+function sessionOperationConflict(previous: Doc<"photoUploadSessions">, file: Infer<typeof sessionValidator>) {
+  return ["itemId", "boxId", "spaceId", "transportResourceId", "transportZoneId", "room"].some(field => (previous[field as keyof typeof previous] ?? null) !== (file[field as keyof typeof file] ?? null))
+    || previous.expectedSizeBytes !== file.expectedSizeBytes || previous.expectedMimeType !== file.expectedMimeType
+    || JSON.stringify((previous.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes])) !== JSON.stringify((file.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes]));
+}
+
 const batchSessionArgs = { files: v.array(v.object(createSessionArgs)), requestBytes: v.number() };
 async function createBatch(ctx: MutationCtx, args: Infer<typeof batchValidator>) {
     if (!args.files.length) return [];
-    const valid: Array<{ index: number; file: Infer<typeof sessionValidator> }> = [];
-    const results: Array<{ uploadSessionId?: Doc<"photoUploadSessions">["_id"]; error?: string; code?: string; created?: boolean }> = args.files.map(() => ({}));
+    const valid: Array<{ index: number; file: Infer<typeof sessionValidator>; fresh: boolean }> = [];
+    const results: Array<{ uploadSessionId?: Doc<"photoUploadSessions">["_id"]; error?: string; code?: string; created?: boolean; fresh?: boolean }> = args.files.map(() => ({}));
     let bytes = 0, heldBytes = 0;
     const pendingKeys = new Set<string>();
     const pendingOperations = new Set<string>();
@@ -2280,14 +2286,16 @@ async function createBatch(ctx: MutationCtx, args: Infer<typeof batchValidator>)
         if (pendingOperations.has(operationId)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "An operationId can occur only once in a batch." });
         const prior = await ctx.db.query("photoUploadSessions").withIndex("by_household_operation", q => q.eq("householdId", file.householdId).eq("operationId", operationId)).unique();
         if (prior && (prior.expectedSizeBytes !== file.expectedSizeBytes || prior.expectedMimeType !== file.expectedMimeType)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId names different media." });
+        if (prior) {
+          if (sessionOperationConflict(prior, file)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId already names different media." });
+        }
         if (prior && !prior.cleanupCompletedAt) {
-          if (["itemId", "boxId", "spaceId", "transportResourceId", "transportZoneId", "room"].some(field => (prior[field as keyof typeof prior] ?? null) !== (file[field as keyof typeof file] ?? null)) || JSON.stringify((prior.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes])) !== JSON.stringify((file.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes]))) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId already names different media." });
           const held = prior.usageReservationId ? await ctx.db.get(prior.usageReservationId) : null;
           if (prior.completedPhotoId || prior.status === "completed" || held?.status === "reserved" || !held) { pendingOperations.add(operationId); results[index] = { uploadSessionId: prior._id, created: false }; continue; }
           const deletion = await ctx.db.query("sessionDeletionJobs").withIndex("by_session", q => q.eq("sessionId", prior._id)).order("desc").first();
           if (deletion?.status === "pending") throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This upload is being cleaned up. Use a new operationId." });
           const missing = Math.max(0, held.bytes - (prior.quarantinedBytes ?? 0));
-          bytes += missing; newSizes.push({ bytes: missing, countUpload: false }); pendingOperations.add(operationId); valid.push({ index, file }); continue;
+          bytes += missing; newSizes.push({ bytes: missing, countUpload: false }); pendingOperations.add(operationId); valid.push({ index, file, fresh: false }); continue;
         }
         const sizeFailure = fileSizeFailure(original.mediaKind, original.sizeBytes, info.site, info.override);
         if (sizeFailure) throw new ConvexError(sizeFailure);
@@ -2300,11 +2308,11 @@ async function createBatch(ctx: MutationCtx, args: Infer<typeof batchValidator>)
         if (held?.status === "reserved") heldBytes += held.bytes;
         else newSizes.push({ bytes: file.expectedSizeBytes + (file.derivativeUploads ?? []).reduce((sum, d) => sum + d.expectedSizeBytes, 0), countUpload: !held });
         bytes += file.expectedSizeBytes + (file.derivativeUploads ?? []).reduce((sum, d) => sum + d.expectedSizeBytes, 0);
-        pendingOperations.add(operationId); valid.push({ index, file });
+        pendingOperations.add(operationId); valid.push({ index, file, fresh: true });
       } catch (error) { const refusal = refusalOf(error); if (refusal) await recordRefusalActivity(ctx, file.householdId, refusal, file.apiActor); results[index] = { code: error instanceof ConvexError && typeof error.data === "object" ? String(error.data?.code ?? "INVALID_FILE") : "INVALID_FILE", error: error instanceof ConvexError && typeof error.data === "object" ? String(error.data?.message ?? "Invalid media.") : error instanceof Error ? error.message : "Invalid media." }; }
     }
     await checkBatchAdmission(ctx, args.files[0].householdId, bytes, valid.length, args.requestBytes, heldBytes, newSizes);
-    for (const { index, file } of valid) results[index] = { uploadSessionId: await createSession(ctx, file), created: true };
+    for (const { index, file, fresh } of valid) results[index] = { uploadSessionId: await createSession(ctx, file), created: true, fresh };
     return results;
   }
 export const batchValidator = v.object(batchSessionArgs);
@@ -2327,3 +2335,16 @@ export const startFinalize = aiMutation({ args: { householdId: v.id("households"
   if (!session || session.householdId !== args.householdId || session.moveId !== args.moveId || (session.status !== "authorized" && !session.completedPhotoId)) throw new ConvexError("Upload session is not active.");
   if (!session.completedPhotoId) await ctx.db.patch(session._id, { processingUntil: Date.now() + 10 * 60 * 1000 });
 } });
+
+// Only the server-side batch coordinator calls this for admitted items it never
+// dispatched. No signed PUT URL has been handed to a caller for this slot.
+export const discardUnstartedBatchItem = internalMutation({
+  args: { householdId: v.id("households"), moveId: v.id("moves"), sessionId: v.id("photoUploadSessions"), fresh: v.boolean() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.householdId !== args.householdId || session.moveId !== args.moveId || session.completedPhotoId || session.status !== "authorized") return;
+    if (args.fresh) await releaseUpload(ctx, session.usageReservationId);
+    else await closeUploadReservation(ctx, session);
+    await ctx.db.patch(session._id, { status: "failed", failureCode: "BATCH_STOPPED", failureReason: "Batch stopped before this item was transferred.", ...(args.fresh ? { cleanupCompletedAt: Date.now() } : {}) });
+  },
+});

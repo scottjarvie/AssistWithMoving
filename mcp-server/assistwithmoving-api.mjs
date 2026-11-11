@@ -109,6 +109,7 @@ export async function assistWithMovingRequest(
     const error = new Error(message);
     error.status = response.status;
     error.payload = payload;
+    if (payload?.partialResults) error.partialResults = payload.partialResults;
     throw error;
   }
 
@@ -156,6 +157,7 @@ export async function assistWithMovingBinaryRequest(
     const error = new Error(message);
     error.status = response.status;
     error.payload = payload;
+    if (payload?.partialResults) error.partialResults = payload.partialResults;
     throw error;
   }
 
@@ -281,7 +283,7 @@ export function textResult(data) {
 
 export function toolErrorResult(error) {
   const refusal = error?.payload?.error ?? error?.data ?? error?.structuredContent;
-  if (refusal?.code === "USAGE_LIMIT_REACHED") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: mcpLimitText(refusal) }] };
+  if (refusal?.code === "USAGE_LIMIT_REACHED") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: (refusal.requestedTotalKnown === false ? refusal.message : mcpLimitText(refusal)) }] };
   if (refusal?.code === "FILE_TOO_LARGE") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: `${refusal.kind} file too large: ${refusal.got} bytes; maximum ${refusal.max} bytes.` }] };
   if (["REQUEST_TOO_LARGE", "OPERATION_ID_REQUIRED", "OPERATION_CONFLICT"].includes(refusal?.code)) return { isError: true, structuredContent: refusal, content: [{ type: "text", text: refusal.message }] };
   return {
@@ -1661,7 +1663,7 @@ export async function uploadEvidenceImages(config, input) {
     delete imageInput.images;
     const results = [];
     try { const result = await uploadEvidenceImage(config, imageInput); results.push({ index: 0, ok: true, ...result, result }); }
-    catch (error) { if (error?.payload?.error?.code === "USAGE_LIMIT_REACHED") throw error; results.push({ index: 0, ok: false, error: error instanceof Error ? error.message : "Image upload failed." }); }
+    catch (error) { if (error?.payload?.error?.code === "USAGE_LIMIT_REACHED") throw error; results.push({ index: 0, ok: false, error: error instanceof Error ? error.message : "Image upload failed." }); if (!input.continueOnError) { error.partialResults = results; throw error; } }
     return { imageCount: 1, uploadedCount: results.filter(r => r.ok).length, failedCount: results.filter(r => !r.ok).length, results, storage: results[0]?.storage, derivativeNote: "Each image was sent as one original upload. Assist With Moving creates web-ready derivatives server-side for uploaded images.", derivativeVariants: derivativeVariantsForStatus("pending"), agentReview: imageBatchAgentReview({ input, results }) };
   }
   if (input.dryRun) return { imageCount: images.length, dryRun: true, results: images.map((_, index) => ({ index, ok: true, dryRun: true })) };

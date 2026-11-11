@@ -37,6 +37,7 @@ function createCtx(tables: Record<string, Row[]>) {
             };
           },
         }),
+        replace: async (id: string, patch: Record<string, unknown>) => { patches.push({ id, patch }); },
         patch: async (id: string, patch: Record<string, unknown>) => {
           patches.push({ id, patch });
         },
@@ -93,7 +94,7 @@ describe("hard delete cascades", () => {
       now: 100,
     });
 
-    for (const id of ["photo_1", "photo_2"]) expect(patches).toContainEqual({ id, patch: { itemId: undefined, boxId: undefined, usageOwnerId: "synthetic-owner", archivedAt: 100, pendingStorageDeletion: true, updatedAt: 100 } });
+    for (const id of ["photo_1", "photo_2"]) expect(patches).toContainEqual({ id, patch: expect.objectContaining({ usageOwnerId: "synthetic-owner", archivedAt: 100, pendingStorageDeletion: true, erasurePending: true, updatedAt: 100 }) });
     expect(deletes).toEqual(["membership_1", "listing_1", "placement_1"]);
     expect(patches).toContainEqual({
       id: "entry_live",

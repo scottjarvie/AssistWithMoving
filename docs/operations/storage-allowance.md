@@ -194,11 +194,18 @@ The current shared formatter can round a file and a nearby cap to the same decim
 figure. AI file-cap refusals therefore retain exact byte counts in their text and
 structured fields. Person-facing rounding remains a shared-core wording follow-up.
 
-Large parent purges still use the existing single-transaction contract. This draft
-has not established a maximum-scale transaction-limit proof or paged parent-purge
-driver; independent review must keep that performance gap open.
+Large move purges remove the move immediately, then continue through bounded,
+resumable indexed pages of one hundred records. The missing move prevents new
+uploads. Small purges retain their synchronous reply. Erased media records are
+replaced atomically with stripped storage cleanup records: private captions,
+notes, filenames, room labels, hashes and uploader attribution are removed.
+Required schema classification fields use neutral constants. Completed sessions,
+claims and reservations are retired; unfinished cleanup records and their jobs
+are removed after confirmed object cleanup. Counts do not fall before confirmation.
+Normal upload replay receipts outside an erasure remain unchanged.
 
-An early storage refusal while preparing URL sources can report only the bytes
-of sources sized so far. No batch object has been stored at that point; a later
-unknown-length source cannot contribute an exact size before it is read. Complete
-prepared batches use their full actual total. This reporting edge remains open.
+An early URL-source refusal marks `requestedTotalKnown: false` and `requested: null`
+when the complete byte total has not been read. Its text explicitly says the total
+is unknown. Prepared batches still report exact totals. Stop-on-error batches keep
+partial results and release this call's unused reservations before returning an
+error; `continueOnError: true` retains individual outcomes and continues.

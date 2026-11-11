@@ -45,8 +45,8 @@ beforeEach(async () => {
   });
 });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
-async function fixture({ cap = 10000, backfilled = true, mode = "on" as "on" | "off" | "warn" } = {}) {
-  const t = convexTest(schema, modules);
+async function fixture({ cap = 10000, backfilled = true, mode = "on" as "on" | "off" | "warn", transactionLimits = false } = {}) {
+  const t = convexTest({ schema, modules, transactionLimits });
   const ids = await t.run(async ctx => {
     const now = Date.now();
     const owner = await ctx.db.insert("users", { clerkUserId: "synthetic-owner", appRole: "member", status: "active", createdAt: now, updatedAt: now, lastSeenAt: now });
@@ -278,7 +278,7 @@ it("move purge retains every photo, session and byte until confirmed storage rem
   await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" });
   const photo = await f.t.run(ctx => ctx.db.get(done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">));
   expect(photo).toMatchObject({ pendingStorageDeletion: true, usageOwnerId: f.owner });
-  expect(await f.t.run(ctx => ctx.db.get(begin.uploadSessionId as import("../../convex/_generated/dataModel").Id<"photoUploadSessions">))).not.toBeNull();
+  expect(await f.t.run(ctx => ctx.db.get(begin.uploadSessionId as import("../../convex/_generated/dataModel").Id<"photoUploadSessions">))).toBeNull();
   expect(storage.objects.has(key)).toBe(true); expect((await f.summary()).usedBytes).toBe(before);
 });
 
@@ -1027,4 +1027,85 @@ it("an automatically created settings row keeps enforcement off and contains no 
   const f = await fixture(); await f.t.run(ctx => ctx.db.delete(f.settings)); await f.upload();
   const settings = await f.t.run(ctx => ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique());
   expect(settings).toMatchObject({ enforcement: "off", storageRevision: expect.any(Number) }); expect(settings).not.toHaveProperty("planStoredBytes"); expect(settings).not.toHaveProperty("maxFileBytes");
+});
+
+it("R3 purge strips private photo metadata immediately and retires completed sessions, claims and cleanup jobs", async () => {
+  const f = await fixture(); const { begin, done } = await f.upload();
+  const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">;
+  await f.t.run(async ctx => { await ctx.db.patch(photoId, { caption: "Synthetic private caption", notes: "Synthetic private note", room: "Synthetic room", fileName: "private.png", originalHash: "private-hash" }); await ctx.db.patch(begin.uploadSessionId as import("../../convex/_generated/dataModel").Id<"photoUploadSessions">, { room: "Synthetic room", agentLabel: "Synthetic private label" }); });
+  const before = (await f.summary()).usedBytes;
+  await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" });
+  const retained = await f.t.run(ctx => ctx.db.get(photoId));
+  for (const field of ["caption", "notes", "room", "fileName", "originalHash", "agentLabel"]) expect(retained).not.toHaveProperty(field);
+  expect(await f.t.run(ctx => ctx.db.query("photoUploadSessions").collect())).toEqual([]);
+  expect(await f.t.run(ctx => ctx.db.query("uploadObjectClaims").collect())).toEqual([]);
+  expect((await f.summary()).usedBytes).toBe(before);
+  await f.t.action(internal.storageDeletion.deletePhoto, { photoId, dryRun: false });
+  expect(await f.t.run(ctx => ctx.db.get(photoId))).toBeNull();
+  expect(await f.t.run(ctx => ctx.db.query("storageDeletionJobs").collect())).toEqual([]);
+  expect((await f.summary()).usedBytes).toBe(0);
+});
+
+it("R3 purged unfinished sessions discard private fields and disappear after confirmed cleanup", async () => {
+  const f = await fixture(); const id = await f.person.mutation(internal.photos.createUploadSession, { ...f.sessionArgs("purged-pending"), room: "Synthetic private room" });
+  await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" });
+  const row = (await f.t.run(ctx => ctx.db.get(id)))!; expect(row).not.toHaveProperty("room"); expect(row).not.toHaveProperty("operationId");
+  vi.setSystemTime(row.expiresAt + 24 * 3600000 + 1);
+  await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false });
+  expect(await f.t.run(ctx => ctx.db.get(id))).toBeNull();
+  expect(await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").collect())).toEqual([]);
+  expect(await f.t.run(ctx => ctx.db.query("uploadObjectClaims").collect())).toEqual([]);
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ storedBytes: 0, reservedBytes: 0, inFlight: 0 });
+});
+
+it.each([1001, 100000])("R3 the purge door pages %i photos with platform transaction limits enabled", async count => {
+  const f = await fixture({ transactionLimits: true }); const { done } = await f.upload();
+  const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">;
+  const template = (await f.t.run(ctx => ctx.db.get(photoId)))!;
+  const { _id, _creationTime, ...fields } = template; void _id; void _creationTime;
+  for (let n = 1; n < count; n += 500) await f.t.run(async ctx => { for (let i = n; i < Math.min(n + 500, count); i++) await ctx.db.insert("itemPhotos", { ...fields, originalStorageKey: `synthetic-legacy-${i}`, caption: "Synthetic private caption" }); });
+  expect(await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" })).toMatchObject({ pending: true });
+  expect(await f.t.run(ctx => ctx.db.get(f.moveId))).toBeNull();
+  let next: { householdId: typeof f.householdId; moveId: typeof f.moveId; table: number; cursor: string | null } | null = { householdId: f.householdId, moveId: f.moveId, table: 0, cursor: null };
+  if (count === 1001) await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+  else while (next) next = await f.t.mutation(internal.moves.purgePage, next);
+  const privateRow = await f.t.run(ctx => ctx.db.query("itemPhotos").withIndex("by_move_created", q => q.eq("moveId", f.moveId)).filter(q => q.neq(q.field("erasurePending"), true)).first());
+  expect(privateRow).toBeNull();
+  expect(await f.t.run(ctx => ctx.db.query("photoUploadSessions").first())).toBeNull();
+}, 300000);
+
+it("R3 early URL batch refusal explicitly reports unknown total rather than a sized prefix", async () => {
+  const f = await fixture({ cap: png.byteLength + 1 }); const key = await f.key();
+  const result = await f.t.action(internal.restApiActions.handle, { method: "POST", path: "uploads/batch", authorization: `Bearer ${key.raw}`, idempotencyKey: "unknown-total", query: {}, body: { moveId: f.moveId, images: [1, 2, 3].map(i => ({ sourceUrl: `https://synthetic.invalid/${i}.png` })) } });
+  expect(result).toMatchObject({ status: 413, body: { error: { code: "USAGE_LIMIT_REACHED", requested: null, requestedTotalKnown: false, remaining: png.byteLength + 1, message: expect.stringContaining("total batch size is unknown") } } });
+  expect(toolErrorResult({ payload: result.body }).content[0].text).toContain("total batch size is unknown");
+  expect(storage.puts).toEqual([]); expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ reservedBytes: 0, inFlight: 0 });
+});
+
+it("R3 cleaned-operation target conflicts remain per item without hidden holds", async () => {
+  const f = await fixture(); const id = await f.person.mutation(internal.photos.createUploadSession, { ...f.sessionArgs("cleaned"), room: "A" });
+  await f.person.mutation(api.photos.cancelUploadSession, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: id });
+  vi.setSystemTime(Date.now() + 25 * 3600000); await f.t.action(internal.storageDeletion.deleteSession, { sessionId: id, dryRun: false });
+  const response = await f.person.mutation(internal.photos.tryCreateUploadBatch, { files: [f.sessionArgs("fresh"), { ...f.sessionArgs("cleaned"), originalStorageKey: "cleaned-new-key", room: "B" }], requestBytes: 1 });
+  expect(response).not.toHaveProperty("refusal"); expect(response.results?.[0].uploadSessionId).toBeTruthy(); expect(response.results?.[1]).toMatchObject({ code: "OPERATION_CONFLICT" });
+  expect(await f.t.run(ctx => ctx.db.query("uploadReservations").withIndex("by_owner_status", q => q.eq("ownerId", f.owner).eq("status", "reserved")).collect())).toHaveLength(1);
+  const before = (await f.t.run(ctx => ctx.db.query("usageCounters").first()))!;
+  await f.t.run(ctx => ctx.db.patch(f.settings, { planStoredBytes: { free: 0, pro: 0 } }));
+  expect(await f.person.mutation(internal.photos.tryCreateUploadBatch, { files: [f.sessionArgs("refused-new")], requestBytes: 1 })).toHaveProperty("refusal");
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ reservedBytes: before.reservedBytes, inFlight: before.inFlight });
+});
+
+it.each([false, true])("R3 real batch validation respects continueOnError=%s", async continueOnError => {
+  const f = await fixture(); const key = await f.key();
+  const response = await f.t.action(internal.restApiActions.handle, { method: "POST", path: "uploads/batch", authorization: `Bearer ${key.raw}`, idempotencyKey: `stop-${continueOnError}`, query: {}, body: { moveId: f.moveId, continueOnError, images: [{ fileBase64: "YmFk", mimeType: "image/png" }, { fileBase64: Buffer.from(png).toString("base64"), mimeType: "image/png" }] } });
+  if (continueOnError) expect(response).toMatchObject({ status: 200, body: { data: { uploadedCount: 1, failedCount: 1 } } });
+  else { expect(response).toMatchObject({ status: 400, body: { partialResults: [{ index: 0, ok: false }] } }); expect(storage.puts).toEqual([]); }
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).not.toMatchObject({ inFlight: 1 });
+});
+
+it("R3 application failure stops later writes and releases unused batch slots", async () => {
+  const f = await fixture(); const key = await f.key(); storage.failPut = true;
+  const response = await f.t.action(internal.restApiActions.handle, { method: "POST", path: "uploads/batch", authorization: `Bearer ${key.raw}`, idempotencyKey: "stop-put", query: {}, body: { moveId: f.moveId, continueOnError: false, images: [1, 2].map(() => ({ fileBase64: Buffer.from(png).toString("base64"), mimeType: "image/png" })) } });
+  expect(response).toMatchObject({ status: 400, body: { partialResults: [{ index: 0, ok: false }] } });
+  expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ inFlight: 0, reservedBytes: 0 }); expect(storage.puts).toEqual([]);
 });
