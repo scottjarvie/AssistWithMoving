@@ -1,3 +1,4 @@
+import { bumpOwnerRevision } from "./usageLimits";
 import { retainPhotoForDeletion, retainSessionForDeletion } from "./lib/storageDeletion";
 import { v } from "convex/values";
 
@@ -565,19 +566,28 @@ async function purgeMoveData(
 export const purgePage = internalMutation({
   args: { householdId: v.id("households"), moveId: v.id("moves"), table: v.number(), cursor: v.union(v.string(), v.null()) },
   handler: async (ctx, args) => {
-    const tables = [...MOVE_INDEXED_PURGE_TABLES, ...HOUSEHOLD_FILTER_PURGE_TABLES];
+    // Retire sessions first, transferring active write leases to their photos.
+    const photos = MOVE_INDEXED_PURGE_TABLES.find(entry => entry.table === "itemPhotos")!;
+    const tables = [...MOVE_INDEXED_PURGE_TABLES.filter(entry => entry !== photos), photos, ...HOUSEHOLD_FILTER_PURGE_TABLES];
     const entry = tables[args.table];
     if (!entry) return null;
     // Dynamic table/index pairs are a closed, server-owned list above.
     const db = ctx.db as any;
     const household = args.table >= MOVE_INDEXED_PURGE_TABLES.length;
     const page = await db.query(entry.table).withIndex(entry.index, (q: any) => q.eq(household ? "householdId" : "moveId", household ? args.householdId : args.moveId)).paginate({ cursor: args.cursor, numItems: 100 });
+    const owner = entry.table === "itemPhotos" ? (await ctx.db.get(args.householdId))?.ownerUserId : undefined;
+    const owners = new Set<Doc<"users">["_id"]>();
     for (const row of page.page) {
       if (household && row.moveId !== args.moveId) continue;
-      if (entry.table === "itemPhotos") await retainPhotoForDeletion(ctx, row, Date.now(), false);
+      if (entry.table === "itemPhotos") {
+        const ownerId = row.usageOwnerId ?? owner ?? row.uploadedByUserId;
+        await retainPhotoForDeletion(ctx, row, Date.now(), false, { ownerId, leaseSaved: true });
+        owners.add(ownerId);
+      }
       else if (entry.table === "photoUploadSessions") await retainSessionForDeletion(ctx, row);
       else await ctx.db.delete(row._id);
     }
+    for (const ownerId of owners) await bumpOwnerRevision(ctx, ownerId);
     if (page.isDone && entry.table === "itemPhotos") await ctx.scheduler.runAfter(0, internal.storageDeletion.sweep, {});
     const table = page.isDone ? args.table + 1 : args.table;
     const next = table < tables.length ? { ...args, table, cursor: page.isDone ? null : page.continueCursor } : null;
