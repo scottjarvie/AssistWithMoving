@@ -75,4 +75,3 @@ export function oldFriendlyUploadError(error: unknown): string {
   }
   return "Upload failed. Tap retry.";
 }
-
