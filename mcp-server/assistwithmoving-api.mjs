@@ -2007,7 +2007,7 @@ async function loadEvidenceMedia(config, input) {
       transport: config.mediaIngress?.transport,
       allowedFileRoots: config.mediaIngress?.allowedFileRoots,
       maxBytes: audioCap === undefined ? transportLimits.video : Math.min(audioCap, transportLimits.video),
-      fileKind: audioHint ? "audio" : undefined,
+      fileKind: audioHint ? (input.audioKind ?? "audio") : undefined,
     });
     return {
       bytes,
@@ -2023,7 +2023,7 @@ async function loadEvidenceMedia(config, input) {
 
   const remote = await downloadPublicHttpsMedia(input.sourceUrl, {
     maxBytes: audioCap === undefined ? transportLimits.image : Math.min(audioCap, transportLimits.image),
-    fileKind: audioHint ? "audio" : undefined,
+    fileKind: audioHint ? (input.audioKind ?? "audio") : undefined,
   });
   const bytes = remote.bytes;
   const url = remote.finalUrl;
