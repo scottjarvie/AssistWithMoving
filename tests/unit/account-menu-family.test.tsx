@@ -24,7 +24,7 @@ describe("Moving account standard — 2026-11-12", () => {
     render(<SignedInAccountSurface {...identity} isAdmin signOut={signOut}/>);
     fireEvent.click(screen.getByRole("button", {name:"Account menu"}));
     expect(await screen.findByRole("link", {name:"Admin"})).toHaveAttribute("href", "/admin");
-    const exit = screen.getByRole("button", {name:"Sign out", exact:true});
+    const exit = screen.getByRole("button", {name:"Sign out"});
     fireEvent.click(exit); fireEvent.click(exit);
     expect(signOut).toHaveBeenCalledTimes(1);
     reject(new Error("synthetic"));
