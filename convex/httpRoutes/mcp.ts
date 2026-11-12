@@ -1,3 +1,6 @@
+import { ConvexError } from "convex/values";
+import { canonicalRequestBytes } from "../lib/aiUploadCaps";
+import { refusalOf, aiRefusal } from "../lib/usageLimits/refusal";
 import connectionPolicy from "../../shared/ai-connection-policy.json";
 /**
  * Stateless dual-era remote MCP endpoint and Moving-native workflow tools.
@@ -44,6 +47,10 @@ export const STATELESS_MOVING_TOOL_NAMES = [
   "search_move_records",
   "get_move_records",
   "get_evidence_media",
+  "begin_media_upload",
+  "begin_media_upload_batch",
+  "finish_media_upload",
+  "upload_media_inline",
   "save_move_context",
   "save_inventory",
   "save_planning_record",
@@ -61,7 +68,7 @@ export const STATELESS_MOVING_TOOL_NAMES = [
 
 const SERVER_NAME = "assistwithmoving";
 const SERVER_VERSION = "0.4.0";
-const MAX_MCP_REQUEST_BYTES = 512 * 1024;
+const MAX_MCP_REQUEST_BYTES = canonicalRequestBytes;
 // Bound key/array traversal before schema errors can expand a compact request.
 // Complete results combine inventory and planning/reference arrays; the
 // 512 KiB byte limit admits supported batches larger than 32K entries.
@@ -373,6 +380,9 @@ function toolResult(data: unknown) {
 }
 
 function toolError(error: unknown) {
+  if (error instanceof ConvexError && typeof error.data === "object" && error.data?.code === "INVALID_UPLOAD") return { isError: true, structuredContent: error.data, content: [{ type: "text" as const, text: JSON.stringify(error.data) }] };
+  const refusal = refusalOf(error);
+  if (refusal) return aiRefusal(refusal);
   const raw = error instanceof Error ? error.message : String(error);
   let payload: Record<string, unknown> = {
     code: "INTERNAL_ERROR",
@@ -761,6 +771,37 @@ export function createMovingServer(
       }
     },
   );
+
+  const uploadFile = z.object({ operationId, sizeBytes: z.number().int().positive(), mimeType: z.string(), sha256: z.string(), audioKind: z.enum(["audio", "voicenote"]).optional() }).strict();
+  for (const name of ["begin_media_upload", "begin_media_upload_batch"] as const) {
+    registerGranted(name, {
+      title: "Begin media upload",
+      description: "Reserve ordinary private uploads. Supply exact SHA-256 and byte size. PUT exact bytes to each short-lived product URL, then call finish_media_upload. Retain operationId on retries. Batch results contain an independent receipt per file.",
+      inputSchema: z.object({ moveId: id, files: z.array(uploadFile) }).strict(),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    }, async input => {
+      try { return toolResult(await actionCtx.runAction(internal.aiUploads.begin, { ...input, moveId: input.moveId as any, principal: convexPrincipal(principal), single: name === "begin_media_upload" })); }
+      catch (error) { return toolError(error); }
+    });
+  }
+  registerGranted("upload_media_inline", {
+    title: "Upload tiny media",
+    description: "Add a tiny original as canonical base64 through the same validation and storage allowance as PUT uploads. Supply exact size, SHA-256 and operationId. The whole request must fit the canonical request ceiling.",
+    inputSchema: z.object({ moveId: id, input: uploadFile, base64: z.string() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, async input => {
+    try { return toolResult(await actionCtx.runAction(internal.aiUploads.inline, { ...input, moveId: input.moveId as any, principal: convexPrincipal(principal) })); }
+    catch (error) { return toolError(error); }
+  });
+  registerGranted("finish_media_upload", {
+    title: "Finish media upload",
+    description: "Validate the uploaded original and attach it to the move. Retry the same session to retrieve the same photoId without adding storage twice.",
+    inputSchema: z.object({ uploadSessionId: id }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, async input => {
+    try { return toolResult(await actionCtx.runAction(internal.aiUploads.finish, { uploadSessionId: input.uploadSessionId as any, principal: convexPrincipal(principal) })); }
+    catch (error) { return toolError(error); }
+  });
 
   registerGranted(
     "get_evidence_media",

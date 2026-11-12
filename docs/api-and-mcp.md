@@ -1441,7 +1441,7 @@ types must also match JPEG, PNG, or WebP file signatures. API-key REST/MCP
 clients may pass a public `sourceUrl`, `dataUrl`, or `fileBase64`; the
 maintainer-only stdio server can also read an approved local `filePath`. The
 canonical OAuth catalog reads existing evidence with `get_evidence_media` but
-does not expose a new-photo upload tool.
+also supports private uploads with begin_media_upload, begin_media_upload_batch, finish_media_upload and upload_media_inline under moving.work.write.
 Set `generateAiSuggestions` when the same upload
 should also place
 the photo into AI review; that queueing step requires `inventory/write` in
@@ -1879,6 +1879,10 @@ connection never sees a capability nobody approved.
 | `search_move_records` | `moving.context.read` | Search bounded items, boxes, spaces, decisions, estimates, plan results, source checks, and the person's Queue summaries. |
 | `get_move_records` | `moving.context.read` | Hydrate up to 25 selected records with role-filtered detail. |
 | `get_evidence_media` | `moving.evidence.read` | Return selected private move photos as native MCP image content. |
+| `begin_media_upload` | `moving.work.write` | Private original upload through ordinary sessions; see the agent guide for the request shape and caps. |
+| `begin_media_upload_batch` | `moving.work.write` | Private original upload through ordinary sessions; see the agent guide for the request shape and caps. |
+| `finish_media_upload` | `moving.work.write` | Private original upload through ordinary sessions; see the agent guide for the request shape and caps. |
+| `upload_media_inline` | `moving.work.write` | Private original upload through ordinary sessions; see the agent guide for the request shape and caps. |
 | `save_move_context` | `moving.work.write` | Replay-safe move route/timing/note correction plus room/location upserts. |
 | `save_inventory` | `moving.work.write` | Replay-safe inventory creation and optimistic corrections with estimates, review flags, and source provenance. |
 | `save_planning_record` | `moving.work.write` | Create or optimistically correct a decision, estimate, plan result, or source check. |

@@ -1,3 +1,4 @@
+import { put as aiUploadPut } from "./aiUploads";
 import { audioResponse } from "./lib/audioResponse";
 import { legacyUploadResponse } from "./lib/legacyUploadResponse";
 import { formatBytes } from "./lib/usageLimits/core";
@@ -39,6 +40,7 @@ import { oauthClientIdFromClaims, resolveClientIdentity } from "./lib/mcpClientI
 import type { GrantDecisionInput as LegacyGrantDecisionRow } from "./lib/aiGrants";
 
 const http = httpRouter();
+http.route({ path: "/ai-upload", method: "PUT", handler: aiUploadPut });
 http.route({ path: "/audio/playback", method: "GET", handler: httpAction(async (ctx, request) => {
   const token = new URL(request.url).searchParams.get("token");
   if (!token) return new Response(null, { status: 404, headers: { "Cache-Control": "private, no-store" } });
