@@ -1,3 +1,4 @@
+import { requireAiUploadSession, checkAiUploadFile, uploadAuthorizationValidator, uploadBinding, type UploadAuthorization } from "./lib/aiUploadSession";
 import { effectiveFileCap } from "./lib/aiUploadCaps";
 import { validateAudioContainer, invalidAudioFileError, audioVideoTrackError, voiceNoteTooLongError } from "./lib/media/audio";
 import { transportLimits, voiceNoteMaxSeconds } from "../shared/media-limits.mjs";
@@ -139,6 +140,7 @@ const photoDisplayVariantValidator = v.union(
   v.literal("original"),
 );
 const apiPhotoActorValidator = v.object({
+  uploadAuthorization: v.optional(uploadAuthorizationValidator),
   oauthCaller: v.optional(mcpCallerValidator),
   ...publicationArgs,
   apiKeyId: v.string(),
@@ -503,6 +505,7 @@ export const evidenceSummary = query({
 // and pass createdByUserId). When omitted, the internal upload functions run the
 // usual ctx.auth permission check.
 type ApiPhotoActor = {
+  uploadAuthorization?: UploadAuthorization;
   oauthCaller?: { subject: string; claims?: Record<string, unknown> };
   acknowledgeContactDetails?: { emails: number; phones: number; addresses: number };
   restorePrivately?: boolean;
@@ -825,7 +828,7 @@ async function runFinalizeUpload(
           await ctx.runMutation(internal.photos.markUploadSessionFailed, { householdId: args.householdId, moveId: args.moveId, uploadSessionId: args.uploadSessionId, apiActor, code: refusal.code, reason: refusal.message });
           throw new ConvexError(refusal);
         }
-        await ctx.runMutation(internal.photos.markAudioValidated, { uploadSessionId: args.uploadSessionId, versionId: version, durationSeconds: result.valid ? result.durationSeconds ?? undefined : undefined });
+        await ctx.runMutation(internal.photos.markAudioValidated, { uploadSessionId: args.uploadSessionId, versionId: version, uploadAuthorization: apiActor?.uploadAuthorization, durationSeconds: result.valid ? result.durationSeconds ?? undefined : undefined });
       }
       for (const derivative of session.derivativeUploads ?? []) {
         const derivativeHead = await b2Client().send(
@@ -1546,6 +1549,9 @@ async function claimSessionObjects(ctx: MutationCtx, sessionId: Doc<"photoUpload
   await ctx.db.patch(sessionId, { objectClaimsRegistered: true });
 }
 async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidator>) {
+    const auth = args.apiActor?.uploadAuthorization;
+    if (args.apiActor) await requireAiUploadSession(ctx, { allowOrdinary: !auth, actorUserId: args.apiActor.createdByUserId, principal: auth?.principal, token: auth?.uploadSessionId ? auth.token : undefined, uploadSessionId: auth?.uploadSessionId, moveId: args.moveId, householdId: args.householdId, operationId: args.operationId, declaration: auth, begin: !auth?.uploadSessionId });
+    if (auth) await checkAiUploadFile(ctx, args.householdId, { ...auth, operationId: args.operationId!, mimeType: args.expectedMimeType, sizeBytes: args.expectedSizeBytes, audioKind: args.audioKind });
     let userId = args.apiActor?.createdByUserId;
     if (!userId) {
       await requirePersonConnectionManagement(ctx);
@@ -1595,7 +1601,7 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
         const usageReservationId = await reserveUpload(ctx, args.householdId, operationId, original.sizeBytes + derivativeUploads.reduce((sum, d) => sum + d.expectedSizeBytes, 0), original.mediaKind === "audio" ? args.audioKind ?? "audio" : original.mediaKind, original.sizeBytes);
     await ctx.db.patch(usageReservationId, { expiresAt: args.expiresAt });
     await ctx.scheduler.runAt(args.expiresAt, internal.usageLimits.expireReservations, {});
-        await ctx.db.patch(previous._id, { usageReservationId, originalStorageKey: args.originalStorageKey, originalBucket: args.originalBucket, derivativeUploads, cleanupCompletedAt: undefined, cleanupError: undefined, status: "authorized", expiresAt: args.expiresAt, updatedAt: now });
+        await ctx.db.patch(previous._id, { ...(auth ? { aiUpload: uploadBinding(null, auth, args.originalStorageKey, args.expiresAt) } : {}), usageReservationId, originalStorageKey: args.originalStorageKey, originalBucket: args.originalBucket, derivativeUploads, cleanupCompletedAt: undefined, cleanupError: undefined, status: "authorized", expiresAt: args.expiresAt, updatedAt: now });
         await claimSessionObjects(ctx, previous._id, [args.originalStorageKey, ...derivativeUploads.map(d => d.storageKey)]);
         return previous._id;
       }
@@ -1607,7 +1613,7 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
       // Reuse the existing hold, keys and declared size. Late PUTs cannot create
       // a second untracked original. Cleanup never deletes live session objects.
       await ctx.scheduler.runAt(args.expiresAt + defaultPhotoUploadCleanupGraceMs, internal.storageDeletion.runSessionDeletion, { sessionId: previous._id });
-      await ctx.db.patch(previous._id, { status: "authorized", expiresAt: args.expiresAt, updatedAt: now });
+      await ctx.db.patch(previous._id, { ...(auth ? { aiUpload: uploadBinding(previous, auth, previous.originalStorageKey, args.expiresAt) } : {}), status: "authorized", expiresAt: args.expiresAt, updatedAt: now });
       return previous._id;
     }
 
@@ -1620,6 +1626,7 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
     await ctx.db.patch(usageReservationId, { expiresAt: args.expiresAt });
     await ctx.scheduler.runAt(args.expiresAt, internal.usageLimits.expireReservations, {});
     const sessionId = await ctx.db.insert("photoUploadSessions", {
+      ...(auth ? { aiUpload: uploadBinding(null, auth, args.originalStorageKey, args.expiresAt) } : {}),
       usageReservationId,
       operationId,
       usageOwnerId: info.ownerId,
@@ -1666,6 +1673,11 @@ export const getUploadSession = internalQuery({
     apiActor: v.optional(apiPhotoActorValidator),
   },
   handler: async (ctx, args) => {
+    if (args.apiActor) {
+      const auth = args.apiActor.uploadAuthorization;
+      await requireAiUploadSession(ctx, { allowOrdinary: !auth, actorUserId: args.apiActor.createdByUserId, principal: auth?.principal, token: auth?.uploadSessionId ? auth.token : undefined, uploadSessionId: args.uploadSessionId, moveId: args.moveId, householdId: args.householdId });
+    }
+
     if (!args.apiActor) {
       await requireMovePermission(
         ctx,
@@ -1802,6 +1814,11 @@ export const markUploadSessionFailed = aiMutation({
     apiActor: v.optional(apiPhotoActorValidator),
   },
   handler: async (ctx, args) => {
+    if (args.apiActor) {
+      const auth = args.apiActor.uploadAuthorization;
+      await requireAiUploadSession(ctx, { allowOrdinary: !auth, actorUserId: args.apiActor.createdByUserId, principal: auth?.principal, token: auth?.uploadSessionId ? auth.token : undefined, uploadSessionId: args.uploadSessionId, moveId: args.moveId, householdId: args.householdId });
+    }
+
     if (!args.apiActor) {
       await requireMovePermission(
         ctx,
@@ -1850,6 +1867,11 @@ const completeSessionArgs = {
     apiActor: v.optional(apiPhotoActorValidator),
   };
 async function completeSession(ctx: MutationCtx, args: Infer<typeof completeValidator>) {
+    if (args.apiActor) {
+      const auth = args.apiActor.uploadAuthorization;
+      await requireAiUploadSession(ctx, { allowOrdinary: !auth, actorUserId: args.apiActor.createdByUserId, principal: auth?.principal, token: auth?.uploadSessionId ? auth.token : undefined, uploadSessionId: args.uploadSessionId, moveId: args.moveId, householdId: args.householdId });
+    }
+
     let userId = args.apiActor?.createdByUserId;
     if (!userId) {
       await requirePersonConnectionManagement(ctx);
@@ -2303,6 +2325,10 @@ function sessionOperationConflict(previous: Doc<"photoUploadSessions">, file: In
 
 const batchSessionArgs = { files: v.array(v.object(createSessionArgs)), requestBytes: v.number() };
 async function createBatch(ctx: MutationCtx, args: Infer<typeof batchValidator>) {
+    for (const file of args.files) if (file.apiActor) {
+      const auth = file.apiActor.uploadAuthorization;
+      await requireAiUploadSession(ctx, { allowOrdinary: !auth, actorUserId: file.apiActor.createdByUserId, principal: auth?.principal, token: auth?.uploadSessionId ? auth.token : undefined, uploadSessionId: auth?.uploadSessionId, moveId: file.moveId, householdId: file.householdId, operationId: file.operationId, declaration: auth, begin: !auth?.uploadSessionId });
+    }
     if (!args.files.length) return [];
     const valid: Array<{ index: number; file: Infer<typeof sessionValidator>; fresh: boolean }> = [];
     const results: Array<{ uploadSessionId?: Doc<"photoUploadSessions">["_id"]; error?: string; code?: string; created?: boolean; fresh?: boolean }> = args.files.map(() => ({}));
@@ -2371,6 +2397,11 @@ export const tryCreateUploadSession = aiMutation({ args: createSessionArgs, hand
 } });
 
 export const startFinalize = aiMutation({ args: { householdId: v.id("households"), moveId: v.id("moves"), uploadSessionId: uploadSessionIdValidator, apiActor: v.optional(apiPhotoActorValidator) }, handler: async (ctx, args) => {
+    if (args.apiActor) {
+      const auth = args.apiActor.uploadAuthorization;
+      await requireAiUploadSession(ctx, { allowOrdinary: !auth, actorUserId: args.apiActor.createdByUserId, principal: auth?.principal, token: auth?.uploadSessionId ? auth.token : undefined, uploadSessionId: args.uploadSessionId, moveId: args.moveId, householdId: args.householdId });
+    }
+
   if (args.apiActor) await assertMoveInHousehold(ctx, args); else { await requirePersonConnectionManagement(ctx); await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:edit"); }
   const session = await ctx.db.get(args.uploadSessionId);
   if (!session || session.householdId !== args.householdId || session.moveId !== args.moveId || (session.status !== "authorized" && !session.completedPhotoId)) throw new ConvexError("Upload session is not active.");
@@ -2401,7 +2432,8 @@ export const audioDurationPolicy = internalQuery({ args: { householdId: v.id("ho
   const info = await limitsFor(ctx, args.householdId);
   return info.override?.voiceNoteMaxSeconds ?? info.site?.voiceNoteMaxSeconds ?? voiceNoteMaxSeconds;
 } });
-export const markAudioValidated = internalMutation({ args: { uploadSessionId: uploadSessionIdValidator, versionId: v.optional(v.string()), durationSeconds: v.optional(v.number()) }, handler: async (ctx, args) => {
+export const markAudioValidated = internalMutation({ args: { uploadAuthorization: v.optional(uploadAuthorizationValidator), uploadSessionId: uploadSessionIdValidator, versionId: v.optional(v.string()), durationSeconds: v.optional(v.number()) }, handler: async (ctx, args) => {
+  if (args.uploadAuthorization) await requireAiUploadSession(ctx, { principal: args.uploadAuthorization.principal, token: args.uploadAuthorization.token, uploadSessionId: args.uploadSessionId });
   const session = await ctx.db.get(args.uploadSessionId);
   if (!session || session.status !== "authorized") throw new ConvexError("Upload session is not active.");
   await ctx.db.patch(session._id, { audioValidated: true, audioVersionId: args.versionId, audioDurationSeconds: args.durationSeconds });

@@ -820,11 +820,11 @@ export function createMovingServer(
     },
   );
 
-  const uploadFile = z.object({ operationId, sizeBytes: z.number().int().positive(), mimeType: z.string(), sha256: z.string(), audioKind: z.enum(["audio", "voicenote"]).optional() }).strict();
+  const uploadFile = z.object({ width: z.number().positive().optional(), height: z.number().positive().optional(), operationId, sizeBytes: z.number().int().positive(), mimeType: z.string(), sha256: z.string(), audioKind: z.enum(["audio", "voicenote"]).optional() }).strict();
   for (const name of ["begin_media_upload", "begin_media_upload_batch"] as const) {
     registerGranted(name, {
       title: "Begin media upload",
-      description: "Reserve ordinary private uploads. Supply exact SHA-256 and byte size. PUT exact bytes to each short-lived product URL, then call finish_media_upload. Retain operationId on retries. Batch results contain an independent receipt per file.",
+      description: "Reserve ordinary private uploads. Supply exact SHA-256 and byte size, plus positive width and height for images. PUT exact bytes to each short-lived product URL, then call finish_media_upload. Retain operationId on retries. Batch results contain an independent receipt per file.",
       inputSchema: z.object({ moveId: id, files: z.array(uploadFile) }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     }, async input => {

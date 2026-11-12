@@ -1,0 +1,150 @@
+{
+  "numeric": {
+    "files": {
+      "audio": 104857600,
+      "image": 26214400,
+      "video": 524288000,
+      "voicenote": 10000000
+    },
+    "batchItems": 25,
+    "batchBytes": 48000
+  },
+  "website": {
+    "image": [
+      true,
+      false
+    ],
+    "audio": [
+      true,
+      false
+    ],
+    "voicenote": [
+      true,
+      false
+    ],
+    "video": [
+      true,
+      false
+    ]
+  },
+  "apiBegin": {
+    "image": [
+      true,
+      false
+    ],
+    "audio": [
+      true,
+      false
+    ],
+    "voicenote": [
+      true,
+      false
+    ],
+    "video": [
+      true,
+      false
+    ]
+  },
+  "tools": {
+    "start_photo_upload": {
+      "files": {
+        "audio": 104857600,
+        "image": 26214400,
+        "video": 524288000,
+        "voicenote": 10000000
+      },
+      "maximumItems": null,
+      "schemaMaxBytes": 524288000,
+      "policyResolved": true
+    },
+    "upload_evidence_file": {
+      "files": {
+        "audio": 104857600,
+        "image": 26214400,
+        "video": 524288000,
+        "voicenote": 10000000
+      },
+      "maximumItems": null,
+      "schemaMaxBytes": null,
+      "policyResolved": true
+    },
+    "upload_evidence_image": {
+      "files": {
+        "image": 26214400
+      },
+      "maximumItems": null,
+      "schemaMaxBytes": null,
+      "policyResolved": true
+    },
+    "upload_evidence_images": {
+      "files": {
+        "image": 26214400
+      },
+      "maximumItems": 50,
+      "schemaMaxBytes": null,
+      "policyResolved": true
+    },
+    "upload_photo": {
+      "files": {
+        "image": 26214400
+      },
+      "maximumItems": null,
+      "schemaMaxBytes": null,
+      "policyResolved": true
+    },
+    "upload_image": {
+      "files": {
+        "image": 26214400
+      },
+      "maximumItems": null,
+      "schemaMaxBytes": null,
+      "policyResolved": true
+    },
+    "upload_photos": {
+      "files": {
+        "image": 26214400
+      },
+      "maximumItems": 50,
+      "schemaMaxBytes": null,
+      "policyResolved": true
+    },
+    "upload_images": {
+      "files": {
+        "image": 26214400
+      },
+      "maximumItems": 50,
+      "schemaMaxBytes": null,
+      "policyResolved": true
+    },
+    "finalize_photo_upload": {
+      "files": {
+        "audio": 104857600,
+        "image": 26214400,
+        "video": 524288000,
+        "voicenote": 10000000
+      },
+      "maximumItems": null,
+      "schemaMaxBytes": null,
+      "policyResolved": true
+    }
+  },
+  "legacy": {
+    "accepted": true,
+    "files": {
+      "audio": 104857600,
+      "image": 26214400,
+      "video": 524288000,
+      "voicenote": 10000000
+    },
+    "batchItems": 25,
+    "batchBytes": 48000
+  },
+  "transports": {
+    "image": 26214400,
+    "audio": 104857600,
+    "video": 524288000,
+    "publicFetchDefault": 26214400,
+    "hostedJson": 5242880,
+    "canonicalJson": 524288
+  }
+}

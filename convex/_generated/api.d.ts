@@ -54,6 +54,7 @@ import type * as lib_aiGrants from "../lib/aiGrants.js";
 import type * as lib_aiPlanningSuggestionWorkflow from "../lib/aiPlanningSuggestionWorkflow.js";
 import type * as lib_aiProvider from "../lib/aiProvider.js";
 import type * as lib_aiUploadCaps from "../lib/aiUploadCaps.js";
+import type * as lib_aiUploadSession from "../lib/aiUploadSession.js";
 import type * as lib_aiUsage from "../lib/aiUsage.js";
 import type * as lib_apiKeyAuth from "../lib/apiKeyAuth.js";
 import type * as lib_apiKeys from "../lib/apiKeys.js";
@@ -238,6 +239,7 @@ declare const fullApi: ApiFromModules<{
   "lib/aiPlanningSuggestionWorkflow": typeof lib_aiPlanningSuggestionWorkflow;
   "lib/aiProvider": typeof lib_aiProvider;
   "lib/aiUploadCaps": typeof lib_aiUploadCaps;
+  "lib/aiUploadSession": typeof lib_aiUploadSession;
   "lib/aiUsage": typeof lib_aiUsage;
   "lib/apiKeyAuth": typeof lib_apiKeyAuth;
   "lib/apiKeys": typeof lib_apiKeys;
