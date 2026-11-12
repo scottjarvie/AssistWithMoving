@@ -1268,6 +1268,8 @@ it("R4 stop-on-error does not read a later URL after the first target refusal", 
   expect(await f.t.run(ctx => ctx.db.query("usageCounters").first())).toMatchObject({ reservedBytes: 0, inFlight: 0 });
 });
 
+// This bulk test erases 1,001 sessions through real Convex-test DB/claim work.
+// Measured at 3.4s alone and up to 6.9s in a loaded suite; allow 15s here.
 it("R4 household session erasure does not schedule one recount per session", async () => {
   const f = await fixture({ transactionLimits: true });
   for (let n = 0; n < 1001; n += 500) await f.t.run(async ctx => { for (let i = n; i < Math.min(n + 500, 1001); i++) await ctx.db.insert("photoUploadSessions", { ...f.sessionArgs(`legacy-session-${i}`, 1), status: "authorized", usageOwnerId: f.owner, createdByUserId: f.owner, createdAt: 1, updatedAt: 1 }); });
@@ -1276,7 +1278,7 @@ it("R4 household session erasure does not schedule one recount per session", asy
   expect(await f.t.run(ctx => ctx.db.query("photoUploadSessions").first())).toBeNull();
   expect(await f.t.run(ctx => ctx.db.query("sessionDeletionJobs").collect())).toHaveLength(1001);
   expect(await f.t.run(async ctx => (await ctx.db.system.query("_scheduled_functions").collect()).filter(row => row.name.includes("usageLimitsStorage:recomputeStep")))).toHaveLength(1);
-});
+}, 15000);
 
 
 async function approveBucket(f: Awaited<ReturnType<typeof fixture>>) {
