@@ -5,7 +5,7 @@ import type { Doc } from "./_generated/dataModel";
 const sources = ["itemPhotos", "photoUploadSessions", "generatedObjects", "storageDeletionJobs", "sessionDeletionJobs", "uploadObjectClaims", "usageInventoryObjects"] as const;
 type Source = typeof sources[number];
 type Row = {
-  store: "b2-private"; bucketRole: "private"; key: string; versionId: null;
+  store: "b2-private"; bucketRole: "private"; key: string; versionId: string | null;
   expectedBytes: number | null; ownerRef: string | null; recordRef: string;
   role: "original" | "copy" | "generated" | "session" | "retained";
   state: "live" | "archived" | "pending" | "deleting";
@@ -18,14 +18,14 @@ async function references(ctx: QueryCtx, source: Source, document: Doc<Source>) 
   const rows: Row[] = [];
   // This installation has one private B2 store. Stored bucket values are never
   // returned; the operator binds the logical role to its configured bucket.
-  const add = (key: string | undefined, size: unknown, ownerRef: string | null, role: Row["role"], state: Row["state"]) => {
-    if (key) rows.push({ store: "b2-private", bucketRole: "private", key, versionId: null, expectedBytes: bytes(size), ownerRef, recordRef: document._id, role, state });
+  const add = (key: string | undefined, size: unknown, ownerRef: string | null, role: Row["role"], state: Row["state"], versionId?: string) => {
+    if (key) rows.push({ store: "b2-private", bucketRole: "private", key, versionId: versionId ?? null, expectedBytes: bytes(size), ownerRef, recordRef: document._id, role, state });
   };
   if (source === "itemPhotos") {
     const d = document as Doc<"itemPhotos">;
     const charged = await owner(ctx, d);
     const state = d.pendingStorageDeletion ? "deleting" : d.archivedAt !== undefined ? "archived" : "live";
-    add(d.originalStorageKey, d.sizeBytes, charged, "original", state);
+    add(d.originalStorageKey, d.sizeBytes, charged, "original", state, d.audioVersionId);
     for (const variant of ["thumb", "card", "detail", "full"] as const) add(d.derivativeRefs[variant], d.derivativeSizes?.[variant], charged, "copy", state);
   } else if (source === "photoUploadSessions") {
     const d = document as Doc<"photoUploadSessions">;
@@ -33,7 +33,7 @@ async function references(ctx: QueryCtx, source: Source, document: Doc<Source>) 
     if (!d.cleanupCompletedAt) {
       const charged = await owner(ctx, d);
       const state = d.status === "completed" ? "live" : d.status === "authorized" ? "pending" : "archived";
-      add(d.originalStorageKey, d.expectedSizeBytes, charged, "session", state);
+      add(d.originalStorageKey, d.expectedSizeBytes, charged, "session", state, d.audioVersionId);
       for (const ref of d.derivativeUploads ?? []) add(ref.storageKey, ref.expectedSizeBytes, charged, "session", state);
     }
   } else if (source === "generatedObjects") {
@@ -43,7 +43,7 @@ async function references(ctx: QueryCtx, source: Source, document: Doc<Source>) 
     const d = document as Doc<"storageDeletionJobs"> | Doc<"sessionDeletionJobs">;
     // The refs array is authoritative; original/derivative fields are indexes
     // into it. Deleted receipts are historical metadata, not retained bytes.
-    for (const ref of d.refs) if (!ref.deleted) add(ref.storageKey, ref.bytes, d.ownerId, "retained", "deleting");
+    for (const ref of d.refs) if (!ref.deleted) add(ref.storageKey, ref.bytes, d.ownerId, "retained", "deleting", ref.versionId);
   } else if (source === "uploadObjectClaims") {
     const d = document as Doc<"uploadObjectClaims">;
     const session = d.sessionId ? await ctx.db.get(d.sessionId) : null;
@@ -80,6 +80,8 @@ async function digest(previous: string, value: unknown) {
  * Concurrent writes require a second pass. Exports are inline database text,
  * not object-store references; capture/queue records link to itemPhotos.
  * movePurges holds traversal state only; its retained bytes live in deletion jobs.
+ * Cloudflare Images objects identified by itemPhotos.cloudflareImageId are
+ * excluded: the operator contract has no store binding for that provider.
  * No Convex file storage is used by this application.
  */
 export const manifestPage = internalQuery({

@@ -16,10 +16,10 @@ async function fixture() {
     const household = await ctx.db.insert("households", { name: "Placeholder", ownerUserId: owner, createdByUserId: owner, createdAt: 0, updatedAt: 0 });
     const move = await ctx.db.insert("moves", { householdId: household, title: "Placeholder", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: owner, createdAt: 0, updatedAt: 0 });
     const photo = { householdId: household, moveId: move, originalStorageKey: "placeholder/shared", originalBucket: "placeholder-bucket", derivativeRefs: { thumb: "placeholder/thumb", card: "placeholder/card", detail: "placeholder/detail", full: "placeholder/full" }, derivativeSizes: { thumb: 1, card: 2, detail: 3, full: 4 }, documentationProfileTypes: [], mimeType: "image/jpeg", sizeBytes: 10, photoType: "other" as const, privacyLevel: "normal" as const, visibilityScope: "moveCollaborators" as const, source: "manualUpload" as const, exifHandlingStatus: "pending" as const, confidence: "none" as const, verificationStatus: "unreviewed" as const, aiProcessed: false, uploadedByUserId: uploader, createdAt: 0, updatedAt: 0 };
-    const photoId = await ctx.db.insert("itemPhotos", photo);
-    await ctx.db.insert("itemPhotos", { ...photo, derivativeRefs: {}, mediaKind: "audio", audioKind: "voicenote", audioVersionId: "placeholder-version", mimeType: "audio/webm" });
+    const photoId = await ctx.db.insert("itemPhotos", { ...photo, cloudflareImageId: "placeholder-provider-image" });
+    const audioPhotoId = await ctx.db.insert("itemPhotos", { ...photo, derivativeRefs: {}, mediaKind: "audio", audioKind: "voicenote", audioVersionId: "placeholder-version", mimeType: "audio/webm" });
     await ctx.db.insert("itemPhotos", { ...photo, originalStorageKey: "placeholder/video", derivativeRefs: {}, mediaKind: "video", pendingStorageDeletion: true });
-    const sessionId = await ctx.db.insert("photoUploadSessions", { householdId: household, moveId: move, originalStorageKey: "placeholder/session", originalBucket: "placeholder-bucket", expectedMimeType: "audio/webm", expectedSizeBytes: 12, mediaKind: "audio", audioKind: "audio", derivativeUploads: [{ variant: "thumb", storageKey: "placeholder/session-copy", bucket: "placeholder-bucket", expectedMimeType: "image/jpeg", expectedSizeBytes: 2, width: 1, height: 1 }], status: "authorized", expiresAt: 100, createdByUserId: uploader, createdAt: 0, updatedAt: 0 });
+    const sessionId = await ctx.db.insert("photoUploadSessions", { householdId: household, moveId: move, originalStorageKey: "placeholder/session", originalBucket: "placeholder-bucket", expectedMimeType: "audio/webm", expectedSizeBytes: 12, mediaKind: "audio", audioKind: "audio", audioVersionId: "placeholder-session-version", derivativeUploads: [{ variant: "thumb", storageKey: "placeholder/session-copy", bucket: "placeholder-bucket", expectedMimeType: "image/jpeg", expectedSizeBytes: 2, width: 1, height: 1 }], status: "authorized", expiresAt: 100, createdByUserId: uploader, createdAt: 0, updatedAt: 0 });
     await ctx.db.insert("generatedObjects", { ownerId: owner, photoId, bucket: "placeholder-bucket", storageKey: "placeholder/generated", bytes: 3, state: "pending", createdAt: 0 });
     const refs = [{ bucket: "placeholder-bucket", storageKey: "placeholder/retained", bytes: 4, deleted: false }, { bucket: "placeholder-bucket", storageKey: "placeholder/removed", bytes: 4, deleted: true }];
     await ctx.db.insert("storageDeletionJobs", { photoId, ownerId: owner, bytes: 8, refs, status: "pending", updatedAt: 0 });
@@ -27,7 +27,7 @@ async function fixture() {
     await ctx.db.insert("uploadObjectClaims", { sessionId, deletionJobId: jobId, storageKey: "placeholder/retained-session" });
     await ctx.db.insert("uploadObjectClaims", { storageKey: "placeholder/unowned" });
     await ctx.db.insert("usageInventoryObjects", { scanId: "placeholder", ownerId: owner, bucket: "placeholder-bucket", storageKey: "placeholder/inventory", firstPage: "placeholder", bytes: 5, unknown: false, missing: false, expiresAt: 100 });
-    return { owner, photoId };
+    return { owner, photoId, audioPhotoId };
   });
   return { t, ...ids };
 }
@@ -56,11 +56,12 @@ it("lists every reference without merging shared objects, and splits one documen
   expect(new Set(small.rows.map(r => r.state))).toEqual(new Set(["live", "pending", "deleting", "archived"]));
   for (const row of small.rows) {
     expect(Object.keys(row).sort()).toEqual(["store", "bucketRole", "key", "versionId", "expectedBytes", "ownerRef", "recordRef", "role", "state"].sort());
-    expect(row.versionId).toBeNull();
+    expect(row.versionId).toBe(row.recordRef === f.audioPhotoId ? "placeholder-version" : row.key === "placeholder/session" ? "placeholder-session-version" : null);
     expect(row.ownerRef).toBe(row.key === "placeholder/unowned" ? null : f.owner);
     expect(row.bucketRole).toBe("private");
   }
   expect(small.rows.some(r => r.key === "placeholder/removed")).toBe(false);
+  expect(JSON.stringify(small.rows)).not.toContain("placeholder-provider-image");
   const before = large.revision;
   await f.t.run(ctx => ctx.db.patch(f.photoId, { sizeBytes: 11, updatedAt: 1 }));
   expect((await walk(f.t, 200)).revision).not.toBe(before);
@@ -119,4 +120,30 @@ it("uses one paginated source read, bounded attribution reads, and no writable o
     cursor = page.nextCursor;
   }
   throw new Error("Paging did not terminate");
+});
+
+it("preserves separate retained versions of a key in both job tables without pinning key-only claims", async () => {
+  const f = await fixture();
+  await f.t.run(async ctx => {
+    for (const table of ["storageDeletionJobs", "sessionDeletionJobs"] as const) {
+      const job = (await ctx.db.query(table).collect())[0];
+      const ref = job.refs[0];
+      await ctx.db.patch(job._id, { refs: [
+        { ...ref, versionId: "placeholder-version-a", bytes: 4 },
+        { ...ref, versionId: "placeholder-version-b", bytes: 7 },
+        { ...ref, versionId: "placeholder-version-removed", deleted: true },
+      ] });
+    }
+  });
+  const small = await walk(f.t, 1), large = await walk(f.t, 200);
+  expect(small.rows).toEqual(large.rows);
+  for (const key of ["placeholder/retained", "placeholder/retained-session"]) {
+    const retained = small.rows.filter(r => r.key === key && r.versionId !== null);
+    expect(retained.map(r => [r.versionId, r.expectedBytes])).toEqual([["placeholder-version-a", 4], ["placeholder-version-b", 7]]);
+    // The operator's physical identity includes the version, even for one key.
+    expect(new Set(retained.map(r => JSON.stringify([r.store, r.bucketRole, r.key, r.versionId]))).size).toBe(2);
+  }
+  const claim = small.rows.filter(r => r.key === "placeholder/retained-session" && r.versionId === null);
+  expect(claim).toHaveLength(1);
+  expect(small.rows.some(r => r.versionId === "placeholder-version-removed")).toBe(false);
 });
