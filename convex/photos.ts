@@ -1,9 +1,10 @@
+import { effectiveFileCap } from "./lib/aiUploadCaps";
 import { validateAudioContainer, invalidAudioFileError, audioVideoTrackError, voiceNoteTooLongError } from "./lib/media/audio";
 import { transportLimits, voiceNoteMaxSeconds } from "../shared/media-limits.mjs";
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
 import { refusalOf, personRefusal, type UploadRefusal } from "./lib/usageLimits/refusal";
 import { recordLimitEvent, recordRefusalActivity, checkBatchAdmission } from "./usageLimits";
-import { checkFileSize, effectiveFileCap, type LimitSettings } from "./lib/usageLimits/core";
+import { checkFileSize, type LimitSettings } from "./lib/usageLimits/core";
 import { siteDefaults } from "./lib/mediaStorage";
 function fileSizeFailure(kind: string, bytes: number, site: LimitSettings | null, override: LimitSettings | null) { return checkFileSize(kind, bytes, effectiveFileCap(kind, siteDefaults, site, override)); }
 import { referencedObject, claimedUploadObject } from "./storageDeletion";

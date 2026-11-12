@@ -1,3 +1,4 @@
+import { effectiveFileCap } from "./lib/aiUploadCaps";
 import { oauthClientIdFromClaims } from "./lib/mcpClientIdentity";
 import { readConnection, oauthIdentity } from "./lib/carriedAccess";
 import { recordAuditEvent } from "./lib/audit";
@@ -15,7 +16,7 @@ import { appRoleForEmail, requireAppAdmin } from "./lib/admin";
 import { billingProfileForHousehold } from "./lib/billing";
 import { requireHouseholdPermission } from "./lib/permissions";
 import { nullableLimitPatch, enforcementValidator } from "./usageLimitsSchema";
-import { nextHourStart, nextDayStart, batchVerdict, ownerReady, ownerEnforcement, aiStorage, applyStoredRemoval, applyCommit, applyRelease, applyReserve, applyStoredAddition, checkCommit, checkUpload, checkFileSize, effectiveFileCap, effectiveLimits, emptyCounters, rollBuckets, storageSummary, storageLine, usageLimitError, validateLimits, validatePlanStoredBytes, validateFileCaps, type Refusal, type UsageCounters, DEFAULT_PLAN_STORED_BYTES } from "./lib/usageLimits/core";
+import { nextHourStart, nextDayStart, batchVerdict, ownerReady, ownerEnforcement, aiStorage, applyStoredRemoval, applyCommit, applyRelease, applyReserve, applyStoredAddition, checkCommit, checkUpload, checkFileSize, effectiveLimits, emptyCounters, rollBuckets, storageSummary, storageLine, usageLimitError, validateLimits, validatePlanStoredBytes, validateFileCaps, type Refusal, type UsageCounters, DEFAULT_PLAN_STORED_BYTES } from "./lib/usageLimits/core";
 
 import { siteDefaults } from "./lib/mediaStorage";
 type Ctx = QueryCtx | MutationCtx;

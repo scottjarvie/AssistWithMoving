@@ -1,5 +1,5 @@
 import { ConvexError } from "convex/values";
-import { DEFAULT_LIMITS, effectiveFileCap } from "./usageLimits/core";
+import { DEFAULT_LIMITS, effectiveFileCap as coreFileCap } from "./usageLimits/core";
 import { siteDefaults } from "../../shared/media-limits.mjs";
 /** Reuse the canonical MCP request ceiling for the small first-party relay. */
 export const canonicalRequestBytes = 512 * 1024;
@@ -12,8 +12,8 @@ export const refusalStatus = 400;
 export function normalizeUploadBound(value: unknown, ceiling: number, fallback = ceiling): number {
   return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value >= 1 && value <= ceiling ? value : fallback;
 }
-export function relayCap(kind: string, site: Parameters<typeof effectiveFileCap>[2], override: Parameters<typeof effectiveFileCap>[3]) {
-  return normalizeUploadBound(effectiveFileCap(kind, siteDefaults, site, override), canonicalRequestBytes);
+export function relayCap(kind: string, site: Parameters<typeof coreFileCap>[2], override: Parameters<typeof coreFileCap>[3]) {
+  return Math.min(effectiveFileCap(kind, siteDefaults, site, override) ?? canonicalRequestBytes, canonicalRequestBytes);
 }
 
 export const unavailableStatus = 503;
@@ -33,6 +33,12 @@ export function decodeInline(base64: string, size: number): Uint8Array<ArrayBuff
   return bytes;
 }
 
-export function filesCap(site: Parameters<typeof effectiveFileCap>[2], override: Parameters<typeof effectiveFileCap>[3]) {
+export function filesCap(site: Parameters<typeof coreFileCap>[2], override: Parameters<typeof coreFileCap>[3]) {
   return normalizeUploadBound(override?.mcpBatchMaxItems ?? site?.mcpBatchMaxItems, uploadFilesPerCall);
+}
+
+/** Preserve every valid existing setting; invalid stored caps use the kind default. */
+export function effectiveFileCap(...args: Parameters<typeof coreFileCap>) {
+  const cap = coreFileCap(...args);
+  return cap === null ? null : normalizeUploadBound(cap, Number.MAX_SAFE_INTEGER, args[1][args[0]] ?? Number.MAX_SAFE_INTEGER);
 }

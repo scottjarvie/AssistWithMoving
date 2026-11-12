@@ -143,7 +143,7 @@ it.each([NaN, Infinity, -1, 0, 1.5, canonicalRequestBytes + 1, null, "2"])("norm
 it("caps readers use the one normalizer and do not read settings directly in the route", () => {
   const route = readFileSync("convex/aiUploads.ts", "utf8");
   expect(route).not.toContain("maxFileBytes");
-  expect(readFileSync("convex/lib/aiUploadCaps.ts", "utf8")).toContain("normalizeUploadBound(effectiveFileCap(");
+  expect(readFileSync("convex/lib/aiUploadCaps.ts", "utf8")).toContain("normalizeUploadBound(cap,");
   for (const value of [1, 3, 1000, canonicalRequestBytes]) expect(relayCap("audio", { maxFileBytes: { audio: value } }, null)).toBe(value);
 });
 it.each(["opus.webm", "opus.ogg", "aac.m4a", "tone.mp3", "tone.wav", "tone.flac", "tone.aac"])("validates %s on both new byte transports", async name => {
@@ -200,4 +200,9 @@ it("uses configured batch bounds in every allowance mode with no session or hold
   await expect(f.begin([f.input, { ...f.input, operationId: "second" }])).rejects.toMatchObject({ data: { code: "REQUEST_TOO_LARGE" } });
   expect(await f.t.run(ctx => ctx.db.query("uploadReservations").collect())).toHaveLength(0);
  }
+});
+
+it.each([NaN, Infinity, -1, 0, 1.5])("invalid stored file bound %s defaults through the real lifecycle", async value => {
+ const f = await aiFixture(); await f.t.run(ctx => ctx.db.patch(f.settings, { maxFileBytes: { voicenote: value } }));
+ const r = (await f.begin()).receipts[0]; expect(r.ok).toBe(true); expect((await f.put(r)).status).toBe(200); await f.finish(r.uploadSessionId!);
 });
