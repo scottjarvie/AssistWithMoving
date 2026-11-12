@@ -415,3 +415,14 @@ it("older upload bridges cannot bypass a bound session using an unbound actor", 
  await expect(f.t.mutation(internal.photos.tryCreateUploadBatch, { requestBytes: 0, files: [{ ...f.scope, operationId: session.operationId!.slice(`${f.moveId}:${f.member}:`.length), originalStorageKey: session.originalStorageKey, originalBucket: session.originalBucket!, expectedMimeType: session.expectedMimeType, expectedSizeBytes: session.expectedSizeBytes, audioKind: session.audioKind, mediaKind: session.mediaKind, expiresAt: session.expiresAt, apiActor }] })).rejects.toThrow();
  expect(await rowSnapshot(f)).toEqual(before);
 });
+
+it("operation ids stay opaque and a capability cannot initialize another operation", async () => {
+ const f = await aiFixture(); const input = { ...f.input, operationId: `opaque:${f.moveId}:${f.member}:suffix` };
+ const receipt = (await f.begin([input])).receipts[0]; expect((await f.put(receipt)).status).toBe(200); await f.finish(receipt.uploadSessionId!);
+ expect(await f.t.run(ctx => ctx.db.query("photoUploadSessions").collect())).toHaveLength(1);
+ expect(await f.t.run(ctx => ctx.db.query("uploadReservations").collect())).toHaveLength(1);
+ const session = (await f.t.run(ctx => ctx.db.get(receipt.uploadSessionId!)))!;
+ const { uploadActor } = await import("../../convex/lib/aiUploadSession"); const before = await rowSnapshot(f);
+ await expect(f.t.action(internal.photos.initUploadForActor, { ...f.scope, operationId: "different-operation", mimeType: input.mimeType, sizeBytes: input.sizeBytes, audioKind: input.audioKind, apiActor: uploadActor(session) })).rejects.toThrow();
+ expect(await rowSnapshot(f)).toEqual(before);
+});

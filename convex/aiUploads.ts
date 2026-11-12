@@ -134,7 +134,7 @@ async function transfer(ctx: ActionCtx, session: Doc<"photoUploadSessions">, byt
     if (digest !== upload.sha256) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "Bytes do not match the operation's SHA-256." });
     if (session.completedPhotoId || upload.transferred) return;
     await ctx.runQuery(internal.aiUploads.preflight, { principal: upload.principal, moveId: session.moveId, single: true, files: [{ operationId: session.operationId!, sizeBytes: session.expectedSizeBytes, mimeType: session.expectedMimeType, sha256: upload.sha256, audioKind: session.audioKind }] });
-    const init = await ctx.runAction(internal.photos.initUploadForActor, { householdId: session.householdId, moveId: session.moveId, apiActor: uploadActor(session), operationId: session.operationId!.split(`${session.moveId}:${session.createdByUserId}:`).pop(), mimeType: session.expectedMimeType, sizeBytes: session.expectedSizeBytes, audioKind: session.audioKind });
+    const init = await ctx.runAction(internal.photos.initUploadForActor, { householdId: session.householdId, moveId: session.moveId, apiActor: uploadActor(session), operationId: session.operationId!.slice(`${session.moveId}:${session.createdByUserId}:`.length), mimeType: session.expectedMimeType, sizeBytes: session.expectedSizeBytes, audioKind: session.audioKind });
     if (init.refusal) throw new ConvexError(init.refusal);
     if (!init.alreadyUploaded) {
       const response = await fetch(init.uploadUrl, { method: "PUT", headers: init.headers, body: bytes, redirect: "error" });

@@ -40,6 +40,7 @@ export async function requireAiUploadSession(ctx: QueryCtx | MutationCtx, args: 
   if (session) {
     const binding = session.aiUpload;
     if (!binding || !sameUploadPrincipal(principal, binding.principal) || session.moveId !== moveId || session.householdId !== access.move.householdId || session.createdByUserId !== access.policy.actor.userId) return uploadUnavailable();
+    if (args.operationId && session.operationId !== `${moveId}:${access.policy.actor.userId}:${args.operationId}`) return uploadUnavailable();
     if (args.token !== undefined && (args.token !== binding.token || binding.attemptKey !== session.originalStorageKey || ((!args.principal || !session.completedPhotoId) && Math.min(binding.expiresAt ?? session.expiresAt, session.expiresAt) <= Date.now()))) return uploadUnavailable();
     if (args.declaration && (args.declaration.sha256 !== binding.sha256 || args.declaration.width !== binding.width || args.declaration.height !== binding.height)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId already names different media." });
     if (!args.begin && !session.completedPhotoId && (session.status !== "authorized" || session.expiresAt <= Date.now())) return uploadUnavailable();
