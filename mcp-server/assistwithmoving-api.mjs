@@ -1999,7 +1999,7 @@ async function loadEvidenceMedia(config, input) {
   let audioCap = audioHint ? transportLimits.audio : undefined;
   if (audioHint && !input.dryRun && !(input.filePath && config.mediaIngress?.transport === "hosted")) {
     const context = await assistWithMovingRequest(config, { path: "uploads/policy", query: { moveId: input.moveId } });
-    audioCap = context.data?.maxFileBytes?.[input.audioKind ?? "audio"] ?? transportLimits.audio;
+    audioCap = Math.min(context.data?.maxFileBytes?.[input.audioKind ?? "audio"] ?? transportLimits.audio, transportLimits.audio);
   }
   if (input.filePath) {
     const { bytes } = await readAllowedLocalMedia({
