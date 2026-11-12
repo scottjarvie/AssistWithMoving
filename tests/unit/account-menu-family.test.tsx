@@ -9,12 +9,16 @@ describe("Moving account standard — 2026-11-12", () => {
   it("preserves destinations, first-link focus and backend role visibility", async () => {
     render(<SignedInAccountSurface {...identity} isAdmin={false} signOut={vi.fn()}/>);
     const trigger = screen.getByRole("button", {name:"Account menu"});
-    fireEvent.click(trigger);
+    fireEvent.keyDown(trigger, {key:"ArrowDown"});
     expect(await screen.findByRole("link", {name:"Connect your chosen AI"})).toHaveAttribute("href", "/settings/ai");
     expect(screen.getByRole("link", {name:"AI setup guide"})).toHaveAttribute("href", "/ai");
     expect(screen.getByRole("link", {name:"Settings"})).toHaveAttribute("href", "/settings");
     expect(screen.queryByRole("link", {name:"Admin"})).toBeNull();
     await waitFor(() => expect(screen.getByRole("link", {name:"Connect your chosen AI"})).toHaveFocus());
+    fireEvent.keyDown(document.activeElement!, {key:"End"});
+    expect(screen.getByRole("button", {name:"Sign out"})).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, {key:"Home"});
+    expect(screen.getByRole("link", {name:"Connect your chosen AI"})).toHaveFocus();
     fireEvent.keyDown(document.activeElement!, {key:"Escape"});
     await waitFor(() => expect(trigger).toHaveFocus());
   });

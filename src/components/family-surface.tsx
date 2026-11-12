@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type KeyboardEvent } from "react";
 import { usePathname } from "next/navigation";
 import { Dialog, Popover } from "radix-ui";
 import { X } from "lucide-react";
@@ -34,7 +34,16 @@ export function FamilySurface({ label, title, trigger, children, roster = false 
   }, [phone]);
   // Remounting on route/breakpoint changes closes the surface without moving focus.
   const close = () => setOpen(false);
-  const button = <Button ref={opener} size="icon-touch" variant="ghost" className={roster ? "family-all" : "rounded-full"} aria-label={label} aria-expanded={open} onPointerDown={event => { opener.current = event.currentTarget; }}>{trigger}</Button>;
+  const button = <Button ref={opener} size="icon-touch" variant="ghost" className={roster ? "family-all" : "rounded-full"} aria-label={label} aria-expanded={open} onKeyDown={event => {
+    if (!roster && (event.key === "ArrowDown" || event.key === "ArrowUp")) { event.preventDefault(); setOpen(true); }
+  }} onPointerDown={event => { opener.current = event.currentTarget; }}>{trigger}</Button>;
+  const navigateLedger = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (roster || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const targets = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("a[href], button:not(:disabled)"));
+    const index = targets.indexOf(document.activeElement as HTMLElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? targets.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + targets.length) % targets.length;
+    if (targets[next]) { event.preventDefault(); targets[next].focus(); }
+  };
   const focusFirstLink = (event: Event) => {
     const content = event.target as HTMLElement;
     const link = content.querySelector<HTMLAnchorElement>("a[href]");
@@ -44,7 +53,7 @@ export function FamilySurface({ label, title, trigger, children, roster = false 
   if (phone) return <Dialog.Root key={`${pathname}-phone`} open={open} onOpenChange={setOpen}>
     <Dialog.Trigger asChild>{button}</Dialog.Trigger>
     <Dialog.Portal><Dialog.Overlay className="family-scrim" onClick={close} />
-      <Dialog.Content aria-modal="true" onOpenAutoFocus={focusFirstLink} className={`family-sheet ${roster ? "family-roster" : "account-surface"}`} aria-describedby={undefined} onCloseAutoFocus={restore} onPointerDownOutside={event => event.preventDefault()}>
+      <Dialog.Content onKeyDown={navigateLedger} aria-modal="true" onOpenAutoFocus={focusFirstLink} className={`family-sheet ${roster ? "family-roster" : "account-surface"}`} aria-describedby={undefined} onCloseAutoFocus={restore} onPointerDownOutside={event => event.preventDefault()}>
         <div className="family-sheet-header"><Dialog.Title>{title}</Dialog.Title><Dialog.Close asChild><Button size="icon-touch" variant="ghost" aria-label="Close"><X aria-hidden="true" /></Button></Dialog.Close></div>
         <div className="family-sheet-scroll">{children(close)}</div>
       </Dialog.Content>
@@ -52,7 +61,7 @@ export function FamilySurface({ label, title, trigger, children, roster = false 
   </Dialog.Root>;
   return <Popover.Root key={`${pathname}-desktop`} open={open} onOpenChange={setOpen} modal={false}>
     <Popover.Trigger asChild>{button}</Popover.Trigger>
-    <Popover.Portal><Popover.Content onOpenAutoFocus={focusFirstLink} align="end" side={roster ? "top" : "bottom"} sideOffset={8} collisionPadding={8} className={`family-popover ${roster ? "family-roster" : "account-surface"}`} aria-label={title} onCloseAutoFocus={restore}>
+    <Popover.Portal><Popover.Content onKeyDown={navigateLedger} onOpenAutoFocus={focusFirstLink} align="end" side={roster ? "top" : "bottom"} sideOffset={8} collisionPadding={8} className={`family-popover ${roster ? "family-roster" : "account-surface"}`} aria-label={title} onCloseAutoFocus={restore}>
       {roster && <h2 className="family-roster-title">{title}</h2>}{children(close)}
     </Popover.Content></Popover.Portal>
   </Popover.Root>;
