@@ -1,4 +1,4 @@
-import { unavailableStatus } from "../../../../../convex/lib/aiUploadCaps";
+import { unavailableStatus } from "../../../../convex/lib/aiUploadCaps";
 import { localPublicAuthEnabled } from "@/lib/localLiveAuth";
 export async function PUT(request: Request) {
   if (localPublicAuthEnabled()) return new Response(null, { status: unavailableStatus });
