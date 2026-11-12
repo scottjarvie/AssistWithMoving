@@ -168,6 +168,7 @@ import type * as restApiActions from "../restApiActions.js";
 import type * as saleListings from "../saleListings.js";
 import type * as seed from "../seed.js";
 import type * as shareLinks from "../shareLinks.js";
+import type * as storageCheck from "../storageCheck.js";
 import type * as storageDeletion from "../storageDeletion.js";
 import type * as storageSizeRepair from "../storageSizeRepair.js";
 import type * as subManifests from "../subManifests.js";
@@ -349,6 +350,7 @@ declare const fullApi: ApiFromModules<{
   saleListings: typeof saleListings;
   seed: typeof seed;
   shareLinks: typeof shareLinks;
+  storageCheck: typeof storageCheck;
   storageDeletion: typeof storageDeletion;
   storageSizeRepair: typeof storageSizeRepair;
   subManifests: typeof subManifests;
