@@ -195,7 +195,7 @@ export const forHousehold = query({ args: { householdId: v.id("households") }, h
 } });
 export async function uploadPolicy(ctx: Ctx, householdId: Id<"households">) {
   const info = await limitsFor(ctx, householdId);
-  const policy = { batchLimitsEnforced: ownerEnforcement(info.effective, ownerReady(await rowFor(ctx, info.ownerId), info.site)) === "on", maxFileBytes: Object.fromEntries(["image", "audio", "video"].map(kind => [kind, effectiveFileCap(kind, siteDefaults, info.site, info.override)!])), mcpBatchMaxItems: info.effective.limits.mcpBatchMaxItems, mcpBatchMaxBytes: info.effective.limits.mcpBatchMaxBytes };
+  const policy = { batchLimitsEnforced: ownerEnforcement(info.effective, ownerReady(await rowFor(ctx, info.ownerId), info.site)) === "on", maxFileBytes: Object.fromEntries(["image", "audio", "voicenote", "video"].map(kind => [kind, effectiveFileCap(kind, siteDefaults, info.site, info.override)!])), mcpBatchMaxItems: info.effective.limits.mcpBatchMaxItems, mcpBatchMaxBytes: info.effective.limits.mcpBatchMaxBytes };
   return { ...policy, requiresOperationId: info.effective.enforcement === "on", line: uploadPolicyLine(policy) };
 }
 export const policyInternal = internalQuery({ args: { householdId: v.id("households") }, handler: (ctx, args) => uploadPolicy(ctx, args.householdId) });
@@ -314,8 +314,9 @@ export const adminSetLimits = mutation({
     await requirePersonConnectionManagement(ctx);
     const actor = await requireAppAdmin(ctx);
     if (!args.reason.trim()) throw new ConvexError("A reason is required.");
-    const numeric = Object.fromEntries(Object.entries(args.limits).filter(([key, value]) => key !== "planStoredBytes" && key !== "maxFileBytes" && value !== null));
+    const numeric = Object.fromEntries(Object.entries(args.limits).filter(([key, value]) => key !== "planStoredBytes" && key !== "maxFileBytes" && key !== "voiceNoteMaxSeconds" && value !== null));
     const errors = [...validateLimits(numeric), ...validatePlanStoredBytes(args.limits.planStoredBytes ?? {}), ...validateFileCaps(args.limits.maxFileBytes ?? {})];
+    if (args.limits.voiceNoteMaxSeconds != null && (!Number.isFinite(args.limits.voiceNoteMaxSeconds) || args.limits.voiceNoteMaxSeconds <= 0)) errors.push("Duration must be positive.");
     if (errors.length) throw new ConvexError(errors.join("; "));
     const before = args.ownerId ? await ctx.db.query("usageLimitOverrides").withIndex("by_owner", q => q.eq("ownerId", args.ownerId!)).unique() : await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique();
     const patch = { ...Object.fromEntries(Object.entries(args.limits).map(([key, value]) => [key, value === null ? undefined : (key === "planStoredBytes" || key === "maxFileBytes") ? { ...before?.[key], ...value as Record<string, number> } : value])), ...(args.enforcement !== undefined ? { enforcement: args.enforcement ?? undefined } : {}) };

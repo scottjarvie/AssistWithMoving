@@ -9,6 +9,7 @@ import { v } from "convex/values";
 export const enforcementValidator = v.union(v.literal("off"), v.literal("warn"), v.literal("on"));
 
 const limitFields = {
+  voiceNoteMaxSeconds: v.optional(v.number()),
   planStoredBytes: v.optional(v.record(v.string(), v.number())),
   maxFileBytes: v.optional(v.record(v.string(), v.number())),
   storedBytesPerUser: v.optional(v.number()),
@@ -26,6 +27,7 @@ export const limitPatchValidator = v.object(limitFields);
 /** Personal limits: a number sets one, null goes back to the site value. */
 const nullableNumber = v.optional(v.union(v.number(), v.null()));
 export const nullableLimitPatch = v.object({
+  voiceNoteMaxSeconds: nullableNumber,
   planStoredBytes: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
   maxFileBytes: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
   storedBytesPerUser: nullableNumber,

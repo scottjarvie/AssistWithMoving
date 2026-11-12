@@ -1,3 +1,4 @@
+import { canViewPhotoAssets } from "./lib/photoVisibility";
 import { queueWorkFilter } from "./lib/queue";
 import {
   reviewQueueSuggestion,
@@ -1119,5 +1120,19 @@ export const badges = query({
         ))
         if (entry.needsInput === undefined) needsYou++;
     return { suggestions, needsYou };
+  },
+});
+
+export const attachAudio = mutation({
+  args: { householdId: v.id("households"), moveId: v.id("moves"), queueItemId: v.id("queueItems"), photoId: v.id("itemPhotos") },
+  handler: async (ctx, args) => {
+    const actor = await resolveWebQueueActor(ctx, args.householdId, args.moveId, "queue:write");
+    const item = await requireQueueItem(ctx, args);
+    requireQueueItemVisible(actor, item);
+    const policy = await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:read");
+    const photo = await ctx.db.get(args.photoId);
+    if (!photo || photo.householdId !== item.householdId || photo.moveId !== item.moveId || photo.archivedAt || photo.mediaKind !== "audio" || !canViewPhotoAssets(photo, policy.visibility)) throw new ConvexError("Audio attachment not found.");
+    await ctx.db.patch(item._id, { attachmentPhotoIds: [...new Set([...(item.attachmentPhotoIds ?? []), photo._id])], updatedAt: Date.now(), version: item.version + 1 });
+    return item._id;
   },
 });

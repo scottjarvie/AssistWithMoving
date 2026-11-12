@@ -114,6 +114,12 @@ export const handle = internalAction({
   },
   handler: async (ctx, args): Promise<RestResponse> => {
     const segments = parseRestPath(args.path);
+    if (segments[0] === "uploads" && segments[1] === "policy" && args.method === "GET") {
+      const moveId = requiredId<"moves">(args.query.moveId, "moveId is required.");
+      const auth = await authenticateAction(ctx, args, moveId);
+      if (!auth.ok || !auth.auth) return auth.response ?? unknownAuthError();
+      return restOk({ data: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: auth.auth.householdId }) });
+    }
     if (segments[0] === "uploads" && segments[1] === "batch" && args.method === "POST") return handleUploadBatch(ctx, args);
     if (segments[0] === "uploads" && segments[1] === "init" && args.method === "POST") {
       return (await handleUploadInit(ctx, args)) as RestResponse;
@@ -177,6 +183,12 @@ async function handlePhotoDisplayUrl(
   };
 
   return await withActionRateLimit(ctx, args, auth, async () => {
+    const photo = await ctx.runQuery(internal.photos.getPhotoForDeliveryForApiActor, { householdId: auth.householdId, moveId, photoId });
+    if (photo.photo.mediaKind === "audio") {
+      const creator = await ctx.runQuery(internal.audioPlayback.keySubject, { apiKeyId: auth.apiKeyId });
+      const playback = await ctx.runMutation(internal.audioPlayback.mint, { photoId, subject: creator, apiKeyId: auth.apiKeyId, agent: true });
+      return restOk({ data: { ...playback, mediaKind: "audio" } });
+    }
     const requested = optionalString(args.query.variant);
     const variant: DisplayUrlVariant =
       requested && displayUrlVariants.has(requested as DisplayUrlVariant)
@@ -217,6 +229,7 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
         spaceId: optionalId<"moveSpaces">(body.spaceId),
         transportResourceId: optionalId<"transportResources">(body.transportResourceId),
         transportZoneId: optionalId<"transportZones">(body.transportZoneId), room: optionalString(body.room),
+        audioKind: body.audioKind === "voicenote" ? "voicenote" : undefined,
         mimeType: requiredString(body.mimeType, "mimeType is required."), sizeBytes: requiredNumber(body.sizeBytes, "sizeBytes is required."),
         derivatives: parseDerivativeUploads(body.derivatives),
         apiActor: { apiKeyId: String(auth.apiKeyId), createdByUserId: auth.createdByUserId, acknowledgeContactDetails: body.acknowledgeContactDetails as { emails: number; phones: number; addresses: number } | undefined, restorePrivately: body.restorePrivately as boolean | undefined },
@@ -547,6 +560,16 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         },
       });
       if (session.completedPhotoId) return restOk({ data: { photoId: session.completedPhotoId, uploadSessionId, derivativeStatus: session.completedPhoto?.derivativeStatus, derivativeError: session.completedPhoto?.derivativeError, derivativeNote: derivativeNoteForStatus(session.completedPhoto?.derivativeStatus), derivativeVariants: derivativeVariantsForStatus(session.completedPhoto?.derivativeStatus), storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: auth.householdId }) } }, 201);
+      if (session.mediaKind === "audio") {
+        const result = await ctx.runAction(internal.photos.finalizeUploadForActor, {
+          householdId: auth.householdId, moveId, uploadSessionId,
+          caption: optionalString(body.caption), notes: optionalString(body.notes), originalHash: optionalString(body.originalHash),
+          privacyLevel: optionalPrivacyLevel(body.privacyLevel), visibilityScope: optionalVisibilityScope(body.visibilityScope), source: optionalPhotoSource(body.source) ?? "api",
+          apiActor: { apiKeyId: String(auth.apiKeyId), createdByUserId: auth.createdByUserId },
+        });
+        if (result.refusal) return { status: 413, body: { error: result.refusal } };
+        return restOk({ data: { ...result, uploadSessionId } }, 201);
+      }
       await ctx.runMutation(internal.photos.startFinalize, { householdId: auth.householdId, moveId, uploadSessionId, apiActor: { apiKeyId: String(auth.apiKeyId), createdByUserId: auth.createdByUserId } });
       await assertUploadedObject(config.bucketName, session.originalStorageKey, {
         sizeBytes: session.expectedSizeBytes,

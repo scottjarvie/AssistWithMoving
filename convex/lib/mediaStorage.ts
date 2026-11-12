@@ -1,3 +1,4 @@
+import { AUDIO_TYPES, normalizeAudioMime } from "./media/audio";
 import { checkFileSize, formatBytes } from "./usageLimits/core";
 export const mediaKinds = ["image", "audio", "video"] as const;
 
@@ -9,14 +10,7 @@ export const allowedImageMimeTypes = [
   "image/webp",
 ] as const;
 
-export const allowedAudioMimeTypes = [
-  "audio/mpeg",
-  "audio/mp4",
-  "audio/aac",
-  "audio/wav",
-  "audio/webm",
-  "audio/ogg",
-] as const;
+export const allowedAudioMimeTypes = AUDIO_TYPES;
 
 export const allowedVideoMimeTypes = [
   "video/mp4",
@@ -47,7 +41,8 @@ export type NormalizedUploadFileShape = UploadFileShape & {
 };
 
 export function normalizeMimeType(mimeType: string) {
-  return mimeType.trim().toLowerCase().split(";")[0] ?? "";
+  const base = mimeType.trim().toLowerCase().split(";")[0] ?? "";
+  return base.startsWith("video/") ? base : normalizeAudioMime(base) ?? base;
 }
 
 export function mediaKindForMimeType(mimeType: string): MediaKind | null {
@@ -156,6 +151,8 @@ export function fileExtensionForMediaMimeType(mimeType: string) {
       return "m4a";
     case "audio/aac":
       return "aac";
+    case "audio/flac":
+      return "flac";
     case "audio/wav":
       return "wav";
     case "audio/webm":

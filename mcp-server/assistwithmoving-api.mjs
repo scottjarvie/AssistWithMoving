@@ -1,3 +1,4 @@
+import { normalizeAudioMime, sniffAudioType, validateAudioContainer, invalidAudioFileError, audioVideoTrackError } from "../shared/audio.mjs";
 import { mcpLimitText } from "../shared/usage-limits.mjs";
 import { transportLimits } from "../shared/media-limits.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -239,6 +240,7 @@ export async function getInlineImages(config, input) {
   }
 
   const images = [];
+  const audio = [];
   for (const photo of selected) {
     try {
       const urlResponse = await getPhotoDisplayUrl(config, {
@@ -247,6 +249,11 @@ export async function getInlineImages(config, input) {
         variant,
       });
       const info = urlResponse?.data ?? urlResponse ?? {};
+      if (info.mediaKind === "audio") {
+        const origin = new URL(config.baseUrl).origin;
+        audio.push({ photoId: photo.photoId, ...info, url: new URL(info.url, origin).href, transcript: info.transcript ?? null, instruction: "Listen to this private audio attachment. No automatic transcript is available." });
+        continue;
+      }
       if (!info.url) throw new Error("No display URL returned.");
       const fetched = await fetchImageAsBase64(info.url);
       images.push({
@@ -267,7 +274,7 @@ export async function getInlineImages(config, input) {
       });
     }
   }
-  return { moveId, variant, requested: selected.length, images };
+  return { moveId, variant, requested: selected.length, images, audio };
 }
 
 export function textResult(data) {
@@ -285,7 +292,7 @@ export function toolErrorResult(error) {
   const refusal = error?.payload?.error ?? error?.data ?? error?.structuredContent;
   if (refusal?.code === "USAGE_LIMIT_REACHED") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: (refusal.batchTotalUnknown ? mcpLimitText(refusal).replace("needs ", "needs at least ") + " The full batch total is unknown." : mcpLimitText(refusal)) }] };
   if (refusal?.code === "FILE_TOO_LARGE") return { isError: true, structuredContent: refusal, content: [{ type: "text", text: `${refusal.kind} file too large: ${refusal.got} bytes; maximum ${refusal.max} bytes.` }] };
-  if (["REQUEST_TOO_LARGE", "OPERATION_ID_REQUIRED", "OPERATION_CONFLICT"].includes(refusal?.code)) return { isError: true, structuredContent: refusal, content: [{ type: "text", text: refusal.message }] };
+  if (["AUDIO_TOO_LONG", "INVALID_AUDIO_CONTAINER", "AUDIO_HAS_VIDEO", "REQUEST_TOO_LARGE", "OPERATION_ID_REQUIRED", "OPERATION_CONFLICT"].includes(refusal?.code)) return { isError: true, structuredContent: refusal, content: [{ type: "text", text: refusal.message }] };
   return {
     isError: true,
     content: [
@@ -1407,8 +1414,15 @@ export async function startPhotoUpload(config, input) {
 
 export async function uploadEvidenceFile(config, input) {
   const media = await loadEvidenceMedia(config, input);
-  const requestedMimeType = normalizeMimeType(input.mimeType ?? media.mimeType);
-  const detectedMimeType = sniffMimeType(media.bytes);
+  const requestedMimeType = audioMimeHint(input.mimeType ?? media.mimeType ?? "") ?? normalizeMimeType(input.mimeType ?? media.mimeType);
+  if (requestedMimeType?.startsWith("audio/")) {
+    const result = await validateAudioContainer(new Uint8Array(media.bytes.buffer, media.bytes.byteOffset, media.bytes.byteLength), requestedMimeType);
+    if (!result.valid) {
+      const data = result.reason === "video-track" ? audioVideoTrackError("ai") : invalidAudioFileError("ai");
+      throw Object.assign(new Error(data.message), { data });
+    }
+  }
+  const detectedMimeType = requestedMimeType?.startsWith("audio/") ? requestedMimeType : sniffMimeType(media.bytes);
   if (!detectedMimeType) {
     throw new Error(
       "Could not verify the media type from its file signature. Use a supported JPEG, PNG, WebP, MP3, MP4/MOV, AAC, WAV, WebM, or Ogg file.",
@@ -1433,6 +1447,7 @@ export async function uploadEvidenceFile(config, input) {
   const originalHash =
     input.originalHash ?? createHash("sha256").update(media.bytes).digest("hex");
   const sessionBody = {
+    audioKind: input.audioKind,
     operationId: input.operationId ?? input.idempotencyKey,
     moveId: input.moveId,
     itemId: input.itemId,
@@ -1980,12 +1995,19 @@ async function loadEvidenceMedia(config, input) {
     throw new Error("Provide exactly one of filePath or sourceUrl.");
   }
 
+  const audioHint = audioMimeHint(input.mimeType ?? mimeTypeForFilename(input.fileName ?? input.filePath ?? new URL(input.sourceUrl ?? "https://example.invalid").pathname) ?? "");
+  let audioCap = audioHint ? transportLimits.audio : undefined;
+  if (audioHint && !input.dryRun && !(input.filePath && config.mediaIngress?.transport === "hosted")) {
+    const context = await assistWithMovingRequest(config, { path: "uploads/policy", query: { moveId: input.moveId } });
+    audioCap = Math.min(context.data?.maxFileBytes?.[input.audioKind ?? "audio"] ?? transportLimits.audio, transportLimits.audio);
+  }
   if (input.filePath) {
     const { bytes } = await readAllowedLocalMedia({
       filePath: input.filePath,
       transport: config.mediaIngress?.transport,
       allowedFileRoots: config.mediaIngress?.allowedFileRoots,
-      maxBytes: transportLimits.video,
+      maxBytes: audioCap === undefined ? transportLimits.video : Math.min(audioCap, transportLimits.video),
+      fileKind: audioHint ? (input.audioKind ?? "audio") : undefined,
     });
     return {
       bytes,
@@ -1993,13 +2015,15 @@ async function loadEvidenceMedia(config, input) {
       fileName: input.fileName ?? path.basename(input.filePath),
       mimeType:
         input.mimeType ??
+        audioHint ??
         sniffMimeType(bytes) ??
         mimeTypeForFilename(input.fileName ?? input.filePath),
     };
   }
 
   const remote = await downloadPublicHttpsMedia(input.sourceUrl, {
-    maxBytes: transportLimits.image,
+    maxBytes: audioCap === undefined ? transportLimits.image : Math.min(audioCap, transportLimits.image),
+    fileKind: audioHint ? (input.audioKind ?? "audio") : undefined,
   });
   const bytes = remote.bytes;
   const url = remote.finalUrl;
@@ -2046,6 +2070,8 @@ function mimeTypeForFilename(filename) {
       return "audio/mpeg";
     case ".m4a":
       return "audio/mp4";
+    case ".flac":
+      return "audio/flac";
     case ".aac":
       return "audio/aac";
     case ".wav":
@@ -2086,27 +2112,8 @@ function sniffMimeType(bytes) {
     }
     if (bytes.toString("ascii", 4, 8) === "ftyp") {
       const majorBrand = bytes.toString("ascii", 8, 12);
-      if (["M4A ", "M4B ", "M4P "].includes(majorBrand)) return "audio/mp4";
       return majorBrand === "qt  " ? "video/quicktime" : "video/mp4";
     }
-  }
-  if (bytes.length >= 3 && bytes.toString("ascii", 0, 3) === "ID3") {
-    return "audio/mpeg";
-  }
-  if (bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF") {
-    const riffType = bytes.toString("ascii", 8, 12);
-    if (riffType === "WAVE") return "audio/wav";
-  }
-  if (
-    bytes.length >= 2 &&
-    bytes[0] === 0xff &&
-    (bytes[1] & 0xe0) === 0xe0 &&
-    ((bytes[1] >> 1) & 0x03) !== 0
-  ) {
-    return "audio/mpeg";
-  }
-  if (bytes.length >= 4 && bytes.toString("ascii", 0, 4) === "OggS") {
-    return "audio/ogg";
   }
   if (
     bytes.length >= 4 &&
@@ -2117,10 +2124,7 @@ function sniffMimeType(bytes) {
   ) {
     return "video/webm";
   }
-  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xf6) === 0xf0) {
-    return "audio/aac";
-  }
-  return undefined;
+  return sniffAudioType(bytes) ?? undefined;
 }
 
 function mediaMimeTypesCompatible(requestedMimeType, detectedMimeType) {
@@ -2608,3 +2612,5 @@ export async function restoreArchivedAssignment(config, input) {
 export function addQueueItem(config,input){return assistWithMovingRequest(config,{method:"POST",path:`/moves/${input.moveId}/queue`,body:input,idempotencyKey:input.operationId});}
 export function listQueueSuggestions(config,input){return assistWithMovingRequest(config,{method:"GET",path:`/moves/${input.moveId}/queue/suggestions`,query:{archived:input.archived?"true":undefined,cursor:input.cursor,limit:input.limit}});}
 export function withdrawQueueSuggestion(config,input){return assistWithMovingRequest(config,{method:"POST",path:`/moves/${input.moveId}/queue/${input.queueItemId}/withdraw`,body:input,idempotencyKey:input.operationId});}
+
+function audioMimeHint(value) { return String(value).trim().toLowerCase().startsWith("video/") ? null : normalizeAudioMime(value); }

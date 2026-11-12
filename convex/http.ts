@@ -1,3 +1,4 @@
+import { audioResponse } from "./lib/audioResponse";
 import { legacyUploadResponse } from "./lib/legacyUploadResponse";
 import { formatBytes } from "./lib/usageLimits/core";
 import { transportLimits } from "../shared/media-limits.mjs";
@@ -38,6 +39,14 @@ import { oauthClientIdFromClaims, resolveClientIdentity } from "./lib/mcpClientI
 import type { GrantDecisionInput as LegacyGrantDecisionRow } from "./lib/aiGrants";
 
 const http = httpRouter();
+http.route({ path: "/audio/playback", method: "GET", handler: httpAction(async (ctx, request) => {
+  const token = new URL(request.url).searchParams.get("token");
+  if (!token) return new Response(null, { status: 404, headers: { "Cache-Control": "private, no-store" } });
+  try {
+    const source = await ctx.runAction(generatedInternal.photos.audioStorageUrl, { token });
+    return await audioResponse(request, source.length, source.mimeType, range => fetch(source.url, { headers: range ? { Range: range } : {}, cache: "no-store" }));
+  } catch { return new Response(null, { status: 403, headers: { "Cache-Control": "private, no-store" } }); }
+}) });
 
 const allowedDirectImageMimeTypes = new Set([
   "image/jpeg",

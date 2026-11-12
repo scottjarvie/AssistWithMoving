@@ -9,7 +9,7 @@ export async function legacyUploadResponse(response: Response): Promise<Response
     const result = envelope.result;
     if (result?.isError === false && result.content?.[0]?.type === "text") {
       const data = JSON.parse(result.content[0].text);
-      if (data?.isError === true && ["USAGE_LIMIT_REACHED", "FILE_TOO_LARGE", "REQUEST_TOO_LARGE", "OPERATION_ID_REQUIRED", "OPERATION_CONFLICT"].includes(data.structuredContent?.code)) envelope.result = aiRefusal(data.structuredContent as UploadRefusal);
+      if (data?.isError === true && ["AUDIO_TOO_LONG", "INVALID_AUDIO_CONTAINER", "AUDIO_HAS_VIDEO", "USAGE_LIMIT_REACHED", "FILE_TOO_LARGE", "REQUEST_TOO_LARGE", "OPERATION_ID_REQUIRED", "OPERATION_CONFLICT"].includes(data.structuredContent?.code)) envelope.result = aiRefusal(data.structuredContent as UploadRefusal);
     }
     return JSON.stringify(envelope);
   };

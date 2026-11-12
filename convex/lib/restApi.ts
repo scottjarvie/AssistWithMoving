@@ -220,7 +220,7 @@ export function requiredScopesForRestRoute({
   if (segments[0] === "me" && method === "GET") {
     return ["moves/read"];
   }
-  if (segments[0] === "uploads" && method === "POST") {
+  if (segments[0] === "uploads" && (method === "POST" || (method === "GET" && segments[1] === "policy"))) {
     return ["photos/write"];
   }
   if (

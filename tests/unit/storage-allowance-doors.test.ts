@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 // @vitest-environment node
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
@@ -14,7 +15,7 @@ const storage = vi.hoisted(() => ({ objects: new Map<string, { bytes: Uint8Array
 vi.mock("@aws-sdk/client-s3", async importOriginal => {
   const real = await importOriginal<typeof import("@aws-sdk/client-s3")>();
   return { ...real, S3Client: class {
-    async send(command: { constructor: { name: string }; input: { Key: string; Body?: Uint8Array; ContentType?: string; VersionId?: string } }) {
+    async send(command: { constructor: { name: string }; input: { Key: string; Body?: Uint8Array; ContentType?: string; VersionId?: string; Range?: string } }) {
       const key = command.input.Key, object = storage.objects.get(key);
       if (command.constructor.name === "HeadObjectCommand") await storage.onHead?.(key);
       if (command.constructor.name === "HeadObjectCommand" && storage.failHead.has(key)) throw Object.assign(new Error("Synthetic metadata outage"), { name: "ServiceUnavailable" });
@@ -22,7 +23,12 @@ vi.mock("@aws-sdk/client-s3", async importOriginal => {
       if (command.constructor.name === "DeleteObjectCommand") { if (storage.failDelete) throw new Error("Synthetic delete failure"); expect(command.input.VersionId).toBeTruthy(); storage.deletes.push(key); storage.objects.delete(key); if (storage.revealOlder) storage.objects.set(key, { bytes: new Uint8Array(1), mime: "image/png", version: "unknown-older-version" }); return {}; }
       if (!object || (command.input.VersionId && object.version !== command.input.VersionId)) throw Object.assign(new Error("Synthetic missing object"), { name: "NotFound" });
       if (command.constructor.name === "HeadObjectCommand") return { ContentLength: object.bytes.byteLength, ContentType: object.mime, VersionId: object.version };
-      if (command.constructor.name === "GetObjectCommand") return { Body: object.bytes };
+      if (command.constructor.name === "GetObjectCommand") {
+        if (!command.input.Range) return { Body: object.bytes };
+        const match = /bytes=(\d+)-(\d+)/.exec(command.input.Range)!;
+        const bytes = object.bytes.subarray(Number(match[1]), Number(match[2]) + 1);
+        return { ContentLength: bytes.length, Body: { transformToByteArray: async () => bytes } };
+      }
       throw new Error(`Unmocked storage command ${command.constructor.name}`);
     }
   } };
@@ -573,17 +579,18 @@ it("turning enforcement on through the real admin mutation refuses the next publ
 });
 
 it.each(["audio/mpeg", "video/mp4"])("%s uses the same charged deletion ledger and regains room", async mimeType => {
-  const f = await fixture({ cap: 20 });
-  const begin = await f.person.action(api.photos.initUpload, { ...f.beginArgs(`media-${mimeType}`, 20), mimeType });
-  const key = decodeURIComponent(new URL(begin.uploadUrl).pathname.slice(1)); storage.objects.set(key, { bytes: new Uint8Array(20), mime: mimeType, version: "media-version" });
+  const bytes = mimeType === "audio/mpeg" ? new Uint8Array(readFileSync("tests/fixtures/audio/tone.mp3")) : new Uint8Array(20);
+  const f = await fixture({ cap: bytes.length });
+  const begin = await f.person.action(api.photos.initUpload, { ...f.beginArgs(`media-${mimeType}`, bytes.length), mimeType });
+  const key = decodeURIComponent(new URL(begin.uploadUrl).pathname.slice(1)); storage.objects.set(key, { bytes, mime: mimeType, version: "media-version" });
   const done = await f.person.action(api.photos.finalizeUpload, { householdId: f.householdId, moveId: f.moveId, uploadSessionId: begin.uploadSessionId as import("../../convex/_generated/dataModel").Id<"photoUploadSessions"> });
   const photoId = done.photoId as import("../../convex/_generated/dataModel").Id<"itemPhotos">;
-  expect((await f.summary()).usedBytes).toBe(20);
+  expect((await f.summary()).usedBytes).toBe(bytes.length);
   await f.t.run(ctx => ctx.db.patch(photoId, { pendingStorageDeletion: true, archivedAt: Date.now() }));
   vi.setSystemTime(begin.expiresAt + 1);
   expect(await deletePhotoAndSettle(f, { photoId, dryRun: false })).toMatchObject({ deleted: true });
   expect((await f.summary()).usedBytes).toBe(0);
-  await f.person.action(api.photos.initUpload, { ...f.beginArgs(`next-${mimeType}`, 20), mimeType });
+  await f.person.action(api.photos.initUpload, { ...f.beginArgs(`next-${mimeType}`, bytes.length), mimeType });
 });
 
 it.each(["thumb", "card", "detail", "full"] as const)("a photo's %s reference protects an otherwise deletable object", async variant => {

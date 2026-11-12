@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -153,9 +154,9 @@ describe("MCP media ingress policy", () => {
   });
 
   it.each([
-    { name: "voice-note.m4a", mimeType: "audio/mp4", bytes: Buffer.from([0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20]) },
-    { name: "voice-note.weba", mimeType: "audio/webm", bytes: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x00]) },
-    { name: "voice-note.mp3", mimeType: "audio/mpeg", bytes: Buffer.from([0xff, 0xfb, 0x90, 0x64]) },
+    { name: "voice-note.m4a", mimeType: "audio/mp4", bytes: readFileSync("tests/fixtures/audio/aac.m4a") },
+    { name: "voice-note.weba", mimeType: "audio/webm", bytes: readFileSync("tests/fixtures/audio/opus.webm") },
+    { name: "voice-note.mp3", mimeType: "audio/mpeg", bytes: readFileSync("tests/fixtures/audio/tone.mp3") },
   ])("keeps advertised $mimeType local media compatible with signature checks", async ({ name, mimeType, bytes }) => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-media-compat-"));
     const filePath = path.join(tempDir, name);
@@ -163,5 +164,33 @@ describe("MCP media ingress policy", () => {
     try {
       await expect(uploadEvidenceFile(apiConfig({ transport: "stdio", allowedFileRoots: [tempDir] }), { moveId: "move1", filePath, mimeType, dryRun: true })).resolves.toMatchObject({ media: { mimeType } });
     } finally { await rm(tempDir, { recursive: true, force: true }); }
+  });
+});
+
+describe("audio originals in the file helper", () => {
+  it.each([
+    ["opus.webm", "audio/webm"], ["opus.ogg", "audio/ogg"], ["aac.m4a", "audio/mp4"], ["fragmented.mp4", "audio/mp4"], ["tone.mp3", "audio/mpeg"], ["tone.wav", "audio/wav"], ["tone.flac", "audio/flac"], ["tone.aac", "audio/aac"],
+  ])("refuses incomplete %s before starting an upload", async (name, mimeType) => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synthetic-audio-"));
+    const filePath = path.join(tempDir, name), bytes = readFileSync(`tests/fixtures/audio/${name}`);
+    const fetchMock = vi.fn(() => { throw new Error("Unexpected network request"); });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      for (const part of [bytes.subarray(0, 12), bytes.subarray(0, Math.floor(bytes.length / 2))]) {
+        await writeFile(filePath, part);
+        await expect(uploadEvidenceFile(apiConfig({ transport: "stdio", allowedFileRoots: [tempDir] }), { moveId: "synthetic-move", filePath, mimeType, dryRun: true })).rejects.toMatchObject({ data: { code: "INVALID_AUDIO_CONTAINER" } });
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); await rm(tempDir, { recursive: true, force: true }); }
+  });
+  it("refuses an oversized declared remote audio body before iterating it", async () => {
+    let read = false;
+    await expect(downloadPublicHttpsMedia("https://example.invalid/audio", { maxBytes: 10, fileKind: "audio", lookupFn: async () => [{ address: "93.184.216.34", family: 4 }], requestFn: async () => ({ status: 200, headers: new Headers({ "content-length": "11" }), body: { *[Symbol.iterator]() { read = true; yield Buffer.alloc(11); } } }) })).rejects.toMatchObject({ payload: { error: { code: "FILE_TOO_LARGE", kind: "audio", max: 10, got: 11 } } });
+    expect(read).toBe(false);
+  });
+  it("downloads audio into one bounded allocation", async () => {
+    const part = Buffer.from([1, 2, 3]);
+    const result = await downloadPublicHttpsMedia("https://example.invalid/audio", { maxBytes: 32, fileKind: "audio", lookupFn: async () => [{ address: "93.184.216.34", family: 4 }], requestFn: async () => ({ status: 200, headers: new Headers({ "content-length": "6" }), body: [part, part] }) });
+    expect(result.bytes).toEqual(Buffer.from([1, 2, 3, 1, 2, 3]));
   });
 });

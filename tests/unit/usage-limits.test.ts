@@ -102,14 +102,14 @@ it("keeps family storage allowance literals out of site logic", async () => {
     switch (node.operatorToken.kind) { case ts.SyntaxKind.AsteriskToken: return a * b; case ts.SyntaxKind.AsteriskAsteriskToken: return a ** b; case ts.SyntaxKind.PlusToken: return a + b; case ts.SyntaxKind.MinusToken: return a - b; case ts.SyntaxKind.SlashToken: return a / b; case ts.SyntaxKind.LessThanLessThanToken: return a << b; default: return null; }
   }
   function storageLiteral(code: string, path = "fixture.ts") {
-    const found: number[] = []; const forbidden = new Set([1e9, 10e9, 1024 ** 3, 10 * 1024 ** 3, 50 * 1024 ** 3, 150 * 1024 ** 3, 500 * 1024 ** 3]);
-    if (path === "convex/lib/observability.ts") forbidden.delete(500 * 1024 ** 3); // Existing operational alert, never an account allowance.
+    const found: number[] = []; const forbidden = new Set([1e9, 10e9, 10_000_000, 100_000_000, 100 * 1024 * 1024, 1024 ** 3, 10 * 1024 ** 3, 50 * 1024 ** 3, 150 * 1024 ** 3, 500 * 1024 ** 3]);
+    if (path === "convex/lib/observability.ts") { forbidden.delete(500 * 1024 ** 3); forbidden.delete(100 * 1024 * 1024); } // Existing operational alert, never an account allowance.
     function visit(node: import("typescript").Node) { const value = constant(node); if (value !== null && forbidden.has(value)) found.push(value); ts.forEachChild(node, visit); }
     visit(ts.createSourceFile(path, code, ts.ScriptTarget.Latest, true)); return found;
   }
   for (const code of ["const x = 1e9", "const x = 2 ** 30", "const x = 1024 ** 3", "const x = 10 * 1_000 * 1_000 * 1_000", "const x = 1 << 30"]) expect(storageLiteral(code).length, code).toBeGreaterThan(0);
   for (const path of [...files("convex"), ...files("src"), ...files("mcp-server"), ...files("shared"), ...files("infra"), ...files("scripts")]) {
-    if (path === "convex/lib/usageLimits/core.ts" || path === "shared/usage-limits.mjs" || /\.(test|spec)\./.test(path)) continue;
+    if (path === "convex/lib/media/audio.ts" || path === "shared/media-limits.mjs" || path === "shared/audio.mjs" || path === "convex/lib/usageLimits/core.ts" || path === "shared/usage-limits.mjs" || /\.(test|spec)\./.test(path)) continue;
     expect(storageLiteral(readFileSync(path, "utf8"), path), path).toEqual([]);
   }
 });
@@ -134,4 +134,11 @@ it("refusal receipt failures cannot replace the admission result", async () => {
   const ctx = { auth: { getUserIdentity: async () => null }, db: { insert } } as never;
   await expect(recordLimitEvent(ctx, { ownerId: "synthetic", at: 1, mode: "on", source: "begin", limit: "storedBytesPerUser", used: 0, cap: 1, requested: 2, remaining: 1 })).resolves.toBeUndefined();
   await expect(recordRefusalActivity(ctx, "synthetic" as never, { code: "FILE_TOO_LARGE", message: "Synthetic refusal" })).resolves.toBeUndefined(); expect(insert).toHaveBeenCalledTimes(2);
+});
+it("keeps audio duration policy in the caps module and settings", () => {
+  for (const path of ["convex/audioPlayback.ts", "convex/lib/audioResponse.ts"]) expect(readFileSync(path, "utf8")).not.toMatch(/\b600\b/);
+  const photos = readFileSync("convex/photos.ts", "utf8");
+  const policy = photos.slice(photos.indexOf("export const audioDurationPolicy"), photos.indexOf("export const markAudioValidated"));
+  expect(policy).toContain("info.override?.voiceNoteMaxSeconds ?? info.site?.voiceNoteMaxSeconds ?? voiceNoteMaxSeconds");
+  expect(policy).not.toMatch(/\b600\b/);
 });

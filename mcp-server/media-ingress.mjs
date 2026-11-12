@@ -16,14 +16,15 @@ export function parseAllowedFileRoots(rawValue, cwd = process.cwd()) {
   return rawValue.split(path.delimiter).map((entry) => entry.trim()).filter(Boolean).map((entry) => path.resolve(cwd, entry));
 }
 
-/** @param {{filePath:string, transport?:"stdio"|"hosted", allowedFileRoots?:string[], maxBytes?:number}} options */
-export async function readAllowedLocalMedia({ filePath, transport, allowedFileRoots = [], maxBytes = DEFAULT_REMOTE_MEDIA_BYTES }) {
+/** @param {{filePath:string, transport?:"stdio"|"hosted", allowedFileRoots?:string[], maxBytes?:number, fileKind?:string}} options */
+export async function readAllowedLocalMedia({ filePath, transport, allowedFileRoots = [], maxBytes = DEFAULT_REMOTE_MEDIA_BYTES, fileKind }) {
   if (transport === "hosted") throw new Error("filePath is disabled for hosted MCP. Use sourceUrl, dataUrl, or fileBase64 instead.");
   if (allowedFileRoots.length === 0) throw new Error("Local filePath access is disabled. Configure ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS with one or more trusted directories before using filePath.");
   const candidatePath = path.resolve(filePath);
   const candidateLstat = await lstat(candidatePath).catch(() => null);
   if (!candidateLstat?.isFile()) throw new Error("filePath must identify a regular file inside an allowed root; symlinks, devices, directories, and pipes are refused.");
   if (candidateLstat.size <= 0) throw new Error("filePath was empty.");
+  if (candidateLstat.size > maxBytes && fileKind) throw fileSizeError(candidateLstat.size, maxBytes, fileKind);
   if (candidateLstat.size > maxBytes) throw new Error(`filePath exceeds the ${formatBytes(maxBytes)} media limit.`);
   const canonicalPath = await realpath(candidatePath);
   const canonicalRoots = await Promise.all(allowedFileRoots.map(async (root) => await realpath(path.resolve(root))));
@@ -33,6 +34,7 @@ export async function readAllowedLocalMedia({ filePath, transport, allowedFileRo
   });
   if (!insideAllowedRoot) throw new Error("filePath resolves outside ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS.");
   const bytes = await readFile(canonicalPath);
+  if (bytes.byteLength > maxBytes && fileKind) throw fileSizeError(bytes.byteLength, maxBytes, fileKind);
   if (bytes.byteLength > maxBytes) throw new Error(`filePath exceeds the ${formatBytes(maxBytes)} media limit.`);
   return { bytes, canonicalPath };
 }
@@ -112,21 +114,21 @@ export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_R
       const declaredLength = Number(headerValue(response.headers, "content-length") ?? "0");
       if (Number.isFinite(declaredLength) && declaredLength > maxBytes) { response.destroy?.(); throw fileSizeError(declaredLength, maxBytes, fileKind); }
       try { await beforeRead?.(declaredLength > 0 && Number.isFinite(declaredLength) ? declaredLength : null); } catch (error) { response.destroy?.(); activeResponse = undefined; throw error; }
-      const chunks = [];
+      const buffer = Buffer.allocUnsafe(maxBytes);
       let receivedBytes = 0;
       try {
         for await (const chunk of response.body) {
           assertWithinDeadline();
-          const bytes = Buffer.from(chunk);
+          const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
           receivedBytes += bytes.byteLength;
           if (receivedBytes > maxBytes) { response.destroy?.(); throw fileSizeError(receivedBytes, maxBytes, fileKind); }
-          chunks.push(bytes);
+          buffer.set(bytes, receivedBytes - bytes.byteLength);
         }
       } catch (error) { response.destroy?.(); throw error; }
       activeResponse = undefined;
       assertWithinDeadline();
       if (receivedBytes === 0) throw new Error("sourceUrl returned an empty response.");
-      return { bytes: Buffer.concat(chunks, receivedBytes), contentType: headerValue(response.headers, "content-type"), finalUrl: url };
+      return { bytes: buffer.subarray(0, receivedBytes), contentType: headerValue(response.headers, "content-type"), finalUrl: url };
     }
     throw new Error("sourceUrl could not be downloaded safely.");
   };
