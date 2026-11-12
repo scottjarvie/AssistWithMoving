@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { internalAction, internalMutation, internalQuery, httpAction } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
@@ -106,7 +106,7 @@ export const finish = internalAction({
 });
 
 /** Ordinary session, ordinary object key, ordinary expiry and cleanup. */
-export const put = httpAction(async (ctx, request) => {
+export async function handlePut(ctx: ActionCtx, request: Request): Promise<Response> {
   const headers = { "Cache-Control": "private, no-store" };
   try {
     const url = new URL(request.url), token = url.searchParams.get("token") ?? "";
@@ -133,7 +133,7 @@ export const put = httpAction(async (ctx, request) => {
   } catch (error) {
     return Response.json({ error: error instanceof ConvexError ? error.data : { code: "UPLOAD_FAILED", message: "Upload unavailable. Keep the original and retry the same operation." } }, { headers, status: refusalStatus });
   }
-});
+}
 
 async function transfer(ctx: ActionCtx, session: Doc<"photoUploadSessions">, bytes: Uint8Array<ArrayBuffer>, token: string) {
     const upload = session.aiUpload!;
