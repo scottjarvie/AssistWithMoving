@@ -209,6 +209,10 @@ only when the person's grant includes its scope:
 - `search_move_records` — `moving.context.read`
 - `get_move_records` — `moving.context.read`
 - `get_evidence_media` — `moving.evidence.read`
+- `begin_media_upload` — `moving.work.write`
+- `begin_media_upload_batch` — `moving.work.write`
+- `finish_media_upload` — `moving.work.write`
+- `upload_media_inline` — `moving.work.write`
 - `save_move_context` — `moving.work.write`
 - `save_inventory` — `moving.work.write`
 - `save_planning_record` — `moving.work.write`
@@ -309,4 +313,4 @@ When the person asks you to add work, use addedBy ai_on_request: it is ordinary 
 
 Queue tools: add_queue_item (moving.queue.work; ai_suggestion also requires moving.suggestions.propose), list_queue_suggestions (moving.queue.work), withdraw_queue_suggestion (moving.queue.work). AI adds require addedBy: ai_on_request or ai_suggestion and operationId.
 
-Storage: the household owner is charged for originals, audio, video and stored image copies. Read storage.line from move context and upload replies. A USAGE_LIMIT_REACHED refusal concerns one upload; keep using this connection and retain the source file. Do not retry by creating a new credential. Allowances and file caps are settings. The canonical OAuth door has no upload tool.
+Storage: the household owner is charged for originals, audio, video and stored image copies. Read storage.line from move context and upload replies. A USAGE_LIMIT_REACHED refusal concerns one upload; keep using this connection and retain the source file. Do not retry by creating a new credential. Allowances and file caps are settings. For canonical uploads use begin_media_upload (a one-file files array) or begin_media_upload_batch, PUT exact bytes to each returned product URL with Content-Length, then finish_media_upload with uploadSessionId. Supply operationId, mimeType, sizeBytes and lowercase SHA-256 per file; images also require positive width and height. audioKind may be audio or voicenote. The short-lived PUT URL is a credential for that one session attempt: keep it private and send the exact declared bytes. Begin and finish require the same verified connection; current access is checked again inside the upload write transactions. Each batch receipt stands alone. Keep the same operationId and exact content on retries. A PUT URL is single-use, even after failure. Retry begin for a fresh URL after a failed PUT; never replay an old URL. If the receipt says alreadyUploaded, skip PUT and call finish. An in-progress attempt cannot be replaced; an uncertain storage response may require waiting for the original or ordinary cleanup. Tiny files may use upload_media_inline with input and canonical base64. The relay ceiling is 512 KiB per original, reduced by file settings; batches allow up to 25 files. Inline requests, including base64 and metadata, must fit 512 KiB. Pending person slots and canonical URL intake are unavailable.

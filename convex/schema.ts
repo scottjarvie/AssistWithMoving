@@ -1918,6 +1918,7 @@ export default defineSchema({
     .index("by_full_key", ["derivativeRefs.full"]),
 
   photoUploadSessions: defineTable({
+    aiUpload: v.optional(v.object({ putState: v.optional(v.union(v.literal("awaiting"), v.literal("in_progress"), v.literal("failed"), v.literal("succeeded"))), putUncertain: v.optional(v.boolean()), attemptKey: v.optional(v.string()), expiresAt: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()), token: v.string(), sha256: v.string(), principal: v.object({ issuer: v.string(), subject: v.string(), clientId: v.string(), clientName: v.optional(v.string()) }), transferred: v.boolean() })),
     audioKind: v.optional(v.union(v.literal("audio"), v.literal("voicenote"))),
     audioDurationSeconds: v.optional(v.number()),
     audioVersionId: v.optional(v.string()),
