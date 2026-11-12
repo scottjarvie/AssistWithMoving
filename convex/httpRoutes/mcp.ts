@@ -772,37 +772,6 @@ export function createMovingServer(
     },
   );
 
-  const uploadFile = z.object({ operationId, sizeBytes: z.number().int().positive(), mimeType: z.string(), sha256: z.string(), audioKind: z.enum(["audio", "voicenote"]).optional() }).strict();
-  for (const name of ["begin_media_upload", "begin_media_upload_batch"] as const) {
-    registerGranted(name, {
-      title: "Begin media upload",
-      description: "Reserve ordinary private uploads. Supply exact SHA-256 and byte size. PUT exact bytes to each short-lived product URL, then call finish_media_upload. Retain operationId on retries. Batch results contain an independent receipt per file.",
-      inputSchema: z.object({ moveId: id, files: z.array(uploadFile) }).strict(),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    }, async input => {
-      try { return toolResult(await actionCtx.runAction(internal.aiUploads.begin, { ...input, moveId: input.moveId as any, principal: convexPrincipal(principal), single: name === "begin_media_upload" })); }
-      catch (error) { return toolError(error); }
-    });
-  }
-  registerGranted("upload_media_inline", {
-    title: "Upload tiny media",
-    description: "Add a tiny original as canonical base64 through the same validation and storage allowance as PUT uploads. Supply exact size, SHA-256 and operationId. The whole request must fit the canonical request ceiling.",
-    inputSchema: z.object({ moveId: id, input: uploadFile, base64: z.string() }).strict(),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, async input => {
-    try { return toolResult(await actionCtx.runAction(internal.aiUploads.inline, { ...input, moveId: input.moveId as any, principal: convexPrincipal(principal) })); }
-    catch (error) { return toolError(error); }
-  });
-  registerGranted("finish_media_upload", {
-    title: "Finish media upload",
-    description: "Validate the uploaded original and attach it to the move. Retry the same session to retrieve the same photoId without adding storage twice.",
-    inputSchema: z.object({ uploadSessionId: id }).strict(),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, async input => {
-    try { return toolResult(await actionCtx.runAction(internal.aiUploads.finish, { uploadSessionId: input.uploadSessionId as any, principal: convexPrincipal(principal) })); }
-    catch (error) { return toolError(error); }
-  });
-
   registerGranted(
     "get_evidence_media",
     {
@@ -850,6 +819,38 @@ export function createMovingServer(
       }
     },
   );
+
+  const uploadFile = z.object({ operationId, sizeBytes: z.number().int().positive(), mimeType: z.string(), sha256: z.string(), audioKind: z.enum(["audio", "voicenote"]).optional() }).strict();
+  for (const name of ["begin_media_upload", "begin_media_upload_batch"] as const) {
+    registerGranted(name, {
+      title: "Begin media upload",
+      description: "Reserve ordinary private uploads. Supply exact SHA-256 and byte size. PUT exact bytes to each short-lived product URL, then call finish_media_upload. Retain operationId on retries. Batch results contain an independent receipt per file.",
+      inputSchema: z.object({ moveId: id, files: z.array(uploadFile) }).strict(),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    }, async input => {
+      try { return toolResult(await actionCtx.runAction(internal.aiUploads.begin, { ...input, moveId: input.moveId as any, principal: convexPrincipal(principal), single: name === "begin_media_upload" })); }
+      catch (error) { return toolError(error); }
+    });
+  }
+  registerGranted("finish_media_upload", {
+    title: "Finish media upload",
+    description: "Validate the uploaded original and attach it to the move. Retry the same session to retrieve the same photoId without adding storage twice.",
+    inputSchema: z.object({ uploadSessionId: id }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, async input => {
+    try { return toolResult(await actionCtx.runAction(internal.aiUploads.finish, { uploadSessionId: input.uploadSessionId as any, principal: convexPrincipal(principal) })); }
+    catch (error) { return toolError(error); }
+  });
+
+  registerGranted("upload_media_inline", {
+    title: "Upload tiny media",
+    description: "Add a tiny original as canonical base64 through the same validation and storage allowance as PUT uploads. Supply exact size, SHA-256 and operationId. The whole request must fit the canonical request ceiling.",
+    inputSchema: z.object({ moveId: id, input: uploadFile, base64: z.string() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, async input => {
+    try { return toolResult(await actionCtx.runAction(internal.aiUploads.inline, { ...input, moveId: input.moveId as any, principal: convexPrincipal(principal) })); }
+    catch (error) { return toolError(error); }
+  });
 
   registerGranted(
     "save_move_context",
