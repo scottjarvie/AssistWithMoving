@@ -62,6 +62,10 @@ const canonicalToolCatalog = [
     label: "Save the work you asked for",
     copy: "Move context, inventory, decisions, estimates, plan sections, source checks, and one complete reviewed result. Replay-safe, so a retry corrects instead of duplicating.",
     tools: [
+      "begin_media_upload",
+      "begin_media_upload_batch",
+      "finish_media_upload",
+      "upload_media_inline",
       "save_move_context",
       "save_inventory",
       "save_planning_record",

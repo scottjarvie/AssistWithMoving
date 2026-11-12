@@ -79,6 +79,10 @@ const canonicalToolCatalog = [
   {
     scope: "moving.work.write",
     tools: [
+      "begin_media_upload",
+      "begin_media_upload_batch",
+      "finish_media_upload",
+      "upload_media_inline",
       "save_move_context",
       "save_inventory",
       "save_planning_record",
