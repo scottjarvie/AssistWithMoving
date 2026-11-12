@@ -24,7 +24,10 @@ export function FamilyRow() {
   useEffect(() => {
     const node = rail.current;
     if (!node) return;
-    const measure = () => setOverflow(node.scrollWidth > node.clientWidth + 1);
+    const measure = () => {
+      // Zero-width/hidden rails have not proved that every entry is visible.
+      if (node.clientWidth > 0) setOverflow(node.scrollWidth > node.clientWidth + 1);
+    };
     if (typeof ResizeObserver === "undefined") { measure(); return; }
     const observer = new ResizeObserver(measure);
     observer.observe(node); measure();
