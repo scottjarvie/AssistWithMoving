@@ -12,7 +12,7 @@ function luminance(hex: string) {
 function dotStyle(site: FamilySite): CSSProperties {
   const light = luminance(site.color);
   // Both the rail and roster backgrounds; neutral if either falls below 3:1.
-  return {"--family-dot-light": (1.02)/(light+.05) >= 3 ? site.color : "var(--muted-foreground)", "--family-dot-dark": (light+.05)/(.025+.05) >= 3 ? site.color : "var(--muted-foreground)"} as CSSProperties;
+  return {"--family-dot-light": (.80)/(light+.05) >= 3 ? site.color : "var(--muted-foreground)", "--family-dot-dark": (light+.05)/(.025+.05) >= 3 ? site.color : "var(--muted-foreground)"} as CSSProperties;
 }
 function SiteContent({site, roster = false}: {site: FamilySite; roster?: boolean}) {
   const current = site.slug === "moving";
