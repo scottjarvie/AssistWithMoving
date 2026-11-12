@@ -6,6 +6,7 @@ import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, internalAction, mutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
   defaultDocumentationProfilesForMoveType,
@@ -617,6 +618,7 @@ export const purge = mutation({
     dryRun: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     const { actor, role } = await requireMovePermission(
       ctx,
       args.householdId,

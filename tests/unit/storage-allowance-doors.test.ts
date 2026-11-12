@@ -6,6 +6,7 @@ import { api, internal } from "../../convex/_generated/api";
 import schema from "../../convex/schema";
 import { hashApiKey, generateApiKeySecret, apiKeyPrefix } from "../../convex/lib/apiKeys";
 import { nativeWebsiteIdentity } from "../helpers/website-session";
+import { SETTINGS_REFUSAL } from "../../convex/lib/connectionReduction";
 import { mcpLimitText } from "../../convex/lib/usageLimits/core";
 import { toolErrorResult } from "../../mcp-server/assistwithmoving-api.mjs";
 
@@ -1463,4 +1464,71 @@ it.each([false, true])("R6 an interrupted person-requested purge completes with 
   await f.t.action(internal.usageLimitsStorage.recomputeStep, { ownerId: f.owner }); await f.t.finishAllScheduledFunctions(vi.runAllTimers);
   expect((await f.summary()).usedBytes).toBe(before); expect(storage.objects.size).toBe(5); expect(storage.deletes).toEqual([]);
   expect((await f.t.run(ctx => ctx.db.query("usageLimitSettings").first()))?.storageDeletionEnabled).not.toBe(true);
+});
+
+
+async function purgeAuthorizationState(f: Awaited<ReturnType<typeof fixture>>) {
+  return f.t.run(async ctx => ({
+    move: await ctx.db.get(f.moveId),
+    jobs: await ctx.db.query("movePurges").collect(),
+    audit: await ctx.db.query("auditLogs").collect(),
+    scheduled: await ctx.db.system.query("_scheduled_functions").collect(),
+  }));
+}
+
+it.each(["oauth", "oauth-with-native-sid", "ai-access-token"] as const)("R7 refuses %s owner authorization with the existing person refusal and no writes", async kind => {
+  const f = await fixture();
+  const identity = kind === "oauth"
+    ? { subject: "synthetic-owner", issuer: "https://synthetic.clerk.accounts.dev", client_id: "synthetic-ai", scope: "openid profile" }
+    : { ...nativeWebsiteIdentity("synthetic-owner"), ...(kind === "ai-access-token" ? { typ: "at+jwt" } : { client_id: "synthetic-ai", scope: "openid profile" }) };
+  const ai = f.t.withIdentity(identity), before = await purgeAuthorizationState(f);
+  await expect(ai.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" })).rejects.toMatchObject({ data: SETTINGS_REFUSAL });
+  expect(await purgeAuthorizationState(f)).toEqual(before); expect(storage.deletes).toEqual([]);
+});
+
+it("R7 refuses an unauthenticated purge with the existing person refusal and no writes", async () => {
+  const f = await fixture(), before = await purgeAuthorizationState(f);
+  await expect(f.t.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" })).rejects.toMatchObject({ data: SETTINGS_REFUSAL });
+  expect(await purgeAuthorizationState(f)).toEqual(before);
+});
+
+it("R7 the native website owner alone creates the durable authorization, with existing title and dry-run checks", async () => {
+  const f = await fixture(), before = await purgeAuthorizationState(f);
+  await expect(f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Wrong" })).rejects.toThrow(/move title/);
+  expect(await purgeAuthorizationState(f)).toEqual(before);
+  expect(await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic", dryRun: true })).toMatchObject({ dryRun: true });
+  expect(await purgeAuthorizationState(f)).toEqual(before);
+  expect(await f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" })).toMatchObject({ pending: true });
+  const after = await purgeAuthorizationState(f);
+  expect(after.jobs).toEqual([expect.objectContaining({ householdId: f.householdId, moveId: f.moveId, requestedByPerson: true })]);
+  expect(after.move).toBeNull(); expect(after.scheduled).toHaveLength(1);
+  await expect(f.person.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" })).rejects.toThrow(/Move not found/);
+  expect(await purgeAuthorizationState(f)).toEqual(after);
+});
+
+it.each(["admin", "editor"] as const)("R7 a native household %s cannot create purge authorization or write anything", async role => {
+  const f = await fixture();
+  await f.t.run(async ctx => { const userId = await ctx.db.insert("users", { clerkUserId: "synthetic-other-member", appRole: "member", status: "active", createdAt: 1, updatedAt: 1, lastSeenAt: 1 }); await ctx.db.insert("householdMemberships", { householdId: f.householdId, userId, role, status: "active", createdAt: 1, updatedAt: 1 }); });
+  const member = f.t.withIdentity(nativeWebsiteIdentity("synthetic-other-member")), before = await purgeAuthorizationState(f);
+  await expect(member.mutation(api.moves.purge, { householdId: f.householdId, moveId: f.moveId, confirmTitle: "Synthetic" })).rejects.toThrow(role === "admin" ? /Only the household owner/ : /Requires household:manage_settings/);
+  expect(await purgeAuthorizationState(f)).toEqual(before);
+});
+
+it("R7 old jobs and replayed recovery cannot mint or upgrade person authorization", async () => {
+  const f = await fixture();
+  const id = await f.t.run(ctx => ctx.db.insert("movePurges", { householdId: f.householdId, moveId: f.moveId, table: 0, cursor: null, updatedAt: 0 }));
+  const before = await purgeAuthorizationState(f);
+  await f.t.mutation(internal.moves.resumePurges, {});
+  await f.t.mutation(internal.moves.purgePage, { runId: id, automatic: true });
+  expect(await purgeAuthorizationState(f)).toEqual(before);
+  // An already-queued legacy continuation may advance its existing cursor,
+  // but must never certify the checkpoint as a fresh person request.
+  await f.t.mutation(internal.moves.purgePage, { runId: id });
+  expect(await f.t.run(ctx => ctx.db.get(id))).not.toHaveProperty("requestedByPerson");
+  await f.t.run(ctx => ctx.db.delete(id));
+  const retired = await purgeAuthorizationState(f);
+  await f.t.mutation(internal.moves.purgePage, { runId: id });
+  await f.t.mutation(internal.moves.purgePage, { runId: id, automatic: true });
+  await f.t.mutation(internal.moves.resumePurges, {});
+  expect(await purgeAuthorizationState(f)).toEqual(retired);
 });
