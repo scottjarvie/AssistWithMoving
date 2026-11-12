@@ -1,3 +1,5 @@
+import { checkFileSize, formatBytes } from "../../convex/lib/usageLimits/core";
+import { siteDefaults } from "../../convex/lib/mediaStorage";
 export const allowedPhotoMimeTypes = [
   "image/jpeg",
   "image/png",
@@ -25,9 +27,9 @@ export const allowedMediaMimeTypes = [
   ...allowedVideoMimeTypes,
 ] as const;
 
-export const maxPhotoUploadBytes = 25 * 1024 * 1024;
-export const maxAudioUploadBytes = 100 * 1024 * 1024;
-export const maxVideoUploadBytes = 500 * 1024 * 1024;
+export const maxPhotoUploadBytes = siteDefaults.image;
+export const maxAudioUploadBytes = siteDefaults.audio;
+export const maxVideoUploadBytes = siteDefaults.video;
 
 export const photoDerivativeSpecs = [
   { variant: "thumb", width: 200, height: 200, fit: "cover", quality: 0.78 },
@@ -52,7 +54,7 @@ export type PhotoDerivativeUpload = {
   height: number;
 };
 
-export function validatePhotoUploadFile(file: Pick<File, "type" | "size">) {
+export function validatePhotoUploadFile(file: Pick<File, "type" | "size">, cap = maxPhotoUploadBytes) {
   if (
     !allowedPhotoMimeTypes.includes(
       file.type as (typeof allowedPhotoMimeTypes)[number]
@@ -64,17 +66,17 @@ export function validatePhotoUploadFile(file: Pick<File, "type" | "size">) {
     } satisfies PhotoUploadValidation;
   }
 
-  if (file.size <= 0 || file.size > maxPhotoUploadBytes) {
+  if (file.size <= 0 || file.size > cap) {
     return {
       ok: false,
-      message: "Use an image under 25 MB.",
+      message: file.size <= 0 ? "Choose a file that is not empty." : checkFileSize("image", file.size, cap)!.message,
     } satisfies PhotoUploadValidation;
   }
 
   return { ok: true } satisfies PhotoUploadValidation;
 }
 
-export function validateMediaUploadFile(file: Pick<File, "type" | "size">) {
+export function validateMediaUploadFile(file: Pick<File, "type" | "size">, cap?: number) {
   const mediaKind = mediaKindForMimeType(file.type);
   if (!mediaKind) {
     return {
@@ -84,11 +86,11 @@ export function validateMediaUploadFile(file: Pick<File, "type" | "size">) {
     } satisfies PhotoUploadValidation;
   }
 
-  const maxBytes = maxUploadBytesForMediaKind(mediaKind);
+  const maxBytes = cap ?? maxUploadBytesForMediaKind(mediaKind);
   if (file.size <= 0 || file.size > maxBytes) {
     return {
       ok: false,
-      message: sizeLimitMessage(mediaKind),
+      message: file.size <= 0 ? "Choose a file that is not empty." : checkFileSize(mediaKind, file.size, maxBytes)!.message,
     } satisfies PhotoUploadValidation;
   }
 
@@ -132,15 +134,8 @@ export function maxUploadBytesForMediaKind(mediaKind: MediaKind) {
   }
 }
 
-export function sizeLimitMessage(mediaKind: MediaKind) {
-  switch (mediaKind) {
-    case "image":
-      return "Use an image under 25 MB.";
-    case "audio":
-      return "Use an audio file under 100 MB.";
-    case "video":
-      return "Use a video file under 500 MB.";
-  }
+export function sizeLimitMessage(mediaKind: MediaKind, cap = maxUploadBytesForMediaKind(mediaKind)) {
+  return `Use a ${mediaKind} file under ${formatBytes(cap)}.`;
 }
 
 export async function fileSha256Hex(file: File) {

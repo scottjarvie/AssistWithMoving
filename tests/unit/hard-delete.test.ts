@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptyCounters } from "../../convex/lib/usageLimits/core";
 
 import type { Id } from "../../convex/_generated/dataModel";
 import {
@@ -10,11 +11,14 @@ import {
 type Row = Record<string, unknown> & { _id: string };
 
 function createCtx(tables: Record<string, Row[]>) {
+  tables.itemPhotos = (tables.itemPhotos ?? []).map(row => ({ originalStorageKey: `${row._id}-key`, originalBucket: "synthetic", derivativeRefs: {}, sizeBytes: 1, uploadedByUserId: "synthetic-owner", ...row }));
   const patches: Array<{ id: string; patch: Record<string, unknown> }> = [];
   const deletes: string[] = [];
   return {
     ctx: {
+      scheduler: { runAfter: async () => "synthetic-scheduled-deletion" },
       db: {
+        get: async () => ({ ownerUserId: "synthetic-owner" }),
         query: (table: string) => ({
           withIndex: (_index: string, build: (q: unknown) => unknown) => {
             const clauses: Array<{ field: string; value: unknown }> = [];
@@ -26,6 +30,7 @@ function createCtx(tables: Record<string, Row[]>) {
             };
             build(q);
             return {
+              unique: async () => table === "usageCounters" ? { _id: "synthetic-counter", ownerId: "synthetic-owner", ...emptyCounters(Date.now()), ready: true, revision: 0 } : table === "usageLimitSettings" ? { _id: "synthetic-site", key: "site", enforcement: "off", updatedAt: 1, updatedBy: "synthetic-admin" } : null,
               collect: async () =>
                 (tables[table] ?? []).filter((row) =>
                   clauses.every((clause) => row[clause.field] === clause.value),
@@ -33,6 +38,8 @@ function createCtx(tables: Record<string, Row[]>) {
             };
           },
         }),
+        insert: async () => "synthetic-cleanup-job",
+        replace: async (id: string, patch: Record<string, unknown>) => { patches.push({ id, patch }); },
         patch: async (id: string, patch: Record<string, unknown>) => {
           patches.push({ id, patch });
         },

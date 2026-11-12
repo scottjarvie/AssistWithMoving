@@ -130,10 +130,10 @@ export const operationalThresholds: Record<
     description: "Failed photo upload sessions in the last 24 hours.",
   },
   photoStorageBytes: {
-    label: "Photo storage",
+    label: "Original photo metadata (not allowance)",
     warningAt: 100 * 1024 * 1024 * 1024,
     criticalAt: 500 * 1024 * 1024 * 1024,
-    description: "Total non-archived photo storage tracked in Convex metadata.",
+    description: "Site-wide non-archived original-file metadata total; excludes stored copies and is not an account allowance.",
   },
   activeApiKeys: {
     label: "Active API keys",

@@ -1,3 +1,5 @@
+// Storage ownership is not rewritten here. After an identity merge, run the all-owner
+// storage backfill before enforcement; retained usage rows must be reconciled first.
 // One-off reconciliation for duplicate user records left by a Clerk instance
 // migration (prod was wired to an old Clerk instance, then switched to the real
 // production instance — Clerk user ids are per-instance, so each person got a

@@ -1,3 +1,4 @@
+import { retainPhotoForDeletion } from "./storageDeletion";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
@@ -88,7 +89,7 @@ export async function cascadeDeleteItem(
     },
   );
 
-  for (const doc of photos) await ctx.db.delete(doc._id);
+  for (const doc of photos) await retainPhotoForDeletion(ctx, doc, args.now);
   for (const doc of memberships) await ctx.db.delete(doc._id);
   for (const doc of listings) await ctx.db.delete(doc._id);
   for (const doc of placements) await ctx.db.delete(doc._id);
@@ -141,7 +142,7 @@ export async function cascadeDeleteBox(
     },
   );
 
-  for (const doc of photos) await ctx.db.delete(doc._id);
+  for (const doc of photos) await retainPhotoForDeletion(ctx, doc, args.now);
   for (const doc of memberships) await ctx.db.delete(doc._id);
   for (const doc of placements) await ctx.db.delete(doc._id);
 

@@ -783,8 +783,8 @@ export const convertItemToBox = mutation({
 // PERMANENTLY delete a box/tote. Removes the row and CANNOT be undone, so it
 // cascades the box's own photos and UNPACKS any items still inside it (drops the
 // boxItems memberships) — the user's actual item records survive as loose items
-// rather than being deleted with the container. (B2 photo objects are not
-// deleted here, same as the move purge; only the DB rows go.)
+// rather than being deleted with the container. Owned photo records and byte
+// charges survive until the storage worker confirms removal of every object.
 export const remove = mutation({
   args: {
     householdId: v.id("households"),

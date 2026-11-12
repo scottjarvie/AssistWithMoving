@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { CreditCard, Gauge, ShieldCheck } from "lucide-react";
 
+import { formatBytes } from "../../convex/lib/usageLimits/core";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ type HouseholdEntry = {
 };
 
 type BillingDimension = {
+  counting?: boolean;
   dimension: string;
   used: number;
   limit: number;
@@ -177,7 +179,7 @@ export function BillingReadinessPanel() {
                     <Badge
                       variant={dimension.evaluation.allowed ? "outline" : "destructive"}
                     >
-                      {formatUsage(dimension.used, dimension.limit)}
+                      {dimension.counting ? "Storage is still being counted." : formatUsage(dimension.used, dimension.limit, dimension.dimension.endsWith("Bytes"))}
                     </Badge>
                   </div>
                   <div className="mt-3 h-2 rounded-full bg-muted">
@@ -207,24 +209,9 @@ export function BillingReadinessPanel() {
   );
 }
 
-function formatUsage(used: number, limit: number) {
-  if (!Number.isFinite(limit)) {
-    return `${formatNumber(used)} / unlimited`;
-  }
-  return `${formatNumber(used)} / ${formatNumber(limit)}`;
-}
-
-function formatNumber(value: number) {
-  if (Math.abs(value) >= 1024 * 1024 * 1024) {
-    return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  }
-  if (Math.abs(value) >= 1024 * 1024) {
-    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  if (Math.abs(value) >= 1000) {
-    return value.toLocaleString();
-  }
-  return String(value);
+function formatUsage(used: number, limit: number, bytes: boolean) {
+  const format = bytes ? formatBytes : (value: number) => value.toLocaleString();
+  return `${format(used)} / ${Number.isFinite(limit) ? format(limit) : "unlimited"}`;
 }
 
 function labelize(value: string) {

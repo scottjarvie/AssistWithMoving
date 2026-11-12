@@ -1,8 +1,15 @@
+import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
+import { refusalOf, personRefusal, type UploadRefusal } from "./lib/usageLimits/refusal";
+import { recordLimitEvent, recordRefusalActivity, checkBatchAdmission } from "./usageLimits";
+import { checkFileSize, effectiveFileCap, type LimitSettings } from "./lib/usageLimits/core";
+import { siteDefaults } from "./lib/mediaStorage";
+function fileSizeFailure(kind: string, bytes: number, site: LimitSettings | null, override: LimitSettings | null) { return checkFileSize(kind, bytes, effectiveFileCap(kind, siteDefaults, site, override)); }
+import { referencedObject, claimedUploadObject } from "./storageDeletion";
+import { releaseUpload, reserveUpload, commitUpload, closeUploadReservation, restoreUploadReservation, addStoredCopy, ownerFor, limitsFor } from "./usageLimits";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v, type Infer } from "convex/values";
 import {
-  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -16,9 +23,11 @@ import {
   type ActionCtx,
   action,
   internalAction,
+  internalMutation,
   internalQuery,
   mutation,
   type MutationCtx,
+  type QueryCtx,
   query,
 } from "./_generated/server";
 import { requireAppAdmin } from "./lib/admin";
@@ -50,7 +59,6 @@ import {
 import {
   defaultPhotoUploadCleanupGraceMs,
   shouldCleanupExpiredUploadSession,
-  type StorageObjectRef,
   unreferencedUploadSessionStorageRefs,
   uploadSessionStorageRefs,
 } from "./lib/photoCleanup";
@@ -192,15 +200,6 @@ function b2Client() {
   });
 }
 
-async function deleteStorageObject(ref: StorageObjectRef) {
-  await b2Client().send(
-    new DeleteObjectCommand({
-      Bucket: ref.bucket,
-      Key: ref.storageKey,
-    }),
-  );
-}
-
 function cleanupStorageError(error: unknown) {
   if (error instanceof Error) {
     return error.name === "Error"
@@ -229,7 +228,7 @@ function uploadObjectKey({
 }
 
 async function assertPhotoTargets(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, "db">,
   args: {
     moveId: Doc<"moves">["_id"];
     itemId?: Doc<"items">["_id"] | null;
@@ -274,6 +273,10 @@ async function assertPhotoTargets(
     }
   }
 }
+
+// Read-only preparation preserves stop-on-error before later sources are read;
+// admission and completion still recheck targets before storing anything.
+export const checkUploadTargets = internalQuery({ args: { moveId: v.id("moves"), itemId: v.optional(v.id("items")), boxId: v.optional(v.id("boxes")), spaceId: v.optional(v.id("moveSpaces")), transportResourceId: v.optional(v.id("transportResources")), transportZoneId: v.optional(v.id("transportZones")) }, handler: async (ctx, args) => { await assertPhotoTargets(ctx, args); return null; } });
 
 async function assertMoveInHousehold(
   ctx: MutationCtx,
@@ -505,6 +508,7 @@ type ApiPhotoActor = {
 };
 
 const initUploadArgs = {
+  operationId: v.optional(v.string()),
   householdId: v.id("households"),
   moveId: v.id("moves"),
   itemId: v.optional(v.id("items")),
@@ -529,6 +533,7 @@ const initUploadArgs = {
 };
 
 type InitUploadArgs = {
+  operationId?: string;
   householdId: Doc<"households">["_id"];
   moveId: Doc<"moves">["_id"];
   itemId?: Doc<"items">["_id"];
@@ -549,6 +554,10 @@ type InitUploadArgs = {
 };
 
 type InitUploadResult = {
+  uploadLimits?: Awaited<ReturnType<typeof import("./usageLimits").uploadPolicy>>;
+  refusal?: UploadRefusal;
+  alreadyUploaded?: boolean;
+  replayedPhotoId?: string;
   uploadSessionId: string;
   uploadUrl: string;
   method: "PUT";
@@ -560,6 +569,7 @@ type InitUploadResult = {
     headers: { "Content-Type": string };
   }>;
   expiresAt: number;
+  storage?: Awaited<ReturnType<typeof import("./usageLimits").summaryFor>>;
 };
 
 // Extracted body of initUpload. When `apiActor` is undefined this behaves
@@ -572,12 +582,12 @@ async function runInitUpload(
   apiActor?: ApiPhotoActor,
 ): Promise<InitUploadResult> {
   {
-    const original = assertOriginalUploadFileShape(args);
+    const original = assertOriginalUploadFileShape(args, Number.MAX_SAFE_INTEGER);
     const normalizedDerivatives = (args.derivatives ?? []).map((derivative) => {
       const normalized = assertImageDerivativeUploadFileShape({
         mimeType: derivative.mimeType,
         sizeBytes: derivative.sizeBytes,
-      });
+      }, Number.MAX_SAFE_INTEGER);
       return {
         ...derivative,
         mimeType: normalized.mimeType,
@@ -589,11 +599,11 @@ async function runInitUpload(
     );
 
     const config = requireB2Config();
-    const objectKey = uploadObjectKey({
+    let objectKey = uploadObjectKey({
       moveId: args.moveId,
       mimeType: original.mimeType,
     });
-    const derivativeUploads =
+    let derivativeUploads =
       normalizedDerivatives.map((derivative) => ({
         ...derivative,
         storageKey: uploadObjectKey({
@@ -604,9 +614,10 @@ async function runInitUpload(
         bucket: config.bucketName,
       })) ?? [];
     const expiresAt = Date.now() + uploadSessionTtlMs;
-    const uploadSessionId = await ctx.runMutation(
-      internal.photos.createUploadSession,
+    const begun = await ctx.runMutation(
+      internal.photos.tryCreateUploadSession,
       {
+        operationId: args.operationId,
         householdId: args.householdId,
         moveId: args.moveId,
         itemId: args.itemId,
@@ -634,6 +645,18 @@ async function runInitUpload(
       },
     );
 
+    if (begun.refusal) throw new ConvexError(begun.refusal);
+    const uploadSessionId = begun.uploadSessionId!;
+    const persisted = await ctx.runQuery(internal.photos.getUploadSession, { householdId: args.householdId, moveId: args.moveId, uploadSessionId, apiActor });
+    if (persisted.completedPhotoId) return { uploadSessionId, alreadyUploaded: true, replayedPhotoId: persisted.completedPhotoId, uploadUrl: "", method: "PUT", headers: { "Content-Type": original.mimeType }, derivativeUploads: [], expiresAt, storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }) };
+    let alreadyUploaded = false;
+    try {
+      const head = await b2Client().send(new HeadObjectCommand({ Bucket: persisted.originalBucket, Key: persisted.originalStorageKey }));
+      alreadyUploaded = head.ContentLength === persisted.expectedSizeBytes && (!head.ContentType || contentTypesMatch(head.ContentType, persisted.expectedMimeType));
+      if (!alreadyUploaded) throw new ConvexError("An earlier upload at this operation id has different bytes. Retry with a new operationId.");
+    } catch (error) { if (!["NotFound", "NoSuchKey"].includes((error as { name?: string }).name ?? "")) throw error; }
+    objectKey = persisted.originalStorageKey;
+    derivativeUploads = (persisted.derivativeUploads ?? []).map(d => ({ variant: d.variant, storageKey: d.storageKey, bucket: d.bucket, mimeType: d.expectedMimeType, sizeBytes: d.expectedSizeBytes, width: d.width, height: d.height }));
     const uploadUrl = await getSignedUrl(
       b2Client(),
       new PutObjectCommand({
@@ -642,7 +665,7 @@ async function runInitUpload(
         ContentType: original.mimeType,
         ContentLength: original.sizeBytes,
       }),
-      { expiresIn: Math.floor(uploadSessionTtlMs / 1000) },
+      { expiresIn: Math.floor(uploadSessionTtlMs / 1000), signingDate: new Date(expiresAt - uploadSessionTtlMs) },
     );
     const signedDerivativeUploads = await Promise.all(
       derivativeUploads.map(async (derivative) => ({
@@ -655,7 +678,7 @@ async function runInitUpload(
             ContentType: derivative.mimeType,
             ContentLength: derivative.sizeBytes,
           }),
-          { expiresIn: Math.floor(uploadSessionTtlMs / 1000) },
+          { expiresIn: Math.floor(uploadSessionTtlMs / 1000), signingDate: new Date(expiresAt - uploadSessionTtlMs) },
         ),
         method: "PUT" as const,
         headers: { "Content-Type": derivative.mimeType },
@@ -663,6 +686,9 @@ async function runInitUpload(
     );
 
     return {
+      alreadyUploaded,
+      uploadLimits: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: args.householdId }),
+      storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }),
       uploadSessionId,
       uploadUrl,
       method: "PUT",
@@ -676,7 +702,8 @@ async function runInitUpload(
 export const initUpload = action({
   args: initUploadArgs,
   handler: async (ctx, args): Promise<InitUploadResult> => {
-    return runInitUpload(ctx, args);
+    await requirePersonConnectionManagement(ctx);
+    try { return await runInitUpload(ctx, args); } catch (error) { const refusal = refusalOf(error); if (refusal) personRefusal(refusal); throw error; }
   },
 });
 
@@ -689,7 +716,7 @@ export const initUploadForActor = internalAction({
     apiActor: apiPhotoActorValidator,
   },
   handler: async (ctx, args): Promise<InitUploadResult> => {
-    return runInitUpload(ctx, args, args.apiActor);
+    try { return await runInitUpload(ctx, args, args.apiActor); } catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; return { refusal, uploadSessionId: "", uploadUrl: "", method: "PUT", headers: { "Content-Type": args.mimeType }, derivativeUploads: [], expiresAt: 0 }; }
   },
 });
 
@@ -732,10 +759,13 @@ type FinalizeUploadArgs = {
 };
 
 type FinalizeUploadResult = {
+  uploadLimits?: Awaited<ReturnType<typeof import("./usageLimits").uploadPolicy>>;
+  refusal?: UploadRefusal;
   photoId: string;
   derivativeStatus?: "pending" | "ready" | "failed";
   derivativeError?: string;
   derivativeNote: string;
+  storage?: Awaited<ReturnType<typeof import("./usageLimits").summaryFor>>;
 };
 
 // Extracted body of finalizeUpload. When `apiActor` is undefined this behaves
@@ -755,6 +785,8 @@ async function runFinalizeUpload(
       apiActor,
     });
 
+    if (session.completedPhotoId) return { photoId: session.completedPhotoId, derivativeStatus: session.completedPhoto?.derivativeStatus, derivativeError: session.completedPhoto?.derivativeError, derivativeNote: derivativeNoteForStatus(session.completedPhoto?.derivativeStatus), storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }) };
+    await ctx.runMutation(internal.photos.startFinalize, { householdId: args.householdId, moveId: args.moveId, uploadSessionId: args.uploadSessionId, apiActor });
     try {
       const head = await b2Client().send(
         new HeadObjectCommand({
@@ -796,7 +828,10 @@ async function runFinalizeUpload(
         }
       }
     } catch (error) {
+      if (!(error instanceof Error) || !/does not match|unsupported|invalid/i.test(error.message)) throw error;
       await ctx.runMutation(internal.photos.markUploadSessionFailed, {
+        reason: error instanceof Error ? error.message : "Invalid upload.",
+        code: "UPLOAD_VALIDATION_FAILED",
         householdId: args.householdId,
         moveId: args.moveId,
         uploadSessionId: args.uploadSessionId,
@@ -805,7 +840,7 @@ async function runFinalizeUpload(
       throw error;
     }
 
-    const photoId = await ctx.runMutation(internal.photos.completeUploadSession, {
+    const finished = await ctx.runMutation(internal.photos.tryCompleteUploadSession, {
       householdId: args.householdId,
       moveId: args.moveId,
       uploadSessionId: args.uploadSessionId,
@@ -825,6 +860,8 @@ async function runFinalizeUpload(
       apiActor,
     });
 
+    if (finished.refusal) throw new ConvexError(finished.refusal);
+    const photoId = finished.photoId!;
     let derivativeStatus = imageDerivativeStatusForSession(session);
     let derivativeError: string | undefined;
     if (shouldGenerateServerDerivatives(session)) {
@@ -835,6 +872,7 @@ async function runFinalizeUpload(
             bucketName: session.originalBucket ?? config.bucketName,
             moveId: args.moveId,
             originalStorageKey: session.originalStorageKey,
+            photoId,
           },
         );
         await ctx.runMutation(internal.photos.markGeneratedDerivativesReady, {
@@ -854,11 +892,13 @@ async function runFinalizeUpload(
           photoId,
           derivativeError,
           apiActor,
-        });
+        }).catch(() => { /* The accepted original and durable copy intents remain counted. */ });
       }
     }
 
     return {
+      storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }),
+      uploadLimits: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: args.householdId }),
       photoId,
       derivativeStatus,
       derivativeError,
@@ -870,7 +910,8 @@ async function runFinalizeUpload(
 export const finalizeUpload = action({
   args: finalizeUploadArgs,
   handler: async (ctx, args): Promise<FinalizeUploadResult> => {
-    return runFinalizeUpload(ctx, args);
+    await requirePersonConnectionManagement(ctx);
+    try { return await runFinalizeUpload(ctx, args); } catch (error) { const refusal = refusalOf(error); if (refusal) personRefusal(refusal); throw error; }
   },
 });
 
@@ -882,7 +923,7 @@ export const finalizeUploadForActor = internalAction({
     apiActor: apiPhotoActorValidator,
   },
   handler: async (ctx, args): Promise<FinalizeUploadResult> => {
-    return runFinalizeUpload(ctx, args, args.apiActor);
+    try { return await runFinalizeUpload(ctx, args, args.apiActor); } catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; return { refusal, photoId: "", derivativeNote: "" }; }
   },
 });
 
@@ -915,6 +956,7 @@ function shouldGenerateServerDerivatives(session: {
 }
 
 function derivativeProcessingError(error: unknown) {
+  if (error instanceof ConvexError && typeof error.data === "string") return error.data;
   if (error instanceof Error && error.message) {
     return `Server derivative processing failed: ${error.message}`;
   }
@@ -1282,14 +1324,11 @@ export const cleanupExpiredUploadSessions = action({
 
         let deletedObjectCount = 0;
         let error: string | undefined;
-        for (const ref of candidate.objectRefs) {
-          try {
-            await deleteStorageObject(ref);
-            deletedObjectCount += 1;
-          } catch (deleteError) {
-            error = cleanupStorageError(deleteError);
-          }
-        }
+        try {
+          const result = await ctx.runAction(internal.storageDeletion.deleteSession, { sessionId: candidate.uploadSessionId, dryRun: false });
+          if (result.deleted) deletedObjectCount = candidate.objectRefs.length;
+          else error = "Storage cleanup remains pending or referenced.";
+        } catch (deleteError) { error = cleanupStorageError(deleteError); }
 
         return {
           uploadSessionId: candidate.uploadSessionId,
@@ -1393,18 +1432,20 @@ export const finishExpiredUploadSessionCleanup = aiMutation({
   handler: async (ctx, args) => {
     const admin = await requireAppAdmin(ctx);
     let markedFailedSessionCount = 0;
+    const deletionEnabled = Boolean((await ctx.db.query("usageLimitSettings").withIndex("by_key", q => q.eq("key", "site")).unique())?.storageDeletionEnabled);
 
     for (const result of args.results) {
       const session = await ctx.db.get(result.uploadSessionId);
-      if (!session || session.status === "completed") {
+      if (!session || session.status === "completed" || session.completedPhotoId || session.cleanupCompletedAt) {
         continue;
       }
 
+      await closeUploadReservation(ctx, session);
       await ctx.db.patch(result.uploadSessionId, {
         status: session.status === "authorized" ? "failed" : session.status,
         cleanupAttemptedAt: args.now,
         cleanupCompletedAt:
-          result.error || !args.deleteObjects ? undefined : args.now,
+          result.error || !args.deleteObjects || !deletionEnabled ? undefined : args.now,
         cleanupError: result.error,
         abandonedObjectCount: result.attemptedObjectCount,
         deletedAbandonedObjectCount: result.deletedObjectCount,
@@ -1439,9 +1480,9 @@ export const finishExpiredUploadSessionCleanup = aiMutation({
   },
 });
 
-export const createUploadSession = aiMutation({
-  args: {
+export const createSessionArgs = {
     ...publicationArgs,
+    operationId: v.optional(v.string()),
     householdId: v.id("households"),
     moveId: v.id("moves"),
     itemId: v.optional(v.id("items")),
@@ -1472,10 +1513,16 @@ export const createUploadSession = aiMutation({
     ),
     expiresAt: v.number(),
     apiActor: v.optional(apiPhotoActorValidator),
-  },
-  handler: async (ctx, args) => {
+  };
+
+async function claimSessionObjects(ctx: MutationCtx, sessionId: Doc<"photoUploadSessions">["_id"], keys: string[]) {
+  for (const key of keys) await ctx.db.insert("uploadObjectClaims", { sessionId, storageKey: key });
+  await ctx.db.patch(sessionId, { objectClaimsRegistered: true });
+}
+async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidator>) {
     let userId = args.apiActor?.createdByUserId;
     if (!userId) {
+      await requirePersonConnectionManagement(ctx);
       const { actor } = await requireMovePermission(
         ctx,
         args.householdId,
@@ -1493,19 +1540,62 @@ export const createUploadSession = aiMutation({
     const original = assertOriginalUploadFileShape({
       mimeType: args.expectedMimeType,
       sizeBytes: args.expectedSizeBytes,
-    });
+    }, Number.MAX_SAFE_INTEGER);
     const derivativeUploads = args.derivativeUploads ?? [];
     for (const derivative of derivativeUploads) {
       assertImageDerivativeUploadFileShape({
         mimeType: derivative.expectedMimeType,
         sizeBytes: derivative.expectedSizeBytes,
-      });
+      }, Number.MAX_SAFE_INTEGER);
     }
     assertDerivativeUploadsAllowed(original.mediaKind, derivativeUploads.length);
     await assertPhotoTargets(ctx, args);
 
     const now = Date.now();
-    return await ctx.db.insert("photoUploadSessions", {
+    const info = await limitsFor(ctx, args.householdId);
+    if (!args.operationId && info.effective.enforcement === "on") throw new ConvexError({ code: "OPERATION_ID_REQUIRED", message: "Send an operationId and retry this upload." });
+    const operationId = args.operationId ? `${args.moveId}:${userId}:${args.operationId}` : args.originalStorageKey;
+    const previous = await ctx.db.query("photoUploadSessions").withIndex("by_household_operation", q => q.eq("householdId", args.householdId).eq("operationId", operationId)).unique();
+    if (previous) {
+      if (sessionOperationConflict(previous, { ...args, expectedSizeBytes: original.sizeBytes, expectedMimeType: original.mimeType })) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId already names different media." });
+      if (previous.status === "completed" || previous.completedPhotoId) return previous._id;
+      const cleanup = await ctx.db.query("sessionDeletionJobs").withIndex("by_session", q => q.eq("sessionId", previous._id)).order("desc").first();
+      if (cleanup?.status === "pending") throw new ConvexError("This upload is being cleaned up. Retry with a new operationId after cleanup completes.");
+      if (previous.cleanupCompletedAt) {
+        const keys = [args.originalStorageKey, ...derivativeUploads.map(d => d.storageKey)];
+        if (new Set(keys).size !== keys.length) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "Each stored copy needs its own object key." });
+        for (const key of keys) if (await claimedUploadObject(ctx, key, previous._id)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This stored object already belongs to another upload." });
+        const usageReservationId = await reserveUpload(ctx, args.householdId, operationId, original.sizeBytes + derivativeUploads.reduce((sum, d) => sum + d.expectedSizeBytes, 0), original.mediaKind, original.sizeBytes);
+    await ctx.db.patch(usageReservationId, { expiresAt: args.expiresAt });
+    await ctx.scheduler.runAt(args.expiresAt, internal.usageLimits.expireReservations, {});
+        await ctx.db.patch(previous._id, { usageReservationId, originalStorageKey: args.originalStorageKey, originalBucket: args.originalBucket, derivativeUploads, cleanupCompletedAt: undefined, cleanupError: undefined, status: "authorized", expiresAt: args.expiresAt, updatedAt: now });
+        await claimSessionObjects(ctx, previous._id, [args.originalStorageKey, ...derivativeUploads.map(d => d.storageKey)]);
+        return previous._id;
+      }
+      await restoreUploadReservation(ctx, previous, args.expiresAt);
+      if (previous.usageReservationId && (await ctx.db.get(previous.usageReservationId))?.status === "reserved") {
+        await ctx.db.patch(previous.usageReservationId, { expiresAt: args.expiresAt });
+        await ctx.scheduler.runAt(args.expiresAt, internal.usageLimits.expireReservations, {});
+      }
+      // Reuse the existing hold, keys and declared size. Late PUTs cannot create
+      // a second untracked original. Cleanup never deletes live session objects.
+      await ctx.scheduler.runAt(args.expiresAt + defaultPhotoUploadCleanupGraceMs, internal.storageDeletion.runSessionDeletion, { sessionId: previous._id });
+      await ctx.db.patch(previous._id, { status: "authorized", expiresAt: args.expiresAt, updatedAt: now });
+      return previous._id;
+    }
+
+    const keys = [args.originalStorageKey, ...derivativeUploads.map(d => d.storageKey)];
+    if (new Set(keys).size !== keys.length) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "Each stored copy needs its own object key." });
+    for (const key of keys) {
+      if (await claimedUploadObject(ctx, key)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This storage object is already registered to another operation." });
+    }
+    const usageReservationId = await reserveUpload(ctx, args.householdId, operationId, original.sizeBytes + derivativeUploads.reduce((sum, d) => sum + d.expectedSizeBytes, 0), original.mediaKind, original.sizeBytes);
+    await ctx.db.patch(usageReservationId, { expiresAt: args.expiresAt });
+    await ctx.scheduler.runAt(args.expiresAt, internal.usageLimits.expireReservations, {});
+    const sessionId = await ctx.db.insert("photoUploadSessions", {
+      usageReservationId,
+      operationId,
+      usageOwnerId: info.ownerId,
       householdId: args.householdId,
       moveId: args.moveId,
       itemId: args.itemId,
@@ -1526,8 +1616,19 @@ export const createUploadSession = aiMutation({
       createdAt: now,
       updatedAt: now,
     });
-  },
-});
+    await claimSessionObjects(ctx, sessionId, [args.originalStorageKey, ...derivativeUploads.map(d => d.storageKey)]);
+    await ctx.scheduler.runAt(args.expiresAt + defaultPhotoUploadCleanupGraceMs, internal.storageDeletion.runSessionDeletion, { sessionId });
+    return sessionId;
+  }
+export const sessionValidator = v.object(createSessionArgs);
+export const createUploadSession = aiMutation({ args: createSessionArgs, handler: createSession });
+
+export const completedOperation = internalQuery({ args: { householdId: v.id("households"), moveId: v.id("moves"), actorUserId: v.id("users"), operationId: v.string() }, handler: async (ctx, args) => {
+  const key = `${args.moveId}:${args.actorUserId}:${args.operationId}`;
+  const session = await ctx.db.query("photoUploadSessions").withIndex("by_household_operation", q => q.eq("householdId", args.householdId).eq("operationId", key)).unique();
+  const photo = session?.completedPhotoId ? await ctx.db.get(session.completedPhotoId) : null;
+  return photo ? { photoId: photo._id, uploadSessionId: session!._id, derivativeStatus: photo.derivativeStatus, derivativeError: photo.derivativeError } : null;
+} });
 
 export const getUploadSession = internalQuery({
   args: {
@@ -1550,13 +1651,15 @@ export const getUploadSession = internalQuery({
       !session ||
       session.householdId !== args.householdId ||
       session.moveId !== args.moveId ||
-      session.status !== "authorized" ||
-      session.expiresAt < Date.now()
+      (session.status !== "authorized" && !session.completedPhotoId) ||
+      (!session.completedPhotoId && session.expiresAt < Date.now() && (session.processingUntil ?? 0) < Date.now())
     ) {
       throw new Error("Upload session is not active.");
     }
 
-    return session;
+    const photo = session.completedPhotoId ? await ctx.db.get(session.completedPhotoId) : null;
+    if (session.completedPhotoId && !photo) throw new ConvexError("This upload was removed. Start a new upload with a new operationId.");
+    return { ...session, completedPhoto: photo ? { derivativeStatus: photo.derivativeStatus, derivativeError: photo.derivativeError } : undefined };
   },
 });
 
@@ -1666,6 +1769,8 @@ export const markUploadSessionFailed = aiMutation({
     householdId: v.id("households"),
     moveId: v.id("moves"),
     uploadSessionId: uploadSessionIdValidator,
+    reason: v.optional(v.string()),
+    code: v.optional(v.string()),
     apiActor: v.optional(apiPhotoActorValidator),
   },
   handler: async (ctx, args) => {
@@ -1683,16 +1788,20 @@ export const markUploadSessionFailed = aiMutation({
       session.householdId === args.householdId &&
       session.moveId === args.moveId
     ) {
+      if (session.status === "completed") return;
+      await closeUploadReservation(ctx, session);
+      await ctx.scheduler.runAt(Math.max(Date.now(), session.expiresAt + defaultPhotoUploadCleanupGraceMs), internal.storageDeletion.runSessionDeletion, { sessionId: session._id });
       await ctx.db.patch(args.uploadSessionId, {
         status: "failed",
+        failureCode: args.code ?? "UPLOAD_FAILED",
+        failureReason: args.reason ?? "The upload did not complete.",
         updatedAt: Date.now(),
       });
     }
   },
 });
 
-export const completeUploadSession = aiMutation({
-  args: {
+const completeSessionArgs = {
     ...publicationArgs,
     householdId: v.id("households"),
     moveId: v.id("moves"),
@@ -1711,10 +1820,11 @@ export const completeUploadSession = aiMutation({
     verificationStatus: v.optional(photoVerificationStatusValidator),
     capturedAt: v.optional(v.number()),
     apiActor: v.optional(apiPhotoActorValidator),
-  },
-  handler: async (ctx, args) => {
+  };
+async function completeSession(ctx: MutationCtx, args: Infer<typeof completeValidator>) {
     let userId = args.apiActor?.createdByUserId;
     if (!userId) {
+      await requirePersonConnectionManagement(ctx);
       const { actor } = await requireMovePermission(
         ctx,
         args.householdId,
@@ -1730,12 +1840,13 @@ export const completeUploadSession = aiMutation({
     }
 
     const session = await ctx.db.get(args.uploadSessionId);
+    if (session?.completedPhotoId && session.householdId === args.householdId && session.moveId === args.moveId) return session.completedPhotoId;
     if (
       !session ||
       session.householdId !== args.householdId ||
       session.moveId !== args.moveId ||
-      session.status !== "authorized" ||
-      session.expiresAt < Date.now()
+      (session.status !== "authorized" && !session.completedPhotoId) ||
+      (!session.completedPhotoId && session.expiresAt < Date.now() && (session.processingUntil ?? 0) < Date.now())
     ) {
       throw new Error("Upload session is not active.");
     }
@@ -1753,11 +1864,8 @@ export const completeUploadSession = aiMutation({
       householdId: args.householdId,
       dimension: "photoCount",
     });
-    await assertHouseholdEntitlement(ctx, {
-      householdId: args.householdId,
-      dimension: "photoStorageBytes",
-      increment: session.expectedSizeBytes,
-    });
+    const storedBytes = session.expectedSizeBytes + (session.derivativeUploads ?? []).reduce((sum, d) => sum + d.expectedSizeBytes, 0);
+    await commitUpload(ctx, args.householdId, session.usageReservationId, storedBytes);
 
     const now = Date.now();
     const derivativeRefs = (session.derivativeUploads ?? []).reduce<
@@ -1773,6 +1881,9 @@ export const completeUploadSession = aiMutation({
           : "pending"
         : undefined;
     const photoId = await ctx.db.insert("itemPhotos", {
+      storedBytes,
+      derivativeSizes: Object.fromEntries((session.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes])),
+      usageOwnerId: session.usageOwnerId ?? await ownerFor(ctx, args.householdId),
       householdId: args.householdId,
       moveId: args.moveId,
       itemId: session.itemId,
@@ -1811,6 +1922,7 @@ export const completeUploadSession = aiMutation({
 
     await ctx.db.patch(args.uploadSessionId, {
       status: "completed",
+      processingUntil: undefined,
       completedPhotoId: photoId,
       updatedAt: now,
     });
@@ -1833,9 +1945,12 @@ export const completeUploadSession = aiMutation({
       },
     });
 
+    for (const claim of await ctx.db.query("uploadObjectClaims").withIndex("by_session", q => q.eq("sessionId", session._id)).collect()) await ctx.db.delete(claim._id);
     return photoId;
-  },
-});
+  }
+export const completeValidator = v.object(completeSessionArgs);
+export const completeUploadSession = aiMutation({ args: completeSessionArgs, handler: completeSession });
+export const tryCompleteUploadSession = aiMutation({ args: completeSessionArgs, handler: async (ctx, args) => { try { return { photoId: await completeSession(ctx, args) }; } catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; await recordRefusalActivity(ctx, args.householdId, refusal, args.apiActor); const session = await ctx.db.get(args.uploadSessionId); if (session && !session.completedPhotoId) { await closeUploadReservation(ctx, session); await ctx.db.patch(session._id, { status: "failed", failureCode: refusal.code, failureReason: refusal.message, updatedAt: Date.now() }); await ctx.scheduler.runAt(Math.max(Date.now(), session.expiresAt + defaultPhotoUploadCleanupGraceMs), internal.storageDeletion.runSessionDeletion, { sessionId: session._id }); } if (refusal.code === "USAGE_LIMIT_REACHED") { const info = await limitsFor(ctx, args.householdId); await recordLimitEvent(ctx, { ownerId: info.ownerId, at: Date.now(), mode: "on", source: "finish", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining }); } return { refusal }; } } });
 
 export const markGeneratedDerivativesReady = aiMutation({
   args: {
@@ -1923,6 +2038,7 @@ export const cancelUploadSession = mutation({
     uploadSessionId: uploadSessionIdValidator,
   },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     await requireMovePermission(
       ctx,
       args.householdId,
@@ -1938,7 +2054,10 @@ export const cancelUploadSession = mutation({
     ) {
       return;
     }
+    await closeUploadReservation(ctx, session);
+    await ctx.scheduler.runAt(Math.max(Date.now(), session.expiresAt + defaultPhotoUploadCleanupGraceMs), internal.storageDeletion.runSessionDeletion, { sessionId: session._id });
     await ctx.db.patch(args.uploadSessionId, {
+      failureCode: "UPLOAD_CANCELLED", failureReason: "Cancelled by the uploader.",
       status: "cancelled",
       updatedAt: Date.now(),
     });
@@ -1953,6 +2072,7 @@ export const updateEvidence = mutation({
     ...photoUpdateArgs,
   },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     const { actor } = await requireMovePermission(
       ctx,
       args.householdId,
@@ -1975,6 +2095,8 @@ export const updateEvidence = mutation({
     await assertPhotoTargets(ctx, args);
 
     const now = Date.now();
+    if (args.sizeBytes !== undefined && args.sizeBytes !== photo.sizeBytes) throw new ConvexError("Stored media size can only be changed by storage verification.");
+    if (args.derivativeRefs && JSON.stringify(args.derivativeRefs) !== JSON.stringify(photo.derivativeRefs)) throw new ConvexError("Stored image references can only be changed by a verified upload.");
     const patch: Partial<Doc<"itemPhotos">> = { updatedAt: now };
     if (args.itemId !== undefined) patch.itemId = args.itemId ?? undefined;
     if (args.boxId !== undefined) patch.boxId = args.boxId ?? undefined;
@@ -2085,5 +2207,150 @@ export const archive = mutation({
       objectTable: "itemPhotos",
       objectId: args.photoId,
     });
+  },
+});
+
+// A durable intent is charged before PUT, so a lost completion write cannot
+// orphan uncounted copies. Generation never uses upload frequency/in-flight caps.
+export const prepareStoredDerivative = internalMutation({
+  args: { photoId: v.id("itemPhotos"), storageKey: v.string(), bytes: v.number() },
+  handler: async (ctx, args) => {
+    const photo = await ctx.db.get(args.photoId);
+    if (!photo || photo.pendingStorageDeletion) throw new ConvexError("Photo is being removed.");
+    const prior = await ctx.db.query("generatedObjects").withIndex("by_key", q => q.eq("storageKey", args.storageKey)).unique();
+    if (prior) { if (prior.photoId !== photo._id || prior.bytes !== args.bytes) throw new ConvexError("Generated object conflicts with its intent."); return; }
+    const ownerId = photo.usageOwnerId ?? await ownerFor(ctx, photo.householdId);
+    await ctx.db.insert("generatedObjects", { ownerId, photoId: photo._id, bucket: photo.originalBucket, storageKey: args.storageKey, bytes: args.bytes, state: "pending", createdAt: Date.now() });
+    await addStoredCopy(ctx, photo.householdId, args.bytes);
+    await ctx.db.patch(photo._id, { storedBytes: (photo.storedBytes ?? photo.sizeBytes) + args.bytes });
+  },
+});
+export const recordStoredDerivative = internalMutation({
+  args: { photoId: v.id("itemPhotos"), variant: photoDerivativeVariantValidator, storageKey: v.string(), bytes: v.number() },
+  handler: async (ctx, args) => {
+    const photo = await ctx.db.get(args.photoId);
+    if (!photo) throw new ConvexError("Photo not found.");
+    const intent = await ctx.db.query("generatedObjects").withIndex("by_key", q => q.eq("storageKey", args.storageKey)).unique();
+    if (intent && (intent.photoId !== photo._id || intent.bytes !== args.bytes)) throw new ConvexError("Generated object does not match its intent.");
+    if (photo.derivativeRefs[args.variant] === args.storageKey) return;
+    if (!intent) await addStoredCopy(ctx, photo.householdId, args.bytes);
+    else await addStoredCopy(ctx, photo.householdId, 0);
+    if (intent) await ctx.db.patch(intent._id, { state: "active" });
+    await ctx.db.patch(photo._id, { storedBytes: (photo.storedBytes ?? photo.sizeBytes) + (intent ? 0 : args.bytes), derivativeRefs: { ...photo.derivativeRefs, [args.variant]: args.storageKey }, derivativeSizes: { ...photo.derivativeSizes, [args.variant]: args.bytes } });
+  },
+});
+
+/** Read-only preflight. The scheduled sweep never deletes storage objects. */
+export const claimExpiredCleanup = internalQuery({
+  args: { cursor: v.optional(v.union(v.string(), v.null())), before: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const before = args.before ?? Date.now() - defaultPhotoUploadCleanupGraceMs;
+    const page = await ctx.db.query("photoUploadSessions").withIndex("by_expires", q => q.lt("expiresAt", before)).paginate({ cursor: args.cursor ?? null, numItems: 30 });
+    const candidates = [];
+    for (const session of page.page) {
+      if (session.completedPhotoId || session.status === "completed" || session.cleanupCompletedAt) continue;
+      const refs = [];
+      for (const ref of uploadSessionStorageRefs(session)) if (!await referencedObject(ctx, ref.storageKey, undefined, session._id)) refs.push(ref);
+      candidates.push({ id: session._id, refs });
+    }
+    return { before, candidates, cursor: page.continueCursor, isDone: page.isDone, dryRun: true as const };
+  },
+});
+export const cleanupExpiredInternal = internalAction({
+  args: { cursor: v.optional(v.union(v.string(), v.null())), before: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<unknown> => ctx.runQuery(internal.photos.claimExpiredCleanup, args),
+});
+
+function sessionOperationConflict(previous: Doc<"photoUploadSessions">, file: Infer<typeof sessionValidator>) {
+  return ["itemId", "boxId", "spaceId", "transportResourceId", "transportZoneId", "room"].some(field => (previous[field as keyof typeof previous] ?? null) !== (file[field as keyof typeof file] ?? null))
+    || previous.expectedSizeBytes !== file.expectedSizeBytes || previous.expectedMimeType !== file.expectedMimeType
+    || JSON.stringify((previous.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes])) !== JSON.stringify((file.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes]));
+}
+
+const batchSessionArgs = { files: v.array(v.object(createSessionArgs)), requestBytes: v.number() };
+async function createBatch(ctx: MutationCtx, args: Infer<typeof batchValidator>) {
+    if (!args.files.length) return [];
+    const valid: Array<{ index: number; file: Infer<typeof sessionValidator>; fresh: boolean }> = [];
+    const results: Array<{ uploadSessionId?: Doc<"photoUploadSessions">["_id"]; error?: string; code?: string; created?: boolean; fresh?: boolean }> = args.files.map(() => ({}));
+    let bytes = 0, heldBytes = 0;
+    const pendingKeys = new Set<string>();
+    const pendingOperations = new Set<string>();
+    const newSizes: Array<{ bytes: number; countUpload: boolean }> = [];
+    for (const [index, file] of args.files.entries()) {
+      try {
+        if (file.householdId !== args.files[0].householdId || file.moveId !== args.files[0].moveId) throw new ConvexError("A batch must belong to one move.");
+        if (file.apiActor) await assertMoveInHousehold(ctx, file);
+        else { await requirePersonConnectionManagement(ctx); await requireMovePermission(ctx, file.householdId, file.moveId, "inventory:edit"); }
+        await assertPhotoTargets(ctx, file);
+        const info = await limitsFor(ctx, file.householdId);
+        const original = assertOriginalUploadFileShape({ mimeType: file.expectedMimeType, sizeBytes: file.expectedSizeBytes }, Number.MAX_SAFE_INTEGER);
+        for (const derivative of file.derivativeUploads ?? []) assertImageDerivativeUploadFileShape({ mimeType: derivative.expectedMimeType, sizeBytes: derivative.expectedSizeBytes }, Number.MAX_SAFE_INTEGER);
+        assertDerivativeUploadsAllowed(original.mediaKind, file.derivativeUploads?.length ?? 0);
+        const actorId = file.apiActor?.createdByUserId ?? (await requireMovePermission(ctx, file.householdId, file.moveId, "inventory:edit")).actor;
+        const userId = typeof actorId === "string" ? actorId : actorId.type === "user" ? actorId.userId : "";
+        const operationId = file.operationId ? `${file.moveId}:${userId}:${file.operationId}` : file.originalStorageKey;
+        if (pendingOperations.has(operationId)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "An operationId can occur only once in a batch." });
+        const prior = await ctx.db.query("photoUploadSessions").withIndex("by_household_operation", q => q.eq("householdId", file.householdId).eq("operationId", operationId)).unique();
+        if (prior && (prior.expectedSizeBytes !== file.expectedSizeBytes || prior.expectedMimeType !== file.expectedMimeType)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId names different media." });
+        if (prior) {
+          if (sessionOperationConflict(prior, file)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId already names different media." });
+        }
+        if (prior && !prior.cleanupCompletedAt) {
+          const held = prior.usageReservationId ? await ctx.db.get(prior.usageReservationId) : null;
+          if (prior.completedPhotoId || prior.status === "completed" || held?.status === "reserved" || !held) { pendingOperations.add(operationId); results[index] = { uploadSessionId: prior._id, created: false }; continue; }
+          const deletion = await ctx.db.query("sessionDeletionJobs").withIndex("by_session", q => q.eq("sessionId", prior._id)).order("desc").first();
+          if (deletion?.status === "pending") throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This upload is being cleaned up. Use a new operationId." });
+          const missing = Math.max(0, held.bytes - (prior.quarantinedBytes ?? 0));
+          bytes += missing; newSizes.push({ bytes: missing, countUpload: false }); pendingOperations.add(operationId); valid.push({ index, file, fresh: false }); continue;
+        }
+        const sizeFailure = fileSizeFailure(original.mediaKind, original.sizeBytes, info.site, info.override);
+        if (sizeFailure) throw new ConvexError(sizeFailure);
+        if (!file.operationId && info.effective.enforcement === "on") throw new ConvexError({ code: "OPERATION_ID_REQUIRED", message: "Send an operationId and retry this upload." });
+        for (const key of [file.originalStorageKey, ...(file.derivativeUploads ?? []).map(d => d.storageKey)]) if (await claimedUploadObject(ctx, key)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This storage object is already registered to another operation." });
+        const keys = [file.originalStorageKey, ...(file.derivativeUploads ?? []).map(d => d.storageKey)];
+        if (keys.some(key => pendingKeys.has(key)) || new Set(keys).size !== keys.length) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "A stored object belongs to one upload in this batch." });
+        for (const key of keys) pendingKeys.add(key);
+        const held = await ctx.db.query("uploadReservations").withIndex("by_owner_key", q => q.eq("ownerId", info.ownerId).eq("key", operationId)).unique();
+        if (held?.status === "reserved") heldBytes += held.bytes;
+        else newSizes.push({ bytes: file.expectedSizeBytes + (file.derivativeUploads ?? []).reduce((sum, d) => sum + d.expectedSizeBytes, 0), countUpload: !held });
+        bytes += file.expectedSizeBytes + (file.derivativeUploads ?? []).reduce((sum, d) => sum + d.expectedSizeBytes, 0);
+        pendingOperations.add(operationId); valid.push({ index, file, fresh: true });
+      } catch (error) { const refusal = refusalOf(error); if (refusal) await recordRefusalActivity(ctx, file.householdId, refusal, file.apiActor); results[index] = { code: error instanceof ConvexError && typeof error.data === "object" ? String(error.data?.code ?? "INVALID_FILE") : "INVALID_FILE", error: error instanceof ConvexError && typeof error.data === "object" ? String(error.data?.message ?? "Invalid media.") : error instanceof Error ? error.message : "Invalid media." }; }
+    }
+    await checkBatchAdmission(ctx, args.files[0].householdId, bytes, valid.length, args.requestBytes, heldBytes, newSizes);
+    for (const { index, file, fresh } of valid) results[index] = { uploadSessionId: await createSession(ctx, file), created: true, fresh };
+    return results;
+  }
+export const batchValidator = v.object(batchSessionArgs);
+export const createUploadBatch = aiMutation({ args: batchSessionArgs, handler: createBatch });
+export const tryCreateUploadBatch = aiMutation({ args: batchSessionArgs, handler: async (ctx, args) => { try { return { results: await createBatch(ctx, args) }; } catch (error) { const refusal = refusalOf(error); if (!refusal) throw error; if (args.files[0]) await recordRefusalActivity(ctx, args.files[0].householdId, refusal, args.files[0].apiActor); if (refusal.code === "USAGE_LIMIT_REACHED" && args.files[0]) { const info = await limitsFor(ctx, args.files[0].householdId); await recordLimitEvent(ctx, { ownerId: info.ownerId, at: Date.now(), mode: "on", source: "batch", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining }); } return { refusal }; } } });
+
+export const tryCreateUploadSession = aiMutation({ args: createSessionArgs, handler: async (ctx, args) => {
+  try { return { uploadSessionId: await createSession(ctx, args) }; }
+  catch (error) { const refusal = refusalOf(error); if (!refusal) throw error;
+    const info = await limitsFor(ctx, args.householdId);
+    await recordRefusalActivity(ctx, args.householdId, refusal, args.apiActor);
+    if (refusal.code === "USAGE_LIMIT_REACHED") await recordLimitEvent(ctx, { ownerId: info.ownerId, at: Date.now(), mode: "on", source: "begin", limit: refusal.limit, used: refusal.used, cap: refusal.cap, requested: refusal.requested, remaining: refusal.remaining });
+    return { refusal };
+  }
+} });
+
+export const startFinalize = aiMutation({ args: { householdId: v.id("households"), moveId: v.id("moves"), uploadSessionId: uploadSessionIdValidator, apiActor: v.optional(apiPhotoActorValidator) }, handler: async (ctx, args) => {
+  if (args.apiActor) await assertMoveInHousehold(ctx, args); else { await requirePersonConnectionManagement(ctx); await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:edit"); }
+  const session = await ctx.db.get(args.uploadSessionId);
+  if (!session || session.householdId !== args.householdId || session.moveId !== args.moveId || (session.status !== "authorized" && !session.completedPhotoId)) throw new ConvexError("Upload session is not active.");
+  if (!session.completedPhotoId) await ctx.db.patch(session._id, { processingUntil: Date.now() + 10 * 60 * 1000 });
+} });
+
+// Only the server-side batch coordinator calls this for admitted items it never
+// dispatched. No signed PUT URL has been handed to a caller for this slot.
+export const discardUnstartedBatchItem = internalMutation({
+  args: { householdId: v.id("households"), moveId: v.id("moves"), sessionId: v.id("photoUploadSessions"), fresh: v.boolean() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.householdId !== args.householdId || session.moveId !== args.moveId || session.completedPhotoId || session.status !== "authorized") return;
+    if (args.fresh) await releaseUpload(ctx, session.usageReservationId);
+    else await closeUploadReservation(ctx, session);
+    await ctx.db.patch(session._id, { status: "failed", failureCode: "BATCH_STOPPED", failureReason: "Batch stopped before this item was transferred.", ...(args.fresh ? { cleanupCompletedAt: Date.now() } : {}) });
   },
 });

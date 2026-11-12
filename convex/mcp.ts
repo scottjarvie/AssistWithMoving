@@ -1,3 +1,4 @@
+import { AI_STORAGE_NOTE } from "./lib/usageLimits/core";
 // MCP tool surface for the OAuth gateway. Each entry maps an MCP tool name to a
 // Convex function in convex/mcpTools.ts; `identityArg: "caller"` tells the
 // gateway to inject the verified caller identity into that argument (and strip
@@ -327,7 +328,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpAction({
     name: "add_images",
     description:
-      "Upload MANY photos at once from base64 image data and attach each via attachTo to an item (itemId), box (boxId), room (spaceId), transport (transportResourceId or transportZoneId), or room name. Remote URL ingestion is refused at this OAuth gateway because it cannot safely verify DNS and redirect targets; fetch user-approved media in the client and pass base64. Returns results: [{ photoId, ok, error? }].",
+      "Upload MANY photos at once from base64 image data and attach each via attachTo to an item (itemId), box (boxId), room (spaceId), transport (transportResourceId or transportZoneId), or room name. Remote URL ingestion is refused at this OAuth gateway because it cannot safely verify DNS and redirect targets; fetch user-approved media in the client and pass base64. Returns results: [{ photoId, ok, error? }]." + " " + AI_STORAGE_NOTE,
     fn: internal.mcpToolsImages.addImages,
     args: addImagesArgs,
     identityArg: "caller",

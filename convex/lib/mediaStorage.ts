@@ -1,3 +1,4 @@
+import { checkFileSize, formatBytes } from "./usageLimits/core";
 export const mediaKinds = ["image", "audio", "video"] as const;
 
 export type MediaKind = (typeof mediaKinds)[number];
@@ -29,9 +30,11 @@ export const allowedMediaMimeTypes = [
   ...allowedVideoMimeTypes,
 ] as const;
 
-export const maxImageUploadBytes = 25 * 1024 * 1024;
-export const maxAudioUploadBytes = 100 * 1024 * 1024;
-export const maxVideoUploadBytes = 500 * 1024 * 1024;
+export { siteDefaults } from "../../shared/media-limits.mjs";
+import { siteDefaults } from "../../shared/media-limits.mjs";
+export const maxImageUploadBytes = siteDefaults.image;
+export const maxAudioUploadBytes = siteDefaults.audio;
+export const maxVideoUploadBytes = siteDefaults.video;
 
 export type UploadFileShape = {
   mimeType: string;
@@ -58,7 +61,7 @@ export function mediaKindForMimeType(mimeType: string): MediaKind | null {
 export function assertOriginalUploadFileShape({
   mimeType,
   sizeBytes,
-}: UploadFileShape): NormalizedUploadFileShape {
+}: UploadFileShape, maxBytesOverride?: number): NormalizedUploadFileShape {
   const normalizedMimeType = normalizeMimeType(mimeType);
   const mediaKind = mediaKindForMimeType(normalizedMimeType);
   if (!mediaKind) {
@@ -67,9 +70,9 @@ export function assertOriginalUploadFileShape({
     );
   }
 
-  const maxBytes = maxUploadBytesForMediaKind(mediaKind);
+  const maxBytes = maxBytesOverride ?? maxUploadBytesForMediaKind(mediaKind);
   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > maxBytes) {
-    throw new Error(sizeLimitMessage(mediaKind));
+    throw new Error(checkFileSize(mediaKind, sizeBytes, maxBytes)?.message ?? "Invalid file size.");
   }
 
   return {
@@ -83,7 +86,7 @@ export function assertOriginalUploadFileShape({
 export function assertImageDerivativeUploadFileShape({
   mimeType,
   sizeBytes,
-}: UploadFileShape): NormalizedUploadFileShape {
+}: UploadFileShape, maxBytesOverride?: number): NormalizedUploadFileShape {
   const normalizedMimeType = normalizeMimeType(mimeType);
   if (!isAllowedImageMimeType(normalizedMimeType)) {
     throw new Error("Image derivatives must be JPEG, PNG, or WebP.");
@@ -91,16 +94,16 @@ export function assertImageDerivativeUploadFileShape({
   if (
     !Number.isFinite(sizeBytes) ||
     sizeBytes <= 0 ||
-    sizeBytes > maxImageUploadBytes
+    sizeBytes > (maxBytesOverride ?? maxImageUploadBytes)
   ) {
-    throw new Error("Image derivatives must be under 25 MB.");
+    throw new Error(checkFileSize("image", sizeBytes, maxBytesOverride ?? maxImageUploadBytes)?.message ?? "Invalid image size.");
   }
 
   return {
     mimeType: normalizedMimeType,
     mediaKind: "image",
     sizeBytes,
-    maxBytes: maxImageUploadBytes,
+    maxBytes: maxBytesOverride ?? maxImageUploadBytes,
   };
 }
 
@@ -181,15 +184,8 @@ export function maxUploadBytesForMediaKind(mediaKind: MediaKind) {
   }
 }
 
-export function sizeLimitMessage(mediaKind: MediaKind) {
-  switch (mediaKind) {
-    case "image":
-      return "Images must be under 25 MB.";
-    case "audio":
-      return "Audio uploads must be under 100 MB.";
-    case "video":
-      return "Video uploads must be under 500 MB.";
-  }
+export function sizeLimitMessage(mediaKind: MediaKind, cap = maxUploadBytesForMediaKind(mediaKind)) {
+  return `${mediaKind === "image" ? "Images" : mediaKind === "audio" ? "Audio uploads" : "Video uploads"} must be under ${formatBytes(cap)}.`;
 }
 
 function isAllowedImageMimeType(

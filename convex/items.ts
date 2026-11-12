@@ -1708,8 +1708,8 @@ export const archive = mutation({
 // this removes the row and CANNOT be undone, so shared hard-delete cleanup owns
 // the referencing-table list. Terminal queue results and audit logs intentionally
 // keep historical ids; live queue targets/media and planning suggestions are
-// scrubbed. (B2 photo objects are not deleted here, same as the move purge; only
-// the DB rows go.)
+// scrubbed. Owned photo records and byte charges survive until the storage
+// worker confirms removal of the original and every copy.
 export const remove = mutation({
   args: {
     householdId: v.id("households"),

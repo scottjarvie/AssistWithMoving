@@ -15,6 +15,7 @@ import connectionPolicy from "../../../../shared/ai-connection-policy.json";
 //
 // Tool definitions are shared with the local stdio server in
 // mcp-server/assistwithmoving-mcp.mjs so the two transports cannot drift.
+import { getApiContext } from "../../../../mcp-server/assistwithmoving-api.mjs";
 import { createMcpHandler } from "mcp-handler";
 import type { McpServerOptions } from "@modelcontextprotocol/sdk/server/mcp.js";
 
@@ -120,6 +121,11 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     mediaIngress: { transport: "hosted", allowedFileRoots: [] },
   };
 
+  let uploadLimits: Parameters<typeof import("../../../../shared/upload-policy.mjs").uploadPolicyLine>[0] | undefined;
+  if (boundedRequest.method === "POST") {
+    try { const envelope = await boundedRequest.clone().json(); if (envelope.method === "tools/list") { const context = await getApiContext(apiConfig); uploadLimits = context.data?.uploadLimits; } } catch { /* Authentication failures keep the existing recovery tools available. */ }
+  }
+
   // The wrapper forwards these unchanged but its declarations predate the
   // guard. Validate against the installed SDK constructor's actual options.
   const serverOptions = {
@@ -131,6 +137,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     (server) => {
       registerTools(server, apiConfig, {
         allowedToolNames: hostedAllowedToolNames(apiKey),
+        uploadLimits,
       });
     },
     serverOptions,

@@ -1436,7 +1436,7 @@ responses include a `derivativeVariants` array describing those prepared web
 sizes without storage URLs or object keys. Remote URLs must use public HTTPS
 without embedded credentials. Assist With Moving validates every DNS result and
 redirect hop, pins the accepted address for the connection, applies a timeout,
-and enforces a 25 MB limit from both headers and streamed bytes. Claimed image
+and enforces the effective image cap from both headers and streamed bytes, within the direct transport ceiling defined in `shared/media-limits.mjs`. Claimed image
 types must also match JPEG, PNG, or WebP file signatures. API-key REST/MCP
 clients may pass a public `sourceUrl`, `dataUrl`, or `fileBase64`; the
 maintainer-only stdio server can also read an approved local `filePath`. The
@@ -1484,7 +1484,7 @@ curl -X POST https://movingmanifest.com/api/v1/uploads/init \
 
 For audio/video originals, omit `derivatives`. Supported originals are JPEG,
 PNG, WebP, MP3, M4A, AAC, WAV, WebM audio, OGG audio, MP4, MOV, and WebM video.
-Current limits are 25 MB for images, 100 MB for audio, and 500 MB for video.
+File caps come from the owner’s effective settings, with defaults in `shared/media-limits.mjs`. The independent transport ceilings also live there; `/me` reports the effective policy.
 
 Finalize:
 

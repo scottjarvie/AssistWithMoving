@@ -1,3 +1,4 @@
+import { summaryFor, uploadPolicy } from "./usageLimits";
 import {queueNeedsInput} from "./lib/queue";
 import {queueWorkFilter} from "./lib/queue";
 import { createQueueItem, readQueueSuggestions, reviewQueueSuggestion, type QueueResultRef } from "./lib/queueService";
@@ -555,6 +556,15 @@ async function deleteExpiredRateLimitWindows(ctx: MutationCtx, now: number) {
   }
 }
 
+function hasUploadRefusal(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const body = value as { body?: unknown; error?: { code?: string }; data?: { results?: Array<{ ok?: boolean; code?: string; refusal?: { code?: string } }> } };
+  if (body.body) return hasUploadRefusal(body.body);
+  const isRefusal = (code?: string) => code === "USAGE_LIMIT_REACHED" || code === "FILE_TOO_LARGE";
+  if (isRefusal(body.error?.code)) return true;
+  return body.data?.results?.some(result => result.ok === false && (isRefusal(result.code) || isRefusal(result.refusal?.code))) ?? false;
+}
+
 export const storeIdempotency = internalMutation({
   args: {
     householdId: v.id("households"),
@@ -567,7 +577,12 @@ export const storeIdempotency = internalMutation({
     expiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const reply = (args.response && typeof args.response === "object" ? args.response : {}) as { error?: { code?: string }; data?: { results?: Array<{ ok?: boolean; code?: string }> } };
+    const transferErrors = ["photo_upload_failed", "upload_init_failed", "upload_finalize_failed"];
+    if (transferErrors.includes(reply.error?.code ?? "") || (Array.isArray(reply.data?.results) && reply.data.results.some(item => item.ok === false && transferErrors.includes(item.code ?? "")))) return;
+
     if (!args.idempotencyKey || !args.requestHash) return;
+    if (hasUploadRefusal(args.response)) return;
     await ctx.db.insert("apiIdempotencyKeys", {
       householdId: args.householdId,
       moveId: args.moveId,
@@ -1643,6 +1658,8 @@ async function routeMe(
   ]);
   return restOk({
     data: {
+      uploadLimits: auth.status === "active" && auth.scopes.includes("photos/write") ? await uploadPolicy(ctx, auth.householdId) : null,
+      storage: auth.status === "active" && auth.scopes.includes("photos/write") ? await summaryFor(ctx, auth.householdId) : null,
       household: household
         ? {
             householdId: household._id,
@@ -2150,6 +2167,7 @@ async function routeAgentContext(
 
   return restOk({
     data: {
+      storage: await summaryFor(ctx, move.householdId),
       move: safeMove(move),
       aiContract: {
         preferredSetupOrder: [

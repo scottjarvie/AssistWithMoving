@@ -44,7 +44,7 @@ export const tierDefinitions: Record<
     limits: {
       activeMoves: 2,
       photoCount: 250,
-      photoStorageBytes: 1 * 1024 * 1024 * 1024,
+      photoStorageBytes: Number.POSITIVE_INFINITY, // Storage is governed by usageLimits settings.
       aiJobsMonthly: 50,
       aiEstimatedCentsMonthly: 250,
       exportJobsMonthly: 25,
@@ -59,7 +59,7 @@ export const tierDefinitions: Record<
     limits: {
       activeMoves: 25,
       photoCount: 10_000,
-      photoStorageBytes: 50 * 1024 * 1024 * 1024,
+      photoStorageBytes: Number.POSITIVE_INFINITY, // Storage is governed by usageLimits settings.
       aiJobsMonthly: 2_000,
       aiEstimatedCentsMonthly: 10_000,
       exportJobsMonthly: 1_000,
@@ -75,7 +75,7 @@ export const tierDefinitions: Record<
     limits: {
       activeMoves: 50,
       photoCount: 25_000,
-      photoStorageBytes: 150 * 1024 * 1024 * 1024,
+      photoStorageBytes: Number.POSITIVE_INFINITY, // Storage is governed by usageLimits settings.
       aiJobsMonthly: 5_000,
       aiEstimatedCentsMonthly: 25_000,
       exportJobsMonthly: 2_500,
@@ -91,7 +91,7 @@ export const tierDefinitions: Record<
     limits: {
       activeMoves: 200,
       photoCount: 100_000,
-      photoStorageBytes: 500 * 1024 * 1024 * 1024,
+      photoStorageBytes: Number.POSITIVE_INFINITY, // Storage is governed by usageLimits settings.
       aiJobsMonthly: 25_000,
       aiEstimatedCentsMonthly: 100_000,
       exportJobsMonthly: 10_000,

@@ -2535,30 +2535,7 @@ describe("Assist With Moving MCP API client", () => {
     );
     await writeFile(firstPath, pngBytes);
     await writeFile(secondPath, pngBytes);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({
-          data: {
-            photoId: "photo-shelf",
-            uploadSessionId: "session-shelf",
-            derivativeStatus: "ready",
-          },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({
-          data: {
-            photoId: "photo-workbench",
-            uploadSessionId: "session-workbench",
-            derivativeStatus: "pending",
-          },
-        }),
-      });
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, headers: new Headers({ "content-type": "application/json" }), json: async () => ({ data: { imageCount: 2, uploadedCount: 2, failedCount: 0, results: [ { index: 0, ok: true, result: { photoId: "photo-shelf", uploadSessionId: "session-shelf", derivativeStatus: "ready" } }, { index: 1, ok: true, result: { photoId: "photo-workbench", uploadSessionId: "session-workbench", derivativeStatus: "pending" } } ] } }) });
     vi.stubGlobal("fetch", fetchMock);
 
     try {
@@ -2641,45 +2618,16 @@ describe("Assist With Moving MCP API client", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const [firstUrl, firstInit] = fetchMock.mock.calls[0] as unknown as [
-      URL,
-      { headers: Record<string, string>; body: Buffer },
-    ];
-    const [secondUrl, secondInit] = fetchMock.mock.calls[1] as unknown as [
-      URL,
-      { headers: Record<string, string>; body: Buffer },
-    ];
-
-    expect(firstUrl.pathname).toBe("/api/v1/photos/upload");
-    expect(Object.fromEntries(firstUrl.searchParams)).toMatchObject({
-      moveId: "move1",
-      fileName: "garage-shelf.png",
-      mimeType: "image/png",
-      room: "Garage",
-      caption: "Garage shelf before packing",
-      photoType: "room",
-      privacyLevel: "normal",
-      source: "mcp",
-      exifHandlingStatus: "pending",
-    });
-    expect(firstInit.headers["idempotency-key"]).toBe("garage-photo-batch-1");
-    expect(firstInit.body).toEqual(pngBytes);
-
-    expect(secondUrl.pathname).toBe("/api/v1/photos/upload");
-    expect(Object.fromEntries(secondUrl.searchParams)).toMatchObject({
-      moveId: "move1",
-      fileName: "garage-workbench.png",
-      mimeType: "image/png",
-      room: "Garage workbench",
-      caption: "Garage workbench before packing",
-      photoType: "room",
-      privacyLevel: "normal",
-      source: "mcp",
-      exifHandlingStatus: "pending",
-    });
-    expect(secondInit.headers["idempotency-key"]).toBe("garage-photo-batch-2");
-    expect(secondInit.body).toEqual(pngBytes);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, { headers: Record<string, string>; body: string }];
+    expect(url.pathname).toBe("/api/v1/uploads/batch");
+    expect(init.headers["idempotency-key"]).toBe("garage-photo-batch");
+    const payload = JSON.parse(init.body);
+    expect(payload.images).toHaveLength(2);
+    expect(payload.images[0]).toMatchObject({ moveId: "move1", room: "Garage", caption: "Garage shelf before packing", mimeType: "image/png" });
+    expect(payload.images[1]).toMatchObject({ moveId: "move1", room: "Garage workbench", caption: "Garage workbench before packing", mimeType: "image/png" });
+    expect(Buffer.from(payload.images[0].fileBase64, "base64")).toEqual(pngBytes);
+    expect(Buffer.from(payload.images[1].fileBase64, "base64")).toEqual(pngBytes);
   });
 
   it("keeps one-call image upload dry runs free of image bytes", async () => {
@@ -3249,4 +3197,28 @@ describe("Assist With Moving MCP API client", () => {
     expect(result.images[0].error).toBeTruthy();
     expect(result.images[0].base64).toBeUndefined();
   });
+});
+
+it.each([false, true])("R3 single-image client preserves stop-on-error=%s", async continueOnError => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: "photo_upload_failed", message: "Synthetic transfer failed" } }), { status: 400, headers: { "content-type": "application/json" } })));
+  const call = uploadEvidenceImages({ baseUrl: "https://synthetic.invalid/api/v1", apiKey: "synthetic-test-only" }, { moveId: "synthetic-move", continueOnError, images: [{ fileBase64: "YmFk", mimeType: "image/png" }] });
+  if (continueOnError) expect(await call).toMatchObject({ uploadedCount: 0, failedCount: 1 });
+  else await expect(call).rejects.toMatchObject({ partialResults: [{ index: 0, ok: false }] });
+});
+
+it("R3 batch client forwards stop-on-error and preserves server partial results", async () => {
+  const partialResults = [{ index: 0, ok: false, error: "Synthetic failure" }];
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: "batch_upload_failed", message: "Synthetic failure" }, partialResults }), { status: 400, headers: { "content-type": "application/json" } })); vi.stubGlobal("fetch", fetch);
+  await expect(uploadEvidenceImages({ baseUrl: "https://synthetic.invalid/api/v1", apiKey: "synthetic-test-only" }, { moveId: "synthetic-move", continueOnError: false, images: [{ fileBase64: "YmFk" }, { fileBase64: "YmFk" }] })).rejects.toMatchObject({ partialResults });
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ continueOnError: false });
+});
+
+it("R4 local stop-on-error sends no later local image after preparation fails", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "moving-stop-test-"));
+  const partialResults = [{ index: 0, ok: false, error: "Synthetic missing file" }];
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: "batch_upload_failed", message: "Synthetic missing file" }, partialResults }), { status: 400, headers: { "content-type": "application/json" } })); vi.stubGlobal("fetch", fetch);
+  try {
+    await expect(uploadEvidenceImages(localMediaApiConfig(root), { moveId: "synthetic", continueOnError: false, images: [{ filePath: path.join(root, "missing.png") }, { filePath: path.join(root, "later.png") }] })).rejects.toMatchObject({ partialResults });
+    expect(JSON.parse(fetch.mock.calls[0][1].body).images).toHaveLength(1);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

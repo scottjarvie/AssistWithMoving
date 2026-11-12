@@ -1,3 +1,5 @@
+import { refusalOf, aiRefusal, type UploadRefusal } from "./lib/usageLimits/refusal";
+import { utf8Bytes } from "./lib/usageLimits/core";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 // OAuth MCP gateway IMAGE tools — multi-image in both directions.
 //   get_images: pull many photos at once (short-lived display URLs).
@@ -437,6 +439,7 @@ const imageInputValidator = v.object({
   ),
 });
 export const addImagesArgs = {
+  operationId: v.optional(v.string()),
   ...publicationArgs,
   caller: mcpCallerValidator,
   householdId: v.id("households"),
@@ -479,11 +482,11 @@ export const addImages = internalAction({
     ctx,
     args,
   ): Promise<{
-    results: Array<{
-      photoId: string | null;
-      ok: boolean;
-      error?: string;
-    }>;
+    results: Array<{ photoId: string | null; ok: boolean; error?: string; code?: string }>;
+    storage?: Awaited<ReturnType<typeof import("./usageLimits").summaryFor>>;
+    uploadLimits?: Awaited<ReturnType<typeof import("./usageLimits").uploadPolicy>>;
+    isError?: boolean; structuredContent?: UploadRefusal;
+    content?: Array<{ type: "text"; text: string }>;
   }> => {
     const { userId } = await ctx.runQuery(
       internal.mcpToolsImages.mcpAssertMoveEditable,
@@ -499,83 +502,55 @@ export const addImages = internalAction({
     // internal-only *ForActor entry points (these skip the ctx.auth check).
     const apiActor = { apiKeyId: "mcp-oauth", createdByUserId: userId, oauthCaller: args.caller, acknowledgeContactDetails: args.acknowledgeContactDetails, restorePrivately: args.restorePrivately };
 
-    const results: Array<{ photoId: string | null; ok: boolean; error?: string }> =
-      [];
-
-    for (const image of args.images) {
+    const policy = await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: args.householdId });
+    if (!args.operationId && policy.requiresOperationId) return { ...aiRefusal({ code: "OPERATION_ID_REQUIRED", message: "Send an operationId and reuse it when retrying this batch." }), results: args.images.map(() => ({ photoId: null, ok: false })), storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }) };
+    const operationId = args.operationId ?? crypto.randomUUID();
+    const results: Array<{ photoId: string | null; ok: boolean; error?: string; code?: string }> = args.images.map(() => ({ photoId: null, ok: false }));
+    const prepared: Array<{ index: number; image: typeof args.images[number]; bytes: Uint8Array; mimeType: string; dims: { width: number; height: number }; operationId: string }> = [];
+    for (const [index, image] of args.images.entries()) {
       try {
         assertOAuthImageSource(image);
-        let bytes: Uint8Array;
-        if (image.base64) {
-          bytes = bytesFromBase64(image.base64);
-        } else {
-          throw new ConvexError("Provide base64 image data.");
-        }
+        const bytes = bytesFromBase64(image.base64!);
         const mimeType = assertOAuthImageBytes(bytes, image.mimeType);
-
-        // completeUploadSession requires positive width/height for images, but
-        // the gateway has no Sharp/Node runtime. Read the dimensions from the
-        // raw bytes (same pure parser the REST upload path uses) before init.
-        // Normalize the mime type first ("image/JPEG", "image/png; charset=..")
-        // so the parser's exact switch still matches.
-        const dims = imageDimensions(
-          bytes,
-          mimeType.toLowerCase().split(";")[0].trim(),
-        );
-        if (!dims) {
-          results.push({
-            photoId: null,
-            ok: false,
-            error: "Could not read image dimensions.",
-          });
-          continue;
-        }
-
-        const init = await ctx.runAction(internal.photos.initUploadForActor, {
-          householdId: args.householdId,
-          moveId: args.moveId,
-          itemId: image.attachTo?.itemId,
-          boxId: image.attachTo?.boxId,
-          spaceId: image.attachTo?.spaceId,
-          transportResourceId: image.attachTo?.transportResourceId,
-          transportZoneId: image.attachTo?.transportZoneId,
-          room: image.attachTo?.room,
-          mimeType,
-          sizeBytes: bytes.byteLength,
-          apiActor,
-        });
-
-        const put = await fetch(init.uploadUrl, {
-          method: "PUT",
-          headers: init.headers,
-          body: new Blob([bytes.buffer as ArrayBuffer], { type: mimeType }),
-        });
+        const dims = imageDimensions(bytes, mimeType);
+        if (!dims) throw new ConvexError("Could not read image dimensions.");
+        prepared.push({ index, image, bytes, mimeType, dims, operationId: `${operationId}:${index}` });
+      } catch (error) { results[index] = { photoId: null, ok: false, error: error instanceof Error ? error.message : "Invalid image." }; }
+    }
+    let admissions: Array<{ uploadSessionId?: Id<"photoUploadSessions">; error?: string; code?: string; created?: boolean }>;
+    try {
+      const admissionResult = await ctx.runMutation(internal.photos.tryCreateUploadBatch, {
+        requestBytes: utf8Bytes(args.images),
+        files: prepared.map(p => ({ householdId: args.householdId, moveId: args.moveId, ...p.image.attachTo, operationId: p.operationId, originalStorageKey: `moves/${args.moveId}/photos/${crypto.randomUUID()}`, originalBucket: process.env.B2_BUCKET_NAME ?? "", expectedMimeType: p.mimeType, expectedSizeBytes: p.bytes.byteLength, derivativeUploads: [], expiresAt: Date.now() + 15 * 60 * 1000, apiActor })),
+      });
+      if (admissionResult.refusal) return { ...aiRefusal(admissionResult.refusal), results, storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }) };
+      admissions = admissionResult.results!;
+    } catch (error) {
+      // Local synthetic calls retain ConvexError data; the mutation also provides
+      // a non-throwing typed admission envelope for remote action boundaries.
+      const refusal = refusalOf(error); if (!refusal) throw error;
+      return { ...aiRefusal(refusal), results, storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }) };
+    }
+    for (const [position, p] of prepared.entries()) {
+      const admission = admissions[position];
+      if (!admission.uploadSessionId) { results[p.index] = { photoId: null, ok: false, error: admission.error, code: admission.code }; continue; }
+      let uploadSessionId: Id<"photoUploadSessions"> | undefined;
+      try {
+        const init = await ctx.runAction(internal.photos.initUploadForActor, { householdId: args.householdId, moveId: args.moveId, ...p.image.attachTo, operationId: p.operationId, mimeType: p.mimeType, sizeBytes: p.bytes.byteLength, apiActor });
+        if (init.refusal) return { ...aiRefusal(init.refusal), results, storage: init.storage };
+        uploadSessionId = init.uploadSessionId as Id<"photoUploadSessions">;
+        if (init.replayedPhotoId) { results[p.index] = { photoId: init.replayedPhotoId, ok: true }; continue; }
+        const put = init.alreadyUploaded ? { ok: true, status: 200 } : await fetch(init.uploadUrl, { method: "PUT", headers: init.headers, body: new Blob([p.bytes.buffer as ArrayBuffer], { type: p.mimeType }) });
         if (!put.ok) throw new ConvexError(`upload PUT failed (${put.status})`);
-
-        const finalized = await ctx.runAction(
-          internal.photos.finalizeUploadForActor,
-          {
-            householdId: args.householdId,
-            moveId: args.moveId,
-            uploadSessionId: init.uploadSessionId as Id<"photoUploadSessions">,
-            width: dims.width,
-            height: dims.height,
-            caption: image.caption,
-            source: "mcp",
-            apiActor,
-          },
-        );
-        results.push({ photoId: String(finalized.photoId), ok: true });
+        const finalized = await ctx.runAction(internal.photos.finalizeUploadForActor, { householdId: args.householdId, moveId: args.moveId, uploadSessionId, width: p.dims.width, height: p.dims.height, caption: p.image.caption, source: "mcp", apiActor });
+        if (finalized.refusal) return { ...aiRefusal(finalized.refusal), results, storage: finalized.storage };
+        results[p.index] = { photoId: finalized.photoId, ok: true };
       } catch (error) {
-        results.push({
-          photoId: null,
-          ok: false,
-          error: error instanceof Error ? error.message : "upload failed",
-        });
+        if (uploadSessionId && admission.created) await ctx.runMutation(internal.photos.markUploadSessionFailed, { householdId: args.householdId, moveId: args.moveId, uploadSessionId, apiActor });
+        results[p.index] = { photoId: null, ok: false, error: error instanceof Error ? error.message : "Upload failed." };
       }
     }
-
-    return { results };
+    return { results, uploadLimits: await ctx.runQuery(internal.usageLimits.policyInternal, { householdId: args.householdId }), storage: await ctx.runQuery(internal.usageLimits.summaryInternal, { householdId: args.householdId }) };
   },
 });
 

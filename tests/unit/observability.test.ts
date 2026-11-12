@@ -198,3 +198,8 @@ describe("observability helpers", () => {
     );
   });
 });
+
+it("labels the old site-wide original metadata statistic separately from the allowance", () => {
+  const signal = evaluateOperationalSignals({ ...quietMetrics, photoStorageBytes: 600 * 1024 ** 3 }).find(signal => signal.key === "photoStorageBytes");
+  expect(signal?.label).toContain("Original photo metadata"); expect(signal?.label).toContain("not allowance");
+});

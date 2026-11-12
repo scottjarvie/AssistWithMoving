@@ -19,7 +19,7 @@ const websiteOrigins = [
  * a foreign authorized party, or a pending session never establish person proof.
  */
 export async function requirePersonConnectionManagement(
-  ctx: MutationCtx | QueryCtx,
+  ctx: Pick<MutationCtx | QueryCtx, "auth">,
 ) {
   const identity = await ctx.auth.getUserIdentity();
   if (

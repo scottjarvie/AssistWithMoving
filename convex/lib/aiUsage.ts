@@ -1,9 +1,10 @@
+import { siteDefaults } from "../../shared/media-limits.mjs";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
 export const aiUsageLimits = {
   maxInputBytes: 200_000,
-  maxPhotoInputBytes: 25 * 1024 * 1024,
+  maxPhotoInputBytes: siteDefaults.image,
   maxDailyJobsPerMove: 120,
   maxDailyJobsPerHousehold: 200,
   maxDailyJobsPerUser: 80,
