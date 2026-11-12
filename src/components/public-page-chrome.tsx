@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FamilyRow } from "@/components/family-row";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRight,
@@ -168,7 +169,9 @@ export function PublicHeader() {
 
 export function PublicFooter() {
   return (
-    <footer className="border-t border-border">
+    <footer>
+      <FamilyRow />
+      <div className="border-t border-border">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
         <div className="max-w-xl space-y-1">
           <p>{product.name} organizes move records, evidence, and documentation packets.</p>
@@ -197,6 +200,7 @@ export function PublicFooter() {
             Support
           </a>
         </div>
+      </div>
       </div>
     </footer>
   );

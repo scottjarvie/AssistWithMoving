@@ -142,3 +142,62 @@
   background: color-mix(in oklch, var(--primary), transparent 55%);
   color: var(--foreground);
 }
+
+/* AWL-0018/0020 · Moving's ledger, phone sheet and quiet family rail. */
+.family-popover { z-index: 70; width: 312px; max-width: calc(100vw - 16px); max-height: min(calc(100dvh - 16px), var(--radix-popover-content-available-height)); overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--popover); color: var(--popover-foreground); box-shadow: 0 12px 32px #0003; padding: 8px; outline: none; }
+.family-scrim { position: fixed; inset: 0; z-index: 70; background: #0006; }
+.family-sheet { position: fixed; inset: auto 0 0; z-index: 71; max-height: 88dvh; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 16px 16px 0 0; background: var(--popover); color: var(--popover-foreground); padding-bottom: env(safe-area-inset-bottom); outline: none; }
+.family-sheet-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.family-sheet-scroll { overflow-y: auto; overscroll-behavior: contain; padding: 12px; }
+.account-band { padding: 12px; border-radius: var(--radius); background: var(--muted); }
+.account-identity { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.account-badge { display: inline-block; margin-top: 6px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+.account-links { display: grid; gap: 4px; }
+.account-band .account-links { margin-top: 12px; }
+.account-links a, .account-exit button { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px; border-radius: var(--radius); font-size: 14px; line-height: 20px; }
+.account-links svg, .account-exit svg { width: 16px; height: 16px; flex-shrink: 0; }
+.account-links a:hover, .account-exit button:hover { background: var(--secondary); }
+.account-settings { margin-top: 8px; }
+.account-role { border-top: 1px solid var(--border); padding-top: 4px; }
+.account-exit { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; }
+.account-exit button { width: 100%; text-align: left; }
+.account-exit button:disabled { opacity: .6; }
+.account-feedback { padding: 8px; font-size: 14px; }
+.account-feedback button { min-height: 44px; min-width: 44px; text-decoration: underline; }
+.family-row { position: relative; display: flex; height: 56px; max-width: 100%; min-width: 0; border-top: 1px solid var(--border); background: var(--background); }
+.family-rail { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 5px 12px; scrollbar-width: none; }
+.family-rail::-webkit-scrollbar { display: none; }
+.family-rail > li { flex-shrink: 0; }
+.family-overflow { padding-right: 104px; scroll-padding-right: 104px; }
+.family-kicker { font-size: 11px; color: var(--muted-foreground); padding-right: 8px; }
+.family-entry { display: flex; align-items: center; gap: 8px; min-height: 44px; min-width: 44px; padding: 6px 12px; border-radius: var(--radius); font-size: 13px; }
+.family-entry small { font-size: 10px; color: var(--muted-foreground); }
+.family-current { background: var(--primary); color: var(--primary-foreground); }
+.family-current small { color: inherit; }
+.family-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--family-dot-light); }
+.dark .family-dot { background: var(--family-dot-dark); }
+.family-dot-hollow { border: 1.5px solid var(--family-dot-light); background: transparent; }
+.dark .family-dot-hollow { border-color: var(--family-dot-dark); background: transparent; }
+.family-current .family-dot { background: currentColor; }
+.family-pin { position: absolute; right: 0; top: 5px; padding-left: 20px; background: linear-gradient(to right, transparent, var(--background) 20px); }
+.family-all { width: auto; min-width: 84px; padding-inline: 10px; font-size: 13px; background: var(--background); }
+.family-all svg { width: 14px; }
+.family-roster.family-popover { width: 560px; }
+.family-roster-title { padding: 8px 12px 12px; font-size: 14px; font-weight: 600; }
+.family-roster-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; }
+.family-roster-grid .family-entry { white-space: normal; overflow-wrap: anywhere; }
+.family-roster-grid small { display: block; }
+.family-life { grid-column: 1 / -1; border-top: 1px solid var(--border); }
+.family-entry[href]:hover { background: var(--muted); }
+.family-row a:focus-visible, .family-popover a:focus-visible, .family-sheet a:focus-visible, .account-surface button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+@media (pointer: coarse) { .account-links a, .account-exit button { min-height: 44px; min-width: 44px; } }
+@media (max-width: 639px) {
+  .family-here { display: none; }
+  .account-links { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .account-links a { min-height: 44px; border: 1px solid var(--border); overflow-wrap: anywhere; }
+  .account-band .account-links a:first-child { grid-column: 1 / -1; }
+  .account-settings { padding: 8px; background: var(--muted); border-radius: var(--radius); }
+  .account-role { margin-top: 8px; padding-top: 8px; }
+  .family-roster-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 359px) { .family-roster-grid { grid-template-columns: minmax(0,1fr); } }
