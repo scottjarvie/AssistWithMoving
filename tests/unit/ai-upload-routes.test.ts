@@ -8,16 +8,16 @@ import { api, internal } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { nativeWebsiteIdentity } from "../helpers/website-session";
 
-const store = vi.hoisted(() => ({ objects: new Map<string, { bytes: Uint8Array; mime: string; size?: number; read?: (a: number, n: number) => Uint8Array }>(), failDelete: false, onHead: undefined as undefined | (() => Promise<void>), reads: [] as number[], versionReads: [] as string[] }));
+const store = vi.hoisted(() => ({ objects: new Map<string, { bytes: Uint8Array; mime: string; size?: number; read?: (a: number, n: number) => Uint8Array }>(), versions: new Map<string, string[]>(), puts: 0, putMode: "normal" as "normal" | "reject" | "before_error" | "after_error", putHook: undefined as undefined | (() => Promise<void>), failDelete: false, onHead: undefined as undefined | (() => Promise<void>), reads: [] as number[], versionReads: [] as string[] }));
 vi.mock("@aws-sdk/client-s3", async load => {
   const actual = await load<typeof import("@aws-sdk/client-s3")>();
   return { ...actual, S3Client: class { async send(command: { constructor: { name: string }; input: { Key: string; Range?: string; VersionId?: string; Body?: Uint8Array; ContentType?: string } }) {
-    if (command.constructor.name === "DeleteObjectCommand") { if (store.failDelete) { store.failDelete = false; throw new Error("Synthetic provider unavailable"); } store.objects.delete(command.input.Key); return {}; }
-    if (command.constructor.name === "PutObjectCommand") { store.objects.set(command.input.Key, { bytes: command.input.Body!, mime: command.input.ContentType! }); return { VersionId: "synthetic-version", ETag: "synthetic-etag" }; }
+    if (command.constructor.name === "DeleteObjectCommand") { if (store.failDelete) { store.failDelete = false; throw new Error("Synthetic provider unavailable"); } store.objects.delete(command.input.Key); store.versions.delete(command.input.Key); return {}; }
+    if (command.constructor.name === "PutObjectCommand") { store.objects.set(command.input.Key, { bytes: command.input.Body!, mime: command.input.ContentType! }); return { VersionId: store.versions.get(command.input.Key)?.at(-1) ?? "synthetic-version", ETag: "synthetic-etag" }; }
     const object = store.objects.get(command.input.Key);
     if (!object) throw Object.assign(new Error("Missing synthetic object"), { name: "NotFound" });
     if (command.constructor.name === "HeadObjectCommand" && store.onHead) { const hook = store.onHead; store.onHead = undefined; await hook(); }
-    if (command.constructor.name === "HeadObjectCommand") return { ContentLength: object.size ?? object.bytes.length, ContentType: object.mime, VersionId: "synthetic-version", ETag: "synthetic-etag" };
+    if (command.constructor.name === "HeadObjectCommand") return { ContentLength: object.size ?? object.bytes.length, ContentType: object.mime, VersionId: store.versions.get(command.input.Key)?.at(-1) ?? "synthetic-version", ETag: "synthetic-etag" };
     if (command.constructor.name === "GetObjectCommand") {
       const match = /bytes=(\d+)-(\d+)/.exec(command.input.Range ?? "");
       if (!match) return { ContentLength: object.bytes.length, Body: { transformToByteArray: async () => object.bytes } };
@@ -32,7 +32,7 @@ vi.mock("@aws-sdk/client-s3", async load => {
 vi.mock("@aws-sdk/s3-request-presigner", () => ({ getSignedUrl: async (_: unknown, command: { input: { Key: string } }) => `https://storage.invalid/${encodeURIComponent(command.input.Key)}` }));
 const modules = import.meta.glob("../../convex/**/*.ts");
 beforeEach(() => {
-  vi.useFakeTimers(); store.failDelete = false; store.onHead = undefined; store.objects.clear(); store.reads.length = 0; store.versionReads.length = 0;
+  vi.useFakeTimers(); store.versions.clear(); store.puts = 0; store.putMode = "normal"; store.putHook = undefined; store.failDelete = false; store.onHead = undefined; store.objects.clear(); store.reads.length = 0; store.versionReads.length = 0;
   for (const name of ["B2_ENDPOINT", "B2_BUCKET_NAME", "B2_APPLICATION_KEY_ID", "B2_APPLICATION_KEY"]) vi.stubEnv(name, "synthetic-placeholder");
   vi.stubEnv("CLERK_JWT_ISSUER_DOMAIN", "https://synthetic.clerk.accounts.dev");
 });
@@ -71,7 +71,14 @@ async function aiFixture() {
   vi.stubGlobal("fetch", async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     if (url.hostname !== "storage.invalid" || init?.method !== "PUT") throw new Error("Unexpected external request");
-    store.objects.set(decodeURIComponent(url.pathname.slice(1)), { bytes: init.body as Uint8Array, mime: (init.headers as Record<string, string>)["Content-Type"] });
+    store.puts++;
+    await store.putHook?.();
+    if (store.putMode === "reject") return new Response(null, { status: 503 });
+    if (store.putMode === "before_error") throw new Error("Synthetic transport failure");
+    const key = decodeURIComponent(url.pathname.slice(1)), versions = store.versions.get(key) ?? [];
+    versions.push(`synthetic-version-${versions.length + 1}`); store.versions.set(key, versions);
+    store.objects.set(key, { bytes: init.body as Uint8Array, mime: (init.headers as Record<string, string>)["Content-Type"] });
+    if (store.putMode === "after_error") throw new Error("Synthetic response failure");
     return new Response(null, { status: 200 });
   });
   const bytes = new Uint8Array(readFileSync("tests/fixtures/audio/tone.wav"));
@@ -255,7 +262,8 @@ it.each([false, true])("cleanup retry stores the current ordinary attempt with d
  const retry = (await f.begin()).receipts[0]; expect(retry.ok).toBe(true);
  const current = (await f.t.run(ctx => ctx.db.get(retry.uploadSessionId!)))!;
  expect(current.originalStorageKey === oldKey).toBe(!enabled);
- expect((await f.put(retry)).status).toBe(200);
+ if (!retry.alreadyUploaded) expect((await f.put(retry)).status).toBe(200);
+ else await expectDeadCapability(f, retry);
  expect(store.objects.has(current.originalStorageKey)).toBe(true);
  await f.finish(retry.uploadSessionId!);
  expect((await f.t.run(ctx => ctx.db.query("usageCounters").collect()))[0]).toMatchObject({ storedBytes: f.bytes.length, reservedBytes: 0, inFlight: 0 });
@@ -343,9 +351,10 @@ async function lifecycle(route: "person" | "connection", state: "begun" | "store
  async function begin() {
   if (route === "connection") return (await f.begin([input])).receipts[0];
   const receipt = await f.person.action(api.photos.initUpload, { ...f.scope, operationId: input.operationId, sizeBytes: bytes.length, mimeType: input.mimeType, audioKind: input.audioKind });
-  return { uploadSessionId: receipt.uploadSessionId as Id<"photoUploadSessions">, uploadUrl: receipt.uploadUrl };
+  return { uploadSessionId: receipt.uploadSessionId as Id<"photoUploadSessions">, uploadUrl: receipt.uploadUrl, alreadyUploaded: receipt.alreadyUploaded };
  }
  async function put(receipt: Awaited<ReturnType<typeof begin>>) {
+  if (receipt.alreadyUploaded) return;
   if (route === "connection") expect((await f.put(receipt, bytes)).status).toBe(200);
   else await fetch(receipt.uploadUrl!, { method: "PUT", headers: { "Content-Type": input.mimeType }, body: bytes });
  }
@@ -425,4 +434,77 @@ it("operation ids stay opaque and a capability cannot initialize another operati
  const { uploadActor } = await import("../../convex/lib/aiUploadSession"); const before = await rowSnapshot(f);
  await expect(f.t.action(internal.photos.initUploadForActor, { ...f.scope, operationId: "different-operation", mimeType: input.mimeType, sizeBytes: input.sizeBytes, audioKind: input.audioKind, apiActor: uploadActor(session) })).rejects.toThrow();
  expect(await rowSnapshot(f)).toEqual(before);
+});
+
+function gate() { let open!: () => void; const promise = new Promise<void>(resolve => { open = resolve; }); return { promise, open }; }
+async function expectDeadCapability(f: Awaited<ReturnType<typeof aiFixture>>, receipt: { uploadUrl?: string }) {
+ const before = await rowSnapshot(f), writes = store.puts, versions = structuredClone(store.versions);
+ expect((await f.put(receipt)).status).toBe(400);
+ expect(await rowSnapshot(f)).toEqual(before); expect(store.puts).toBe(writes); expect(store.versions).toEqual(versions);
+}
+it("single-attempt capability refuses overlapping PUT and all successful replays without writes", async () => {
+ const f = await aiFixture(), receipt = (await f.begin()).receipts[0];
+ const entered = gate(), release = gate(), duplicate = gate();
+ store.putHook = async () => { if (store.puts > 1) duplicate.open(); entered.open(); await release.promise; };
+ let firstFinished = false;
+ const first = f.put(receipt).then(response => { firstFinished = true; return response; });
+ await entered.promise;
+ const before = await rowSnapshot(f);
+ const second = f.put(receipt);
+ const outcome = await Promise.race([second.then(response => response.status), duplicate.promise.then(() => "duplicate-write")]);
+ expect(firstFinished).toBe(false);
+ // Release the synthetic provider even if the old implementation reaches it twice.
+ if (outcome !== 400) { release.open(); await Promise.all([first, second]); }
+ expect(outcome).toBe(400); expect(await rowSnapshot(f)).toEqual(before);
+ expect((await f.begin()).receipts[0].ok).toBe(false);
+ expect(await rowSnapshot(f)).toEqual(before);
+ release.open(); expect((await first).status).toBe(200);
+ expect(store.puts).toBe(1); expect([...store.versions.values()].map(v => v.length)).toEqual([1]);
+ await expectDeadCapability(f, receipt);
+ const result = await f.finish(receipt.uploadSessionId!) as { photoId: Id<"itemPhotos"> };
+ await expectDeadCapability(f, receipt);
+ expect((await f.t.run(ctx => ctx.db.get(result.photoId)))!.audioVersionId).toBe([...store.versions.values()][0][0]);
+ expect(store.versionReads.length).toBeGreaterThan(0); expect(new Set(store.versionReads)).toEqual(new Set([[...store.versions.values()][0][0]]));
+ expect((await f.t.run(ctx => ctx.db.query("usageCounters").collect()))[0]).toMatchObject({ storedBytes: f.bytes.length, reservedBytes: 0, inFlight: 0 });
+});
+it.each(["digest", "reject", "after_error"] as const)("single-attempt %s failure requires a fresh capability and preserves one version", async failure => {
+ const f = await aiFixture(), first = (await f.begin()).receipts[0];
+ const body = f.bytes.slice(); if (failure === "digest") body[0] ^= 1; else store.putMode = failure;
+ expect((await f.put(first, body)).status).toBe(400); store.putMode = "normal";
+ await expectDeadCapability(f, first);
+ const retry = (await f.begin()).receipts[0];
+ expect(retry.uploadSessionId).toBe(first.uploadSessionId); expect(retry.uploadUrl).not.toBe(first.uploadUrl);
+ await expectDeadCapability(f, first);
+ expect((await f.put(retry)).status).toBe(200); await expectDeadCapability(f, retry);
+ await f.finish(retry.uploadSessionId!);
+ expect([...store.versions.values()].map(v => v.length)).toEqual([1]); expect(store.objects.size).toBe(1);
+ expect((await f.t.run(ctx => ctx.db.query("usageCounters").collect()))[0]).toMatchObject({ storedBytes: f.bytes.length, reservedBytes: 0, inFlight: 0 });
+});
+
+it.each(["late-object", "cleanup"] as const)("an uncertain storage response recovers via %s without a second write to the original", async recovery => {
+ const f = await aiFixture(), first = (await f.begin()).receipts[0];
+ const original = (await f.t.run(ctx => ctx.db.get(first.uploadSessionId!)))!;
+ store.putMode = "before_error"; expect((await f.put(first)).status).toBe(400); store.putMode = "normal";
+ await expectDeadCapability(f, first);
+ const retry = (await f.begin()).receipts[0]; expect(retry.uploadUrl).not.toBe(first.uploadUrl);
+ expect((await f.put(retry)).status).toBe(400); expect(store.puts).toBe(1); expect(store.versions.size).toBe(0);
+ await expectDeadCapability(f, retry);
+ if (recovery === "late-object") {
+  store.objects.set(original.originalStorageKey, { bytes: f.bytes, mime: f.input.mimeType });
+  store.versions.set(original.originalStorageKey, ["late-provider-version"]);
+ } else {
+  const row = (await f.t.run(ctx => ctx.db.get(first.uploadSessionId!)))!;
+  const { defaultPhotoUploadCleanupGraceMs } = await import("../../convex/lib/photoCleanup");
+  vi.setSystemTime(row.expiresAt + defaultPhotoUploadCleanupGraceMs + 1);
+  await f.t.mutation(internal.usageLimits.operatorSetDeletionModes, { bucket: true, reason: "Synthetic test" });
+  await f.t.action(internal.storageDeletion.runSessionDeletion, { sessionId: row._id });
+ }
+ const final = (await f.begin()).receipts[0]; expect(final.uploadSessionId).toBe(first.uploadSessionId);
+ await expectDeadCapability(f, retry); expect((await f.put(final)).status).toBe(200);
+ const result = await f.finish(final.uploadSessionId!) as { photoId: Id<"itemPhotos"> };
+ expect(store.objects.size).toBe(1); expect([...store.versions.values()].map(v => v.length)).toEqual([1]);
+ expect(store.puts).toBe(recovery === "late-object" ? 1 : 2);
+ expect((await f.t.run(ctx => ctx.db.get(result.photoId)))!.audioVersionId).toBe([...store.versions.values()][0][0]);
+ expect(store.versionReads.length).toBeGreaterThan(0); expect(new Set(store.versionReads)).toEqual(new Set([[...store.versions.values()][0][0]]));
+ expect((await f.t.run(ctx => ctx.db.query("usageCounters").collect()))[0]).toMatchObject({ storedBytes: f.bytes.length, reservedBytes: 0, inFlight: 0 });
 });

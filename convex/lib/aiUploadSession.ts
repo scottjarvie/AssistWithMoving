@@ -40,6 +40,7 @@ export async function requireAiUploadSession(ctx: QueryCtx | MutationCtx, args: 
   if (session) {
     const binding = session.aiUpload;
     if (!binding || !sameUploadPrincipal(principal, binding.principal) || session.moveId !== moveId || session.householdId !== access.move.householdId || session.createdByUserId !== access.policy.actor.userId) return uploadUnavailable();
+    if (args.begin && binding.putState === "in_progress" && !session.cleanupCompletedAt) return uploadUnavailable();
     if (args.operationId && session.operationId !== `${moveId}:${access.policy.actor.userId}:${args.operationId}`) return uploadUnavailable();
     if (args.token !== undefined && (args.token !== binding.token || binding.attemptKey !== session.originalStorageKey || ((!args.principal || !session.completedPhotoId) && Math.min(binding.expiresAt ?? session.expiresAt, session.expiresAt) <= Date.now()))) return uploadUnavailable();
     if (args.declaration && (args.declaration.sha256 !== binding.sha256 || args.declaration.width !== binding.width || args.declaration.height !== binding.height)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This operationId already names different media." });
@@ -59,8 +60,8 @@ export async function requireAiUploadSession(ctx: QueryCtx | MutationCtx, args: 
 
 export function uploadBinding(previous: Doc<"photoUploadSessions"> | null, auth: UploadAuthorization, key: string, expiresAt: number): NonNullable<Doc<"photoUploadSessions">["aiUpload"]> {
   const old = previous?.aiUpload;
-  if (old?.attemptKey === key && (old.expiresAt ?? previous!.expiresAt) > Date.now()) return old;
-  return { principal: auth.principal, token: auth.token, sha256: auth.sha256, width: auth.width, height: auth.height, attemptKey: key, expiresAt, transferred: false };
+  if (old?.attemptKey === key && old.putState !== "failed" && (old.expiresAt ?? previous!.expiresAt) > Date.now()) return old;
+  return { principal: auth.principal, token: auth.token, sha256: auth.sha256, width: auth.width, height: auth.height, attemptKey: key, expiresAt, transferred: false, putState: "awaiting", putUncertain: old?.attemptKey === key && old.putUncertain === true };
 }
 export function uploadActor(session: Doc<"photoUploadSessions">) {
   const binding = session.aiUpload!;
