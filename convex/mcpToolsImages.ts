@@ -1,3 +1,4 @@
+import { oauthClientIdFromClaims } from "./lib/mcpClientIdentity";
 import { refusalOf, aiRefusal, type UploadRefusal } from "./lib/usageLimits/refusal";
 import { utf8Bytes } from "./lib/usageLimits/core";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
@@ -139,6 +140,7 @@ export const mcpResolvePhotos = internalQuery({
           canViewPhotoAssets(p, policy.visibility),
       )
       .map((p) => ({
+        mediaKind: p.mediaKind ?? "image",
         photoId: p._id,
         caption: p.caption ?? null,
         attachedTo: p.itemId
@@ -346,7 +348,15 @@ export const getImages = internalAction({
     let spentBytes = 0;
     let budgetExhausted = false;
 
+    const audio: Array<Record<string, unknown>> = [];
     for (const p of photos) {
+      if (p.mediaKind === "audio") {
+        try {
+          const playback = await ctx.runMutation(internal.audioPlayback.mint, { photoId: p.photoId, subject: args.caller.subject, clientId: oauthClientIdFromClaims(args.caller.claims), agent: true });
+          audio.push({ photoId: p.photoId, ...playback, instruction: "Listen to this private audio attachment. No transcript is available; transcription is not automatic." });
+        } catch { audio.push({ photoId: p.photoId, unavailable: true, instruction: "Audio is unavailable to this connection. Recheck your evidence permission." }); }
+        continue;
+      }
       const remaining = TOTAL_BYTE_BUDGET - spentBytes;
       // Nothing useful is left to spend: stop fetching rather than burning
       // round trips on photos that cannot fit.
@@ -408,6 +418,8 @@ export const getImages = internalAction({
         skipped: skipped.length,
         budgetExhausted,
       }),
+      audio,
+      audioReturned: audio.filter(item => !item.unavailable).length,
       images: delivered,
       skipped,
     };

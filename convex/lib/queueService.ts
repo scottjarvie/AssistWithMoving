@@ -164,6 +164,7 @@ export function shapeQueueItem(item: Doc<"queueItems">, now = Date.now()) {
         ? `/app/boxes/${encodeURIComponent(item.fromRecord.id)}`
         : `/app/moves/${encodeURIComponent(item.moveId)}/${item.fromRecord.type === "item" ? "inventory" : item.fromRecord.type === "space" ? "spaces" : item.fromRecord.type === "queue" ? "queue" : "overview"}?record=${encodeURIComponent(item.fromRecord.id)}`
       : null,
+    attachmentPhotoIds: item.attachmentPhotoIds ?? [],
     suggestionStatus: item.suggestionStatus ?? null,
     suggestionActedAt: item.suggestionActedAt ?? null,
     suggestionReason: item.suggestionReason ?? null,

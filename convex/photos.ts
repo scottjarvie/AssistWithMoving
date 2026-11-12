@@ -1,3 +1,5 @@
+import { validateAudioContainer, invalidAudioFileError, audioVideoTrackError, voiceNoteTooLongError } from "./lib/media/audio";
+import { transportLimits, voiceNoteMaxSeconds } from "../shared/media-limits.mjs";
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
 import { refusalOf, personRefusal, type UploadRefusal } from "./lib/usageLimits/refusal";
 import { recordLimitEvent, recordRefusalActivity, checkBatchAdmission } from "./usageLimits";
@@ -508,6 +510,7 @@ type ApiPhotoActor = {
 };
 
 const initUploadArgs = {
+  audioKind: v.optional(v.union(v.literal("audio"), v.literal("voicenote"))),
   operationId: v.optional(v.string()),
   householdId: v.id("households"),
   moveId: v.id("moves"),
@@ -533,6 +536,7 @@ const initUploadArgs = {
 };
 
 type InitUploadArgs = {
+  audioKind?: "audio" | "voicenote";
   operationId?: string;
   householdId: Doc<"households">["_id"];
   moveId: Doc<"moves">["_id"];
@@ -617,6 +621,7 @@ async function runInitUpload(
     const begun = await ctx.runMutation(
       internal.photos.tryCreateUploadSession,
       {
+        audioKind: args.audioKind,
         operationId: args.operationId,
         householdId: args.householdId,
         moveId: args.moveId,
@@ -803,6 +808,24 @@ async function runFinalizeUpload(
       ) {
         throw new Error("Uploaded object type does not match the session.");
       }
+      if (session.mediaKind === "audio") {
+        const version = head.VersionId;
+        if (!version) throw new ConvexError("The audio storage version is not available yet. Try again.");
+        const result = await validateAudioContainer({ size: session.expectedSizeBytes, async read(offset, length) {
+          const part = await b2Client().send(new GetObjectCommand({ Bucket: session.originalBucket ?? config.bucketName, Key: session.originalStorageKey, VersionId: version, IfMatch: head.ETag, Range: `bytes=${offset}-${offset + length - 1}` }));
+          if (part.ContentLength !== length) throw new Error("Invalid audio range response.");
+          return (await part.Body!.transformToByteArray());
+        } }, session.expectedMimeType);
+        const audience = apiActor ? "ai" : "person";
+        let refusal: { code: "AUDIO_TOO_LONG" | "INVALID_AUDIO_CONTAINER" | "AUDIO_HAS_VIDEO"; message: string } | null = !result.valid ? (result.reason === "video-track" ? audioVideoTrackError(audience) : invalidAudioFileError(audience)) : null;
+        const policy = await ctx.runQuery(internal.photos.audioDurationPolicy, { householdId: args.householdId });
+        if (result.valid && session.audioKind === "voicenote" && result.durationSeconds !== null && result.durationSeconds > policy) refusal = voiceNoteTooLongError(result.durationSeconds, policy, audience);
+        if (refusal) {
+          await ctx.runMutation(internal.photos.markUploadSessionFailed, { householdId: args.householdId, moveId: args.moveId, uploadSessionId: args.uploadSessionId, apiActor, code: refusal.code, reason: refusal.message });
+          throw new ConvexError(refusal);
+        }
+        await ctx.runMutation(internal.photos.markAudioValidated, { uploadSessionId: args.uploadSessionId, versionId: version, durationSeconds: result.valid ? result.durationSeconds ?? undefined : undefined });
+      }
       for (const derivative of session.derivativeUploads ?? []) {
         const derivativeHead = await b2Client().send(
           new HeadObjectCommand({
@@ -828,6 +851,7 @@ async function runFinalizeUpload(
         }
       }
     } catch (error) {
+      if (refusalOf(error)) throw error;
       if (!(error instanceof Error) || !/does not match|unsupported|invalid/i.test(error.message)) throw error;
       await ctx.runMutation(internal.photos.markUploadSessionFailed, {
         reason: error instanceof Error ? error.message : "Invalid upload.",
@@ -1481,6 +1505,7 @@ export const finishExpiredUploadSessionCleanup = aiMutation({
 });
 
 export const createSessionArgs = {
+    audioKind: v.optional(v.union(v.literal("audio"), v.literal("voicenote"))),
     ...publicationArgs,
     operationId: v.optional(v.string()),
     householdId: v.id("households"),
@@ -1553,6 +1578,7 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
 
     const now = Date.now();
     const info = await limitsFor(ctx, args.householdId);
+    assertAudioCap(original.mediaKind, args.audioKind, original.sizeBytes, info.site, info.override);
     if (!args.operationId && info.effective.enforcement === "on") throw new ConvexError({ code: "OPERATION_ID_REQUIRED", message: "Send an operationId and retry this upload." });
     const operationId = args.operationId ? `${args.moveId}:${userId}:${args.operationId}` : args.originalStorageKey;
     const previous = await ctx.db.query("photoUploadSessions").withIndex("by_household_operation", q => q.eq("householdId", args.householdId).eq("operationId", operationId)).unique();
@@ -1565,7 +1591,7 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
         const keys = [args.originalStorageKey, ...derivativeUploads.map(d => d.storageKey)];
         if (new Set(keys).size !== keys.length) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "Each stored copy needs its own object key." });
         for (const key of keys) if (await claimedUploadObject(ctx, key, previous._id)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This stored object already belongs to another upload." });
-        const usageReservationId = await reserveUpload(ctx, args.householdId, operationId, original.sizeBytes + derivativeUploads.reduce((sum, d) => sum + d.expectedSizeBytes, 0), original.mediaKind, original.sizeBytes);
+        const usageReservationId = await reserveUpload(ctx, args.householdId, operationId, original.sizeBytes + derivativeUploads.reduce((sum, d) => sum + d.expectedSizeBytes, 0), original.mediaKind === "audio" ? args.audioKind ?? "audio" : original.mediaKind, original.sizeBytes);
     await ctx.db.patch(usageReservationId, { expiresAt: args.expiresAt });
     await ctx.scheduler.runAt(args.expiresAt, internal.usageLimits.expireReservations, {});
         await ctx.db.patch(previous._id, { usageReservationId, originalStorageKey: args.originalStorageKey, originalBucket: args.originalBucket, derivativeUploads, cleanupCompletedAt: undefined, cleanupError: undefined, status: "authorized", expiresAt: args.expiresAt, updatedAt: now });
@@ -1589,7 +1615,7 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
     for (const key of keys) {
       if (await claimedUploadObject(ctx, key)) throw new ConvexError({ code: "OPERATION_CONFLICT", message: "This storage object is already registered to another operation." });
     }
-    const usageReservationId = await reserveUpload(ctx, args.householdId, operationId, original.sizeBytes + derivativeUploads.reduce((sum, d) => sum + d.expectedSizeBytes, 0), original.mediaKind, original.sizeBytes);
+    const usageReservationId = await reserveUpload(ctx, args.householdId, operationId, original.sizeBytes + derivativeUploads.reduce((sum, d) => sum + d.expectedSizeBytes, 0), original.mediaKind === "audio" ? args.audioKind ?? "audio" : original.mediaKind, original.sizeBytes);
     await ctx.db.patch(usageReservationId, { expiresAt: args.expiresAt });
     await ctx.scheduler.runAt(args.expiresAt, internal.usageLimits.expireReservations, {});
     const sessionId = await ctx.db.insert("photoUploadSessions", {
@@ -1606,6 +1632,7 @@ async function createSession(ctx: MutationCtx, args: Infer<typeof sessionValidat
       room: normalizeOptionalText(args.room),
       originalStorageKey: args.originalStorageKey,
       originalBucket: args.originalBucket,
+      audioKind: args.audioKind,
       mediaKind: original.mediaKind,
       expectedMimeType: original.mimeType,
       expectedSizeBytes: original.sizeBytes,
@@ -1854,6 +1881,7 @@ async function completeSession(ctx: MutationCtx, args: Infer<typeof completeVali
       session.mediaKind ??
       mediaKindForMimeType(session.expectedMimeType) ??
       "image";
+    if (mediaKind === "audio" && !session.audioValidated) throw new ConvexError(invalidAudioFileError());
     assertImageDimensions({
       mediaKind,
       width: args.width,
@@ -1881,6 +1909,10 @@ async function completeSession(ctx: MutationCtx, args: Infer<typeof completeVali
           : "pending"
         : undefined;
     const photoId = await ctx.db.insert("itemPhotos", {
+      audioKind: session.audioKind,
+      audioDurationSeconds: session.audioDurationSeconds,
+      audioVersionId: session.audioVersionId,
+      audioValidated: session.audioValidated,
       storedBytes,
       derivativeSizes: Object.fromEntries((session.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes])),
       usageOwnerId: session.usageOwnerId ?? await ownerFor(ctx, args.householdId),
@@ -2263,6 +2295,7 @@ export const cleanupExpiredInternal = internalAction({
 
 function sessionOperationConflict(previous: Doc<"photoUploadSessions">, file: Infer<typeof sessionValidator>) {
   return ["itemId", "boxId", "spaceId", "transportResourceId", "transportZoneId", "room"].some(field => (previous[field as keyof typeof previous] ?? null) !== (file[field as keyof typeof file] ?? null))
+    || previous.audioKind !== file.audioKind
     || previous.expectedSizeBytes !== file.expectedSizeBytes || previous.expectedMimeType !== file.expectedMimeType
     || JSON.stringify((previous.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes])) !== JSON.stringify((file.derivativeUploads ?? []).map(d => [d.variant, d.expectedSizeBytes]));
 }
@@ -2303,6 +2336,7 @@ async function createBatch(ctx: MutationCtx, args: Infer<typeof batchValidator>)
           const missing = Math.max(0, held.bytes - (prior.quarantinedBytes ?? 0));
           bytes += missing; newSizes.push({ bytes: missing, countUpload: false }); pendingOperations.add(operationId); valid.push({ index, file, fresh: false }); continue;
         }
+        assertAudioCap(original.mediaKind, file.audioKind, original.sizeBytes, info.site, info.override);
         const sizeFailure = fileSizeFailure(original.mediaKind, original.sizeBytes, info.site, info.override);
         if (sizeFailure) throw new ConvexError(sizeFailure);
         if (!file.operationId && info.effective.enforcement === "on") throw new ConvexError({ code: "OPERATION_ID_REQUIRED", message: "Send an operationId and retry this upload." });
@@ -2354,3 +2388,26 @@ export const discardUnstartedBatchItem = internalMutation({
     await ctx.db.patch(session._id, { status: "failed", failureCode: "BATCH_STOPPED", failureReason: "Batch stopped before this item was transferred.", ...(args.fresh ? { cleanupCompletedAt: Date.now() } : {}) });
   },
 });
+
+function assertAudioCap(mediaKind: string, kind: "audio" | "voicenote" | undefined, bytes: number, site: LimitSettings | null, override: LimitSettings | null) {
+  if (mediaKind !== "audio") return;
+  const audioKind = kind ?? "audio";
+  const cap = Math.min(effectiveFileCap(audioKind, siteDefaults, site, override)!, transportLimits.audio);
+  const refusal = checkFileSize(audioKind, bytes, cap);
+  if (refusal) throw new ConvexError(refusal);
+}
+export const audioDurationPolicy = internalQuery({ args: { householdId: v.id("households") }, handler: async (ctx, args) => {
+  const info = await limitsFor(ctx, args.householdId);
+  return info.override?.voiceNoteMaxSeconds ?? info.site?.voiceNoteMaxSeconds ?? voiceNoteMaxSeconds;
+} });
+export const markAudioValidated = internalMutation({ args: { uploadSessionId: uploadSessionIdValidator, versionId: v.optional(v.string()), durationSeconds: v.optional(v.number()) }, handler: async (ctx, args) => {
+  const session = await ctx.db.get(args.uploadSessionId);
+  if (!session || session.status !== "authorized") throw new ConvexError("Upload session is not active.");
+  await ctx.db.patch(session._id, { audioValidated: true, audioVersionId: args.versionId, audioDurationSeconds: args.durationSeconds });
+} });
+
+export const audioStorageUrl = internalAction({ args: { token: v.string() }, handler: async (ctx, args): Promise<{ url: string; length: number; mimeType: string }> => {
+  const photo = await ctx.runQuery(internal.audioPlayback.resolve, args);
+  const url = await getSignedUrl(b2Client(), new GetObjectCommand({ Bucket: photo.originalBucket ?? requireB2Config().bucketName, Key: photo.originalStorageKey, VersionId: photo.audioVersionId }), { expiresIn: displayUrlTtlSeconds });
+  return { url, length: photo.sizeBytes, mimeType: photo.mimeType };
+} });

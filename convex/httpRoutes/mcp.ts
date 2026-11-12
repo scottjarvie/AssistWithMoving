@@ -767,7 +767,7 @@ export function createMovingServer(
     {
       title: "Get evidence media",
       description:
-        "Return private move photos as native inline image blocks — never a storage link. Filter by explicit photo IDs or one item, box, space, transport, zone, room, or the move. Use detail/full only when fine print matters. Delivery is budgeted: a photo too large at the size you asked for is sent smaller rather than dropped, and any photo left out is listed under `skipped` with a reason and what to do about it.",
+        "Return private move photos as native inline image blocks and audio attachments as short-lived private playback links. Filter by explicit photo IDs or one item, box, space, transport, zone, room, or the move. Use detail/full only when fine print matters. Delivery is budgeted: a photo too large at the size you asked for is sent smaller rather than dropped, and any photo left out is listed under `skipped` with a reason and what to do about it.",
       inputSchema: z
         .object({
           moveId: id,
@@ -796,7 +796,7 @@ export function createMovingServer(
           moveId: input.moveId as any,
         });
         const result = await actionCtx.runAction((internal as any).mcpToolsImages.getImages, {
-          caller: { subject: principal.subject },
+          caller: { subject: principal.subject, claims: { client_id: principal.clientId } },
           householdId: scope.householdId,
           moveId: input.moveId,
           filter: input.filter,

@@ -11,6 +11,7 @@ export function uploadRefusal(error: unknown): { code: string; message: string }
   }
   if (!data || typeof data !== "object") return null;
   const refusal = data as { code: string; message: string; batchTotalUnknown?: boolean };
+  if (["AUDIO_TOO_LONG", "INVALID_AUDIO_CONTAINER", "AUDIO_HAS_VIDEO"].includes(refusal.code) && typeof refusal.message === "string") return { code: refusal.code, message: refusal.message };
   if (refusal.code === "USAGE_LIMIT_REACHED" && refusal.batchTotalUnknown) return { code: refusal.code, message: refusal.message };
   if (refusal.code === "USAGE_LIMIT_REACHED") return { code: refusal.code, message: usageLimitError(data as UsageLimitError).message };
   if (refusal.code === "FILE_TOO_LARGE" || refusal.code === "REQUEST_TOO_LARGE") return { code: refusal.code, message: refusal.message };

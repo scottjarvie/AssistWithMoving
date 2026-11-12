@@ -122,6 +122,7 @@ const allowedOriginalMediaMimeTypes = [
   "audio/wav",
   "audio/webm",
   "audio/ogg",
+  "audio/flac",
   "video/mp4",
   "video/quicktime",
   "video/webm",
@@ -2050,6 +2051,7 @@ export function registerTools(target, apiConfig, options = {}) {
         moveId: result.moveId,
         variant: result.variant,
         requested: result.requested,
+        audio: result.audio,
         returned: result.images.filter((img) => img.base64).length,
         images: result.images.map((img) => ({
           photoId: img.photoId,
@@ -2068,7 +2070,7 @@ export function registerTools(target, apiConfig, options = {}) {
           content.push({ type: "image", data: img.base64, mimeType: img.mimeType });
         }
       }
-      if (content.length === 1) {
+      if (content.length === 1 && !result.audio?.length) {
         content.push({
           type: "text",
           text: "No viewable images were returned for this filter.",
@@ -2092,6 +2094,7 @@ export function registerTools(target, apiConfig, options = {}) {
       transportResourceId: z.string().optional(),
       transportZoneId: z.string().optional(),
       room: z.string().optional(),
+      audioKind: z.enum(["audio", "voicenote"]).optional(),
       mimeType: z.enum(allowedOriginalMediaMimeTypes),
       sizeBytes: z.number().int().positive().max(transportLimits.video),
       derivatives: z
@@ -2126,6 +2129,7 @@ export function registerTools(target, apiConfig, options = {}) {
       transportResourceId: z.string().optional(),
       transportZoneId: z.string().optional(),
       room: z.string().optional(),
+      audioKind: z.enum(["audio", "voicenote"]).optional(),
       mimeType: z.enum(allowedOriginalMediaMimeTypes).optional(),
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),

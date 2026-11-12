@@ -1842,6 +1842,10 @@ export default defineSchema({
     .index("by_household", ["householdId"]),
 
   itemPhotos: defineTable({
+    audioKind: v.optional(v.union(v.literal("audio"), v.literal("voicenote"))),
+    audioDurationSeconds: v.optional(v.number()),
+    audioVersionId: v.optional(v.string()),
+    audioValidated: v.optional(v.boolean()),
     storageWriteUntil: v.optional(v.number()),
     usageOwnerId: v.optional(v.id("users")),
     storedBytes: v.optional(v.number()),
@@ -1914,6 +1918,10 @@ export default defineSchema({
     .index("by_full_key", ["derivativeRefs.full"]),
 
   photoUploadSessions: defineTable({
+    audioKind: v.optional(v.union(v.literal("audio"), v.literal("voicenote"))),
+    audioDurationSeconds: v.optional(v.number()),
+    audioVersionId: v.optional(v.string()),
+    audioValidated: v.optional(v.boolean()),
     objectClaimsRegistered: v.optional(v.boolean()),
     usageOwnerId: v.optional(v.id("users")),
     operationId: v.optional(v.string()),
@@ -2081,7 +2089,9 @@ export default defineSchema({
   // Canonical person <-> chosen-AI handoffs. Specialized domain workflows keep
   // their own statuses and may be projected through adapters; they are not
   // silently relabeled or migrated into this table.
+  audioPlaybackCapabilities: defineTable({ token: v.string(), apiKeyId: v.optional(v.id("apiKeys")), photoId: v.id("itemPhotos"), subject: v.string(), clientId: v.optional(v.string()), expiresAt: v.number(), agent: v.boolean() }).index("by_token", ["token"]),
   queueItems: defineTable({
+    attachmentPhotoIds: v.optional(v.array(v.id("itemPhotos"))),
     addRequestKey:v.optional(v.string()),
     addedBy: v.optional(v.union(v.literal("person"), v.literal("ai_on_request"), v.literal("ai_suggestion"))),
     addedByLabel: v.optional(v.string()),
