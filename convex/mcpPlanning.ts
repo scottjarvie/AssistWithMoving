@@ -614,8 +614,8 @@ function shapeQueueSummary(row: Doc<"queueItems">) {
 
 function parseOffset(cursor: string | undefined) {
   if (!cursor) return 0;
-  const match = cursor.match(/^offset:(\d+)$/);
-  if (!match) {
+  const match = cursor.length <= 80 ? cursor.match(/^offset:(\d+)$/) : null;
+  if (!match || !Number.isSafeInteger(Number(match[1]))) {
     mcpError(
       "VALIDATION_ERROR",
       "Search cursor is invalid.",
@@ -642,6 +642,12 @@ export const searchMoveRecords = internalQuery({
       "inventory:read",
       "moving.context.read",
     );
+    if (args.limit !== undefined && !Number.isFinite(args.limit)) {
+      mcpError("VALIDATION_ERROR", "Search limit must be finite.", "Provide a finite limit from 1 to 50.");
+    }
+    if ((args.query?.length ?? 0) > 240) {
+      mcpError("VALIDATION_ERROR", "Search query exceeds 240 characters.", "Shorten the query and restart without a cursor.");
+    }
     const limit = Math.min(Math.max(Math.trunc(args.limit ?? 25), 1), 50);
     const offset = parseOffset(args.cursor);
     const needle = args.query?.trim().toLowerCase() ?? "";
@@ -658,6 +664,18 @@ export const searchMoveRecords = internalQuery({
       ],
     );
     const candidates: Array<Record<string, unknown> & { updatedAt: number }> = [];
+    const visitedKinds: string[] = [];
+    let candidateWindowMayBeLimited = false;
+    let nativeCoverageUnverified = false;
+    const observeWindow = (kind: string, rowCount: number, nativeSearch = false) => {
+      visitedKinds.push(kind);
+      // Native planning search matches archived text before the live archive
+      // gate. Do not expose its raw exhaustion as a new hidden-text oracle.
+      // Until installed-engine/privacy proof, report coverage as unverified
+      // regardless of those counts. Source windows are query-independent.
+      if (nativeSearch) nativeCoverageUnverified = true;
+      else if (rowCount === MAX_SEARCH_CANDIDATES_PER_KIND) candidateWindowMayBeLimited = true;
+    };
 
     if (requested.has("item")) {
       const rows = await ctx.db
@@ -665,6 +683,7 @@ export const searchMoveRecords = internalQuery({
         .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
         .order("desc")
         .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow("item", rows.length);
       for (const item of rows) {
         if (item.deletedAt !== undefined) continue;
         const haystack = [item.name, item.room, item.category, item.description]
@@ -689,6 +708,7 @@ export const searchMoveRecords = internalQuery({
         .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
         .order("desc")
         .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow("box", rows.length);
       for (const box of rows) {
         if (box.archivedAt !== undefined) continue;
         const haystack = [box.code, box.label, box.nickname, box.room, box.description]
@@ -713,6 +733,7 @@ export const searchMoveRecords = internalQuery({
           q.eq("moveId", args.moveId).eq("status", "active"),
         )
         .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow("space", rows.length);
       for (const space of rows) {
         const haystack = [space.name, ...space.aliases, space.kind, space.notes]
           .filter(Boolean)
@@ -746,6 +767,7 @@ export const searchMoveRecords = internalQuery({
             )
             .order("desc")
             .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow(kind, rows.length, Boolean(needle));
       for (const row of rows) {
         if (row.archivedAt !== undefined) continue;
         candidates.push({
@@ -769,6 +791,7 @@ export const searchMoveRecords = internalQuery({
         )
         .order("desc")
         .filter(queueWorkFilter).take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow("queue", rows.length);
       for (const row of rows) {
         if (!queueIsWork(row)) continue;
         const haystack = [row.directive, row.summary, row.resultSummary, row.requiredAction]
@@ -790,17 +813,32 @@ export const searchMoveRecords = internalQuery({
     candidates.sort((a, b) => b.updatedAt - a.updatedAt || String(a.id).localeCompare(String(b.id)));
     const page = candidates.slice(offset, offset + limit);
     const nextOffset = offset + page.length;
+    const unsupportedKinds = [...requested].filter((kind) => !visitedKinds.includes(kind));
+    const incomplete = candidateWindowMayBeLimited || nativeCoverageUnverified || unsupportedKinds.length > 0;
     return {
       records: page,
       nextCursor: nextOffset < candidates.length ? `offset:${nextOffset}` : null,
       boundedCandidateCount: candidates.length,
       candidateLimitPerKind: MAX_SEARCH_CANDIDATES_PER_KIND,
-      truncatedBeforeFilter:
-        candidates.length >= requested.size * MAX_SEARCH_CANDIDATES_PER_KIND,
+      // Conservative compatibility flag: a full window MAY have omitted rows;
+      // surviving matches cannot establish source exhaustion.
+      truncatedBeforeFilter: incomplete,
+      coverage: {
+        visitedKinds,
+        unsupportedKinds,
+        candidateWindowStatus: nativeCoverageUnverified
+          ? "unverified"
+          : candidateWindowMayBeLimited ? "possiblyLimited" : "exhausted",
+        continuationScope: "boundedCandidatePool",
+        corpusComplete: !incomplete,
+        exactTotal: null,
+      },
       next:
         nextOffset < candidates.length
-          ? "Continue with nextCursor, or narrow query/kinds for a smaller result."
-          : "Call get_move_records with the IDs that need full context.",
+          ? "Continue within this bounded candidate pool with nextCursor; this does not scan beyond its source windows."
+          : incomplete
+            ? "The bounded pool is exhausted; corpus coverage is not proved. Narrow query/kinds or use the existing typed finders."
+            : "Call get_move_records with the IDs that need full context.",
     };
   },
 });

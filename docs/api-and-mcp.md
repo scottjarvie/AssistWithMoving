@@ -1907,6 +1907,22 @@ Start with `get_move_brief`. Search before creating duplicates. For normal
 finished work, prefer `save_complete_result`; use granular saves for later
 corrections.
 
+`search_move_records` reads at most 120 candidates per implemented kind and
+returns at most 50 records. Its `offset:N` cursor pages the **recomputed bounded
+candidate pool**, not the underlying move corpus; edits can shift that pool.
+`nextCursor: null` therefore does not prove a whole-move search. The additive
+`coverage` object names visited and unsupported kinds, states whether source
+windows were exhausted, possibly limited, or unverified, and reports
+`continuationScope: "boundedCandidatePool"`. `boundedCandidateCount` counts
+surviving matches in that pool, not source rows or an exact corpus total;
+`coverage.exactTotal` is null. `truncatedBeforeFilter` is conservative: true if
+any source window filled, any requested kind was unsupported, or native planning
+coverage is unverified. Exactly 120 source rows still counts as possibly limited
+because there is no lookahead read. Nonempty native planning searches always
+report unverified coverage, without exposing raw archived-text exhaustion.
+Existing typed finders remain available; this metadata does not add complete
+corpus continuation or change the other three public doors.
+
 **Canonical OAuth can work the Queue.** With `moving.queue.work` the loop is
 list → claim → (ask the smallest question, raising the Needs your input flag (state unchanged), or release) → complete, and
 `save_complete_result` with `completeQueueItem` does the save and the completion

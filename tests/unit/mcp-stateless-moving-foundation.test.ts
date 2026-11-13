@@ -264,6 +264,90 @@ async function seedMove() {
 }
 
 describe("stateless Moving MCP foundation", () => {
+  it("reports full source windows before text/deletion filtering without claiming corpus continuation", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const fixture = await seedMove();
+      const itemIds: string[] = [];
+      await fixture.t.run(async (ctx) => {
+        for (let index = 0; index < 121; index++) {
+          const id = await ctx.db.insert("items", {
+            householdId: fixture.householdId, moveId: fixture.moveId,
+            name: index === 120 ? "latest 東京" : "ordinary",
+            normalizedName: index === 120 ? "latest 東京" : "ordinary",
+            description: index === 120 ? "body-only café" : undefined,
+            quantity: 1, status: "active", condition: "good", disposition: "take",
+            weightConfidence: "none", volumeConfidence: "none", fragility: "low",
+            stackable: false, hazardousFlag: false, highValue: false,
+            requiresPersonalTransport: false, planningDefaultKeys: [],
+            needsReview: false, reviewFlags: [], aiTags: [], createdVia: "manual",
+            createdByUserId: fixture.userId, updatedByUserId: fixture.userId,
+            createdAt: index, updatedAt: index,
+            deletedAt: index > 0 && index < 120 ? 999 : undefined,
+          });
+          itemIds.push(id);
+        }
+      });
+      const search = (query: string) => fixture.t.query(mcpInternal.searchMoveRecords, {
+        principal: PRINCIPAL, moveId: fixture.moveId, kinds: ["item", "space"], query,
+      });
+      for (const query of ["test", "東京", "body-only", "café"]) {
+        const result = await search(query);
+        expect(result.records).toHaveLength(1);
+        expect(result.truncatedBeforeFilter).toBe(true);
+        expect(result.nextCursor).toBeNull();
+        expect(result.coverage).toMatchObject({
+          visitedKinds: ["item", "space"], unsupportedKinds: [],
+          candidateWindowStatus: "possiblyLimited", corpusComplete: false,
+          continuationScope: "boundedCandidatePool", exactTotal: null,
+        });
+      }
+      const empty = await search("no-match");
+      expect(empty.records).toEqual([]);
+      expect(empty.truncatedBeforeFilter).toBe(true);
+      expect(empty.next).toContain("corpus coverage is not proved");
+      // Exactly at the cap is still conservative: no lookahead read was made.
+      await fixture.t.run(async (ctx) => { await ctx.db.delete(itemIds[0] as any); });
+      expect((await search("test")).truncatedBeforeFilter).toBe(true);
+      await fixture.t.run(async (ctx) => { await ctx.db.delete(itemIds[1] as any); });
+      expect((await search("test")).truncatedBeforeFilter).toBe(false);
+    });
+  });
+
+  it("distinguishes unsupported families and unverified native coverage from exhausted source windows", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const fixture = await seedMove();
+      const base = { principal: PRINCIPAL, moveId: fixture.moveId };
+      const empty = await fixture.t.query(mcpInternal.searchMoveRecords, { ...base, kinds: ["item"] });
+      expect(empty.coverage.candidateWindowStatus).toBe("exhausted");
+      expect(empty.truncatedBeforeFilter).toBe(false);
+      const photo = await fixture.t.query(mcpInternal.searchMoveRecords, { ...base, kinds: ["photo"] });
+      expect(photo.coverage).toMatchObject({ visitedKinds: [], unsupportedKinds: ["photo"], corpusComplete: false });
+      const native = await fixture.t.query(mcpInternal.searchMoveRecords, { ...base, kinds: ["decision"], query: "missing" });
+      expect(native.coverage).toMatchObject({ candidateWindowStatus: "unverified", corpusComplete: false });
+      expect(native.truncatedBeforeFilter).toBe(true);
+      for (const cursor of ["offset:9007199254740992", `offset:${"0".repeat(81)}`, "offset:-1", "other:0"]) {
+        await expect(fixture.t.query(mcpInternal.searchMoveRecords, { ...base, cursor })).rejects.toThrow(/Restart search_move_records/);
+      }
+      await expect(fixture.t.query(mcpInternal.searchMoveRecords, { ...base, query: "a".repeat(241) })).rejects.toThrow(/240/);
+      await expect(fixture.t.query(mcpInternal.searchMoveRecords, { ...base, limit: Infinity })).rejects.toThrow(/finite/);
+    });
+  });
+
+  it("keeps search and coverage identical when only a foreign Queue owner's terms change", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const fixture = await seedMove();
+      const input = { principal: PRINCIPAL, moveId: fixture.moveId, kinds: ["queue"], query: "hidden-token" };
+      const before = await fixture.t.query(mcpInternal.searchMoveRecords, input);
+      await fixture.t.run(async (ctx) => {
+        await ctx.db.patch(fixture.foreignQueueItemId, { directive: "hidden-token" });
+      });
+      expect(await fixture.t.query(mcpInternal.searchMoveRecords, input)).toEqual(before);
+      await expect(fixture.t.query(mcpInternal.searchMoveRecords, {
+        ...input, principal: { ...PRINCIPAL, clientId: "unapproved-sibling" },
+      })).rejects.toThrow(/GRANT_REQUIRED|Missing power/);
+    });
+  });
+
   it("returns an RFC 9728 OAuth challenge and bounded public resource metadata", async () => {
     const t = convexTest(schema, modules);
     await withEnvironment(
