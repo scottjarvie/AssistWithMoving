@@ -2502,6 +2502,7 @@ export default defineSchema({
     .index("by_assigned_resource", ["assignedResourceId"])
     .index("by_assigned_trip", ["assignedTripId"])
     .index("by_move_updated", ["moveId", "updatedAt"])
+    .index("by_move_active_updated", ["moveId", "deletedAt", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
     .index("by_move_code", ["moveId", "code"])
     .index("by_household", ["householdId"]),
@@ -2566,6 +2567,18 @@ export default defineSchema({
     .index("by_item", ["itemId"])
     .index("by_platform_status", ["platform", "status"])
     .index("by_household", ["householdId"]),
+
+  itemSearchContinuations: defineTable({
+    connectionId: v.id("aiAccessConnections"),
+    binding: v.string(),
+    position: v.union(v.string(), v.null()),
+    revision: v.number(),
+    expiresAt: v.number(),
+    rows: v.number(),
+    sourceValueBytes: v.number(),
+    steps: v.number(),
+    terminal: v.boolean(),
+  }).index("by_connection", ["connectionId"]),
 
   plannedItems: defineTable({
     householdId: v.id("households"),

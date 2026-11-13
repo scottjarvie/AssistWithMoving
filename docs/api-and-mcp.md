@@ -1921,7 +1921,24 @@ coverage is unverified. Exactly 120 source rows still counts as possibly limited
 because there is no lookahead read. Nonempty native planning searches always
 report unverified coverage, without exposing raw archived-text exhaustion.
 Existing typed finders remain available; this metadata does not add complete
-corpus continuation or change the other three public doors.
+corpus continuation or change the other public doors.
+
+The source-only `mcpPlanning.searchItemPagePrototype` is an internal preparation
+lane, **not registered on any of the four public doors**. It keeps canonical item
+joined substring matching through the same matcher, reads a lifecycle-partitioned
+ordinary range index, and holds continuation position/revision/budgets server-side
+in one expiring state per existing connection. No caller-supplied done/seen/index
+state or new secret is used. Every step rechecks current grant and move/household
+authority; semantic or authority changes require restart. Existing array and
+offset paths remain available. Its `complete` status means an observed end of
+that active source-range traversal; `corpusComplete` stays false because there is
+no frozen concurrent-edit snapshot. A terminal traversal budget is explicitly
+`budgetLimited`. Native text-search options do not enforce scan/byte budgets;
+this prototype's ordinary range options and returned-value byte checks are not
+proof of installed whole-call engine costs. Schema/index installation, real-auth
+runtime proof and a public adapter/read switch remain separately gated. See the
+[site plan](planning/awl-0019-search-plan.md) for frozen budgets and authority,
+transport, writer and release ledgers.
 
 **Canonical OAuth can work the Queue.** With `moving.queue.work` the loop is
 list → claim → (ask the smallest question, raising the Needs your input flag (state unchanged), or release) → complete, and

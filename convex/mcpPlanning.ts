@@ -2,12 +2,15 @@ import { summaryFor } from "./usageLimits";
 import { captureNeedsInput, ingestionStatusToQueueState } from "./lib/queue";
 import { queueIsWork, queueNeedsInput, effectiveQueueState, queueWorkFilter } from "./lib/queue";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
-import { effectiveScopes } from "./lib/aiGrants";
+import { effectiveExpiry, effectiveScopes } from "./lib/aiGrants";
+import { oauthIdentity, readConnection } from "./lib/carriedAccess";
+import { resolveMoveAccess } from "./lib/moveAccess";
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalQuery,
+  internalMutation,
   query,
   type MutationCtx,
   type QueryCtx,
@@ -625,6 +628,126 @@ function parseOffset(cursor: string | undefined) {
   return Number(match[1]);
 }
 
+// SOURCE-ONLY prototype: deliberately not registered in any public transport.
+// Existing array and offset finders remain available until exact-head clearance.
+const ITEM_PAGE_BYTES = 256 * 1024;
+const ITEM_PAGE_VALUE_BYTES = 1280 * 1024; // byte-budget boundary document allowance
+const ITEM_TRAVERSAL_BYTES = 16 * 1024 * 1024;
+const ITEM_TRAVERSAL_ROWS = 10_000;
+const ITEM_TRAVERSAL_STEPS = 400;
+const ITEM_STATE_TTL = 15 * 60 * 1000;
+const jsonBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+
+function canonicalItemMatches(item: Pick<Doc<"items">, "name" | "room" | "category" | "description">, needle: string) {
+  return !needle || [item.name, item.room, item.category, item.description]
+    .filter(Boolean).join(" ").toLowerCase().includes(needle);
+}
+
+function restartItemSearch(message: string): never {
+  mcpError("SEARCH_RESTART_REQUIRED", message, "Restart the item search without a cursor; the existing search_move_records finder remains available.");
+}
+
+export const searchItemPagePrototype = internalMutation({
+  args: {
+    principal: mcpPrincipalValidator,
+    moveId: v.id("moves"),
+    query: v.optional(v.string()),
+    room: v.optional(v.string()),
+    category: v.optional(v.string()),
+    disposition: v.optional(itemDisposition),
+    needsReview: v.optional(v.boolean()),
+    pageSize: v.optional(v.number()),
+    cursor: v.optional(v.object({ id: v.id("itemSearchContinuations"), version: v.number() })),
+  },
+  handler: async (ctx, args) => {
+    const { move, policy, grant } = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:read", "moving.context.read");
+    const pageSize = args.pageSize ?? 25;
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 50 ||
+        (args.query?.length ?? 0) > 240 || (args.room?.length ?? 0) > 240 || (args.category?.length ?? 0) > 240) {
+      restartItemSearch("Invalid item query, filters or page size (1 to 50).");
+    }
+    if (args.cursor && (!Number.isSafeInteger(args.cursor.version) || args.cursor.version < 1 || jsonBytes(args.cursor) > 256)) {
+      restartItemSearch("Invalid item cursor version or size.");
+    }
+    const needle = args.query?.trim().toLowerCase() ?? "";
+    const connection = await readConnection(ctx, policy.user._id, oauthIdentity(args.principal.clientId));
+    if (!connection || !connection.isCurrent || connection.grantId !== grant._id) restartItemSearch("The current connection changed.");
+    const live = await resolveMoveAccess(ctx, policy.user._id, move.householdId, move._id);
+    // Effective values, not updatedAt as a fictional monotonic authority revision.
+    // Membership ABA is disclosed; the live gate always wins on each step.
+    const binding = JSON.stringify({
+      version: 1, mode: "joined-lowercase-infix-v1", index: "items.by_move_active_updated.desc",
+      principal: [args.principal.issuer.trim().replace(/\/+$/, ""), args.principal.subject, args.principal.clientId],
+      connection: [connection._id, connection.grantId, connection.generation, connection.isCurrent],
+      grant: [grant._id, grant.version, [...effectiveScopes(grant)].sort(), grant.moveScope,
+        [...(grant.moveIds ?? [])].map(String).sort(), effectiveExpiry(grant) ?? null],
+      move: [move._id, move.householdId, move.status, move.archivedAt ?? null],
+      access: [live.role, live.accessKind,
+        live.membership ? [live.membership._id, live.membership.role, live.membership.status, live.membership.apiAccessStatus ?? null] : null,
+        live.participant ? [live.participant._id, live.participant.role, live.participant.status, live.participant.accessKind, live.participant.agentAccessStatus ?? null] : null],
+      needle, room: args.room ?? null, category: args.category ?? null,
+      disposition: args.disposition ?? null, needsReview: args.needsReview ?? null, pageSize,
+    });
+    if (jsonBytes(binding) > 8192) restartItemSearch("Authority binding exceeds the prototype budget.");
+    const now = Date.now();
+    const previous = args.cursor
+      ? await ctx.db.get(args.cursor.id)
+      : await ctx.db.query("itemSearchContinuations").withIndex("by_connection", q => q.eq("connectionId", connection._id)).unique();
+    if (args.cursor && (!previous || previous.connectionId !== connection._id || previous.binding !== binding ||
+        previous.revision !== args.cursor.version || previous.expiresAt <= now || previous.terminal)) {
+      restartItemSearch("Cursor is stale, expired, terminal or belongs to another request or authority.");
+    }
+    const continuing = args.cursor ? previous! : null;
+    const rowsBefore = continuing?.rows ?? 0;
+    const page = await ctx.db.query("items")
+      .withIndex("by_move_active_updated", q => q.eq("moveId", move._id).eq("deletedAt", undefined)).order("desc")
+      .paginate({ cursor: continuing?.position ?? null,
+        numItems: Math.min(pageSize, ITEM_TRAVERSAL_ROWS - rowsBefore),
+        maximumRowsRead: Math.min(pageSize, ITEM_TRAVERSAL_ROWS - rowsBefore), maximumBytesRead: ITEM_PAGE_BYTES })
+      .catch(() => restartItemSearch("The source range cursor is unavailable. No completion is inferred."));
+    if (page.page.length > pageSize || jsonBytes(page.page) > ITEM_PAGE_VALUE_BYTES || page.continueCursor.length > 8192) {
+      mcpError("SEARCH_UNAVAILABLE", "Source page exceeds the prototype row/byte budget.", "Use the existing finder; do not assume this traversal is complete.");
+    }
+    const records = [];
+    for (const item of page.page) {
+      // Lifecycle/privacy gate before matching: forbidden terms cannot affect
+      // candidates, source progress, output or continuation.
+      if (item.deletedAt !== undefined) continue;
+      if (args.room !== undefined && item.room !== args.room) continue;
+      if (args.category !== undefined && item.category !== args.category) continue;
+      if (args.disposition !== undefined && item.disposition !== args.disposition) continue;
+      if (args.needsReview !== undefined && item.needsReview !== args.needsReview) continue;
+      if (!canonicalItemMatches(item, needle)) continue;
+      const summary = [item.room, item.category, item.disposition].filter(Boolean).join(" · ");
+      records.push({ kind: "item", id: item._id, title: item.name.slice(0, 160), summary: summary.slice(0, 240),
+        snippetTruncated: item.name.length > 160 || summary.length > 240,
+        status: item.status, needsReview: item.needsReview, updatedAt: item.updatedAt });
+    }
+    const state = {
+      connectionId: connection._id, binding, position: page.continueCursor,
+      revision: (previous?.revision ?? 0) + 1, expiresAt: continuing?.expiresAt ?? now + ITEM_STATE_TTL,
+      rows: rowsBefore + page.page.length,
+      sourceValueBytes: (continuing?.sourceValueBytes ?? 0) + jsonBytes(page.page),
+      steps: (continuing?.steps ?? 0) + 1, terminal: false,
+    };
+    const budgetLimited = !page.isDone && (state.rows >= ITEM_TRAVERSAL_ROWS ||
+      state.sourceValueBytes >= ITEM_TRAVERSAL_BYTES || state.steps >= ITEM_TRAVERSAL_STEPS);
+    state.terminal = page.isDone || budgetLimited;
+    if (!Number.isSafeInteger(state.revision) || jsonBytes(state) > 24 * 1024) restartItemSearch("Continuation state exceeds its storage budget.");
+    const id = previous ? previous._id : await ctx.db.insert("itemSearchContinuations", state);
+    if (previous) await ctx.db.replace(previous._id, state);
+    const response = { records, nextCursor: state.terminal ? null : { id, version: state.revision },
+      coverage: { status: page.isDone ? "complete" : budgetLimited ? "budgetLimited" : "continuable",
+        family: "item", mode: "joined-lowercase-infix-v1", ordering: "by_move_active_updated_desc_native",
+        completeScope: "activeSourceRangeTraversal", observedRangeEnd: page.isDone,
+        corpusComplete: false, snapshot: false, exactTotal: null, snippetsBounded: true },
+      next: budgetLimited ? "Traversal budget reached; retain the existing finder or narrow filters. This is not corpus completion."
+        : "Continue with the returned handle and identical query/filter/page-size semantics; deduplicate stable IDs under concurrent edits." };
+    if (jsonBytes(response) > 160 * 1024) mcpError("SEARCH_UNAVAILABLE", "Response exceeds the prototype byte budget.", "Use the existing finder.");
+    return response;
+  },
+});
+
 export const searchMoveRecords = internalQuery({
   args: {
     principal: mcpPrincipalValidator,
@@ -686,11 +809,7 @@ export const searchMoveRecords = internalQuery({
       observeWindow("item", rows.length);
       for (const item of rows) {
         if (item.deletedAt !== undefined) continue;
-        const haystack = [item.name, item.room, item.category, item.description]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (needle && !haystack.includes(needle)) continue;
+        if (!canonicalItemMatches(item, needle)) continue;
         candidates.push({
           kind: "item",
           id: item._id,
