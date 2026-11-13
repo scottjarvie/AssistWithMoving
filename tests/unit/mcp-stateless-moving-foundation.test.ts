@@ -7,7 +7,7 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { internal } from "../../convex/_generated/api";
 import { createMovingServer, STATELESS_MOVING_TOOL_NAMES } from "../../convex/httpRoutes/mcp";
@@ -246,7 +246,20 @@ async function seedMove() {
       foreignQueueItemId,
     };
   });
-  await t.mutation(internal.aiGrants.touchLegacyConnection, { subject: PRINCIPAL.subject, clientId: PRINCIPAL.clientId });
+  // Legacy grants bootstrap through scheduled pages. Finish fixture setup before
+  // querying authority, rather than racing the zero-delay continuation timer.
+  vi.useFakeTimers();
+  try {
+    await t.mutation(internal.aiGrants.touchLegacyConnection, { subject: PRINCIPAL.subject, clientId: PRINCIPAL.clientId });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const access = await t.query(internal.aiGrants.grantsForPrincipal, {
+      subject: PRINCIPAL.subject,
+      clientId: PRINCIPAL.clientId,
+    });
+    expect(access.connectionState.status).toBe("active");
+  } finally {
+    vi.useRealTimers();
+  }
   return { t, ...ids };
 }
 
