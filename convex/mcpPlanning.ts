@@ -741,7 +741,7 @@ export const searchItemPagePrototype = internalMutation({
         family: "item", mode: "joined-lowercase-infix-v1", ordering: "by_move_active_updated_desc_native",
         completeScope: "activeSourceRangeTraversal", observedRangeEnd: page.isDone,
         corpusComplete: false, snapshot: false, exactTotal: null, snippetsBounded: true },
-      next: budgetLimited ? "Traversal budget reached; retain the existing finder or narrow filters. This is not corpus completion."
+      next: budgetLimited ? "Traversal budget reached; this lane cannot continue. Existing finders remain available with their own limits. No corpus completion is inferred."
         : "Continue with the returned handle and identical query/filter/page-size semantics; deduplicate stable IDs under concurrent edits." };
     if (jsonBytes(response) > 160 * 1024) mcpError("SEARCH_UNAVAILABLE", "Response exceeds the prototype byte budget.", "Use the existing finder.");
     return response;
