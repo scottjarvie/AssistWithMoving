@@ -1,11 +1,44 @@
 import { ConvexError } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { visibilityForHouseholdRole, type HouseholdRole } from "./roles";
 
 export const ACCOUNT_EXPORT_EXPIRATION_MS = 14 * 24 * 60 * 60 * 1000;
 export const ACCOUNT_DELETION_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 export const ACCOUNT_DELETION_CONFIRMATION = "DELETE MY ACCOUNT";
+export const ITEM_SEARCH_STATE_TTL_MS = 15 * 60 * 1000;
+
+/** Ephemeral request capabilities are erased, not retained as account history. */
+export async function eraseItemSearchState(ctx: MutationCtx, state: Doc<"itemSearchContinuations">) {
+  if (state.expiryJobId) {
+    const job = await ctx.db.system.get(state.expiryJobId);
+    // Cancellation of an already completed function throws. Reading pending
+    // state in this transaction makes cancellation atomic against execution.
+    if (job?.state.kind === "pending") await ctx.scheduler.cancel(state.expiryJobId);
+  }
+  await ctx.db.delete(state._id);
+}
+
+export async function eraseItemSearchForConnection(ctx: MutationCtx, connectionId: Id<"aiAccessConnections">) {
+  const state = await ctx.db.query("itemSearchContinuations")
+    .withIndex("by_connection", q => q.eq("connectionId", connectionId)).unique();
+  if (state) await eraseItemSearchState(ctx, state);
+}
+
+export async function eraseItemSearchOwnerPage(ctx: MutationCtx, ownerUserId: Id<"users">) {
+  const rows = await ctx.db.query("itemSearchContinuations")
+    .withIndex("by_owner", q => q.eq("ownerUserId", ownerUserId)).take(25);
+  for (const row of rows) await eraseItemSearchState(ctx, row);
+  return rows.length;
+}
+
+/** Indexed current lifecycle, not an unbounded history scan or invented hold. */
+export async function itemSearchAccountLifecycle(ctx: MutationCtx | QueryCtx, userId: Id<"users">) {
+  const requests = await Promise.all((["pending", "completed", "cancelled"] as const).map(status =>
+    ctx.db.query("accountDeletionRequests").withIndex("by_user_status", q => q.eq("userId", userId).eq("status", status)).order("desc").first()));
+  return { blocked: Boolean(requests[0] || requests[1]), cancelledRequest: requests[2]?._id ?? null };
+}
 
 export const retentionPolicy = {
   accountExports:
@@ -22,6 +55,8 @@ export const retentionPolicy = {
     "Queue items and attributable activity remain with the move so collaborators retain the work record; account deletion anonymizes the user profile and revokes that person's AI access.",
   storage:
     "Photo objects are retained with their household/move records unless a household owner deletes the source records or a future storage cleanup job removes archived data.",
+  itemSearchContinuations:
+    "Ephemeral item-search capabilities retain a request digest, not plaintext queries or filters. Physical expiry is scheduled at 15 minutes; terminal searches and credential changes erase state immediately. Account deletion blocks recreation and drains state in bounded pages. Cursor capabilities and request digests are excluded from account exports to avoid extending their retention. No legal-hold facility for this ephemeral state is implemented; household evidence and audit retention are unchanged.",
 } as const;
 
 export function accountExportExpiresAt(now: number) {

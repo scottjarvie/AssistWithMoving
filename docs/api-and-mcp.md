@@ -1940,6 +1940,18 @@ runtime proof and a public adapter/read switch remain separately gated. See the
 [site plan](planning/awl-0019-search-plan.md) for frozen budgets and authority,
 transport, writer and release ledgers.
 
+The prototype persists only a server-computed request digest, not plaintext
+query/filter text. The digest is data minimization, **not an integrity seal**;
+server-owned state, atomic revision and current authority enforce continuation.
+One per-state scheduled expiry chain physically erases abandoned state after its
+15-minute deadline (subject to scheduler execution delay), and terminal searches
+or credential changes erase it immediately. Pending/completed account deletion
+blocks recreation and drains state in indexed bounded steps. Account exports
+explicitly exclude short-lived search digests/capabilities so export artifacts do
+not extend retention. Current policy has no legal-hold facility for this ephemeral
+state; household evidence/audit retention is unchanged. These source hooks and
+scheduler behavior are not deployed or runtime-certified by this draft.
+
 **Canonical OAuth can work the Queue.** With `moving.queue.work` the loop is
 list → claim → (ask the smallest question, raising the Needs your input flag (state unchanged), or release) → complete, and
 `save_complete_result` with `completeQueueItem` does the save and the completion

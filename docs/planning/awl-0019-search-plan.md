@@ -77,18 +77,53 @@ also checked against1.25MiB (metric excludes engine overhead). Traversal stops
 after10000returned source rows,400steps or16MiBsource-value JSON, whichever first;
 last step may cross byte budget by one bounded page. Nonterminal exhaustion at
 that boundary is `budgetLimited`, not complete; retain existing finder. 15minute
-absolute state lifetime; row binding<=8KiB, native cursor<=8KiB, combined state
+absolute traversal validity; canonical binding input<=8KiB (transient only), stored
+binding is a74-byte `sha256-v2:` fingerprint, native cursor<=8KiB, combined state
 JSON<=24KiB; opaque request cursor<=256bytes. One state read/write + bounded
 authority reads, zero related-record hydration, blob reads, child calls/retries.
 Response160KiB cap; titles160/summary240code units per result, explicit truncation.
 Source strings retain full matching semantics; summaries bounded only on output.
 Oversize state/row/response fails explicitly, no silent text clipping for matching.
 
-One state per existing connection caps repeated-start storage; expired state is
-replaced on next use, with no new cron or user-content cleanup. Retired connection
-state retention follows credential retention (no user text); global historical
-credential growth remains existing authority storage, not caller-chosen search
-session growth. Mutation serialization rejects concurrent replay. Native cursor
+One state per existing connection caps repeated-start storage. The binding is
+personal request data even as a digest: no anonymity or integrity seal is claimed.
+Raw query/filter/subject/client semantics are hashed only transiently and are not
+copied to stored state, scheduled job args, exports or audit. Persisted connection/
+owner IDs and native position remain ephemeral personal capability data.
+
+Each nonterminal state ID has one durable `ctx.scheduler.runAt` expiry chain;
+replacement starts reuse it and update revision/deadline. The callback reads its
+own ID, deletes at expiry or reschedules once for the replacement deadline. No
+new cron/workflow. Terminal completion/budget limitation deletes state immediately.
+The stored expiry job ID permits atomic cancellation of pending callbacks on
+terminal/credential/account erasure, preventing dead-session pending-job buildup.
+Every supported person/AI connection change, Forget and retirement erases its
+state in the same mutation. Old state IDs are deleted, never scrubbed/reused as a
+new row; new IDs prevent revision1 revival after physical cleanup. Scheduler
+execution latency is not a promise of physical deletion at the exact millisecond;
+logical refusal still applies at deadline, and scheduler/platform reliability
+needs isolated proof. Only opaque row IDs persist in scheduler metadata.
+
+Recovery function `cleanupExpiredItemSearchContinuations` deletes at most25expired
+and25legacy-unscheduled rows per transaction through dedicated range indexes,
+then schedules another bounded step if full. Legacy owner/expiry markers are
+optional for schema compatibility. Approved activation must drain any older
+unscheduled state before exposing this lane; no plaintext migration/import.
+
+Account deletion request/completion synchronously erase25owner-indexed states and
+schedule a bounded owner drain, then25connection pages through current/retired
+owner indexes to remove legacy ownerless state. Pending/completed deletion blocks
+new searches/state recreation through three indexed lifecycle lookups. Latest
+cancelled request ID enters the transient binding, so cancellation cannot revive
+a pre-hold handle; cancelled cleanup callbacks refuse to touch a new session.
+Exports explicitly exclude digests/cursor capabilities with a retention-policy
+explanation instead of extending their lifetime in14-day artifacts. No legal-hold
+facility for ephemeral search state exists in current account policy/schema;
+none is invented. Household evidence/media and audit retention are untouched.
+Physically orphaned pre-version2 ownerless rows cannot be attributed through a
+missing credential; the global indexed legacy drain removes them before activation.
+
+Mutation serialization rejects concurrent replay. Native cursor
 is not a frozen snapshot: edits may move records across it, producing repeats or
 skips; IDs allow consumer dedup, no stored seen list. Completeness is only native
 end of this live traversal, no universal concurrent-edit guarantee.
@@ -109,8 +144,15 @@ Installed engine and complete authority-read accounting remain separate gates.
 Successful-path source accounting: requireMcpMove uses user/connection/owner/grant,
 move, subject user, resolved move/membership/participant (9 point/unique lookups);
 prototype connection and full live resolution add4; continuation lookup adds1.
-Thus14point/unique lookups plus one range page (<=50returned source rows) and one
-state insert/replace, zero parent/reference hydration or child actions. Duplicate
+The retention remedy adds3indexed deletion-lifecycle lookups:17point/unique calls
+plus one range page (<=50returned source rows) and one state replace/delete.
+Initial nonterminal insert (or legacy enrollment) additionally schedules one expiry
+job and patches its ID (2state writes on insert). Normal continuation/restart
+schedules none. Terminal existing-state erasure adds1system job read and cancels
+only a pending job (18point/system lookups total); terminal with no prior state
+needs no state write. Expiry rescheduling has1state read,1scheduler write and
+1state patch; physical erasure paths have at most1job read/cancel per row.
+Zero parent/reference hydration or child actions. Duplicate
 unique rows fail closed; errors abort the transaction. Those are source-level
 counts, not measured installed syscall/DB-byte counters. No hard whole-call byte
 claim follows from source-page options: authority rows are read before that page,
@@ -356,3 +398,30 @@ the first patch's phrase “other three public doors”; wording corrected to �
 public doors”, preserving the four-door truth without changing any catalog.
 No full suite or build replay at the prototype head; earlier full-suite/upload
 failure and earlier build receipt remain pinned to the first-patch checkpoint.
+
+## Focused recheck1 retention remedy
+
+The independent recheck at e1a2ce67 passed continuation integrity and concrete
+ledger within their source scope, but correctly found plaintext binding retention
+and logical-expiry-only cleanup. The source remedy above supersedes that retention
+design. SHA-256 minimizes retained request text; it is server-computed comparison
+only, not client integrity or a new secret/seal. Current authority and strict
+server-state revision protections remain in the atomic mutation. Deletion IDs
+are never recycled, and cancelled deletion generations enter the digest.
+
+Existing account request/completion, person/AI carried-access changes and retirement
+are integrated via bounded lookup. Live deadline expiry uses per-state scheduling,
+not a deployed cron change. New cleanup functions/indexes/retention hooks remain
+SOURCE ONLY until exact-head review and approved isolated schema/bundle/scheduler
+installation. Physical deadline processing, whole-call/state/authority engine
+metrics, safe real auth, native planning/Queue privacy, baseline acceptance,
+installed index readiness, upload-memory failure and release/backup gates remain
+unverified. No retained household data or hold mechanism has been bypassed.
+
+Retention local checks:9focused retention/authority/privacy cases passed
+(11unrelated/scaling cases skipped);39account-privacy/awl0015-v2 regressions and
+35awl0015-audit regressions passed. This includes the actual API-key rotation
+writer's cache erasure, not only shared connection-change helpers, and cancellation
+of pending expiry jobs on terminal erasure. Strict Convex/root TypeScript and
+changed-file lint pass. The source-only scheduler tests use fake time/model
+execution and do not prove live scheduler/OCC/auth or physical deadline latency.

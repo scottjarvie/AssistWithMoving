@@ -2570,6 +2570,9 @@ export default defineSchema({
 
   itemSearchContinuations: defineTable({
     connectionId: v.id("aiAccessConnections"),
+    ownerUserId: v.optional(v.id("users")),
+    expiryScheduled: v.optional(v.boolean()),
+    expiryJobId: v.optional(v.id("_scheduled_functions")),
     binding: v.string(),
     position: v.union(v.string(), v.null()),
     revision: v.number(),
@@ -2578,7 +2581,10 @@ export default defineSchema({
     sourceValueBytes: v.number(),
     steps: v.number(),
     terminal: v.boolean(),
-  }).index("by_connection", ["connectionId"]),
+  }).index("by_connection", ["connectionId"])
+    .index("by_owner", ["ownerUserId"])
+    .index("by_expiry", ["expiresAt"])
+    .index("by_expiry_schedule", ["expiryScheduled"]),
 
   plannedItems: defineTable({
     householdId: v.id("households"),

@@ -5,6 +5,8 @@ import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
 import { effectiveExpiry, effectiveScopes } from "./lib/aiGrants";
 import { oauthIdentity, readConnection } from "./lib/carriedAccess";
 import { resolveMoveAccess } from "./lib/moveAccess";
+import { eraseItemSearchForConnection, eraseItemSearchOwnerPage, eraseItemSearchState, itemSearchAccountLifecycle, ITEM_SEARCH_STATE_TTL_MS } from "./lib/accountPrivacy";
+import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -635,7 +637,7 @@ const ITEM_PAGE_VALUE_BYTES = 1280 * 1024; // byte-budget boundary document allo
 const ITEM_TRAVERSAL_BYTES = 16 * 1024 * 1024;
 const ITEM_TRAVERSAL_ROWS = 10_000;
 const ITEM_TRAVERSAL_STEPS = 400;
-const ITEM_STATE_TTL = 15 * 60 * 1000;
+const ITEM_STATE_TTL = ITEM_SEARCH_STATE_TTL_MS;
 const jsonBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 
 function canonicalItemMatches(item: Pick<Doc<"items">, "name" | "room" | "category" | "description">, needle: string) {
@@ -661,6 +663,8 @@ export const searchItemPagePrototype = internalMutation({
   },
   handler: async (ctx, args) => {
     const { move, policy, grant } = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:read", "moving.context.read");
+    const lifecycle = await itemSearchAccountLifecycle(ctx, policy.user._id);
+    if (lifecycle.blocked) restartItemSearch("Account deletion is pending or completed; search state cannot be created or resumed.");
     const pageSize = args.pageSize ?? 25;
     if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 50 ||
         (args.query?.length ?? 0) > 240 || (args.room?.length ?? 0) > 240 || (args.category?.length ?? 0) > 240) {
@@ -675,8 +679,8 @@ export const searchItemPagePrototype = internalMutation({
     const live = await resolveMoveAccess(ctx, policy.user._id, move.householdId, move._id);
     // Effective values, not updatedAt as a fictional monotonic authority revision.
     // Membership ABA is disclosed; the live gate always wins on each step.
-    const binding = JSON.stringify({
-      version: 1, mode: "joined-lowercase-infix-v1", index: "items.by_move_active_updated.desc",
+    const canonicalBinding = JSON.stringify({
+      version: 2, mode: "joined-lowercase-infix-v1", index: "items.by_move_active_updated.desc",
       principal: [args.principal.issuer.trim().replace(/\/+$/, ""), args.principal.subject, args.principal.clientId],
       connection: [connection._id, connection.grantId, connection.generation, connection.isCurrent],
       grant: [grant._id, grant.version, [...effectiveScopes(grant)].sort(), grant.moveScope,
@@ -687,8 +691,13 @@ export const searchItemPagePrototype = internalMutation({
         live.participant ? [live.participant._id, live.participant.role, live.participant.status, live.participant.accessKind, live.participant.agentAccessStatus ?? null] : null],
       needle, room: args.room ?? null, category: args.category ?? null,
       disposition: args.disposition ?? null, needsReview: args.needsReview ?? null, pageSize,
+      accountLifecycle: lifecycle.cancelledRequest,
     });
-    if (jsonBytes(binding) > 8192) restartItemSearch("Authority binding exceeds the prototype budget.");
+    if (jsonBytes(canonicalBinding) > 8192) restartItemSearch("Authority binding exceeds the prototype budget.");
+    // Data minimization only. Integrity is the server-owned row + live authority
+    // + atomic expected revision, never a client-editable digest or invented seal.
+    const binding = "sha256-v2:" + Array.from(new Uint8Array(await crypto.subtle.digest(
+      "SHA-256", new TextEncoder().encode(canonicalBinding))), byte => byte.toString(16).padStart(2, "0")).join("");
     const now = Date.now();
     const previous = args.cursor
       ? await ctx.db.get(args.cursor.id)
@@ -724,7 +733,8 @@ export const searchItemPagePrototype = internalMutation({
         status: item.status, needsReview: item.needsReview, updatedAt: item.updatedAt });
     }
     const state = {
-      connectionId: connection._id, binding, position: page.continueCursor,
+      connectionId: connection._id, ownerUserId: policy.user._id, expiryScheduled: true,
+      expiryJobId: previous?.expiryJobId, binding, position: page.continueCursor,
       revision: (previous?.revision ?? 0) + 1, expiresAt: continuing?.expiresAt ?? now + ITEM_STATE_TTL,
       rows: rowsBefore + page.page.length,
       sourceValueBytes: (continuing?.sourceValueBytes ?? 0) + jsonBytes(page.page),
@@ -734,8 +744,21 @@ export const searchItemPagePrototype = internalMutation({
       state.sourceValueBytes >= ITEM_TRAVERSAL_BYTES || state.steps >= ITEM_TRAVERSAL_STEPS);
     state.terminal = page.isDone || budgetLimited;
     if (!Number.isSafeInteger(state.revision) || jsonBytes(state) > 24 * 1024) restartItemSearch("Continuation state exceeds its storage budget.");
-    const id = previous ? previous._id : await ctx.db.insert("itemSearchContinuations", state);
-    if (previous) await ctx.db.replace(previous._id, state);
+    let id = previous?._id;
+    if (state.terminal) {
+      if (previous) await eraseItemSearchState(ctx, previous);
+    } else if (previous) {
+      await ctx.db.replace(previous._id, state);
+    } else {
+      id = await ctx.db.insert("itemSearchContinuations", state);
+    }
+    if (!state.terminal && !state.expiryJobId) {
+      // Exactly one expiry chain per live state, canceled on terminal/lifecycle
+      // erasure. No request data is copied into scheduler arguments.
+      const expiryJobId = await ctx.scheduler.runAt(state.expiresAt, internal.mcpPlanning.expireItemSearchContinuation, { id: id! });
+      if (jsonBytes({ ...state, expiryJobId }) > 24 * 1024) restartItemSearch("Continuation state exceeds its storage budget.");
+      await ctx.db.patch(id!, { expiryJobId });
+    }
     const response = { records, nextCursor: state.terminal ? null : { id, version: state.revision },
       coverage: { status: page.isDone ? "complete" : budgetLimited ? "budgetLimited" : "continuable",
         family: "item", mode: "joined-lowercase-infix-v1", ordering: "by_move_active_updated_desc_native",
@@ -745,6 +768,61 @@ export const searchItemPagePrototype = internalMutation({
         : "Continue with the returned handle and identical query/filter/page-size semantics; deduplicate stable IDs under concurrent edits." };
     if (jsonBytes(response) > 160 * 1024) mcpError("SEARCH_UNAVAILABLE", "Response exceeds the prototype byte budget.", "Use the existing finder.");
     return response;
+  },
+});
+
+/** One bounded durable expiry chain per state; no cron/workflow is introduced. */
+export const expireItemSearchContinuation = internalMutation({
+  args: { id: v.id("itemSearchContinuations") },
+  handler: async (ctx, { id }): Promise<null> => {
+    const row = await ctx.db.get(id);
+    if (!row) return null;
+    if (row.expiresAt <= Date.now()) await ctx.db.delete(id);
+    else {
+      const expiryJobId = await ctx.scheduler.runAt(row.expiresAt, internal.mcpPlanning.expireItemSearchContinuation, { id });
+      await ctx.db.patch(id, { expiryJobId });
+    }
+    return null;
+  },
+});
+
+/** Recovery for legacy/stranded expiry rows; bounded indexed physical erasure. */
+export const cleanupExpiredItemSearchContinuations = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<{ deleted: number }> => {
+    const rows = await ctx.db.query("itemSearchContinuations").withIndex("by_expiry", q => q.lte("expiresAt", Date.now())).take(25);
+    for (const row of rows) await eraseItemSearchState(ctx, row);
+    // Reset legacy abandoned rows that predate scheduled expiry, even if their
+    // logical deadline has not passed. No raw request text needs to be imported.
+    const legacy = await ctx.db.query("itemSearchContinuations").withIndex("by_expiry_schedule", q => q.eq("expiryScheduled", undefined)).take(25);
+    for (const row of legacy) await eraseItemSearchState(ctx, row);
+    if (rows.length === 25 || legacy.length === 25) await ctx.scheduler.runAfter(0, internal.mcpPlanning.cleanupExpiredItemSearchContinuations, {});
+    return { deleted: rows.length + legacy.length };
+  },
+});
+
+/** Account erasure drains indexed pages; cancelled requests never erase new state. */
+export const cleanupItemSearchForDeletedAccount = internalMutation({
+  args: { ownerUserId: v.id("users"), requestId: v.id("accountDeletionRequests"),
+    phase: v.optional(v.union(v.literal("owned"), v.literal("current"), v.literal("retired"))), cursor: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<null> => {
+    const request = await ctx.db.get(args.requestId);
+    if (!request || request.userId !== args.ownerUserId || request.status === "cancelled") return null;
+    const phase = args.phase ?? "owned";
+    if (phase === "owned") {
+      const count = await eraseItemSearchOwnerPage(ctx, args.ownerUserId);
+      await ctx.scheduler.runAfter(0, internal.mcpPlanning.cleanupItemSearchForDeletedAccount,
+        { ownerUserId: args.ownerUserId, requestId: args.requestId, phase: count === 25 ? "owned" : "current" });
+    } else {
+      // Covers older rows with no ownerUserId, including retired credentials.
+      const page = await ctx.db.query("aiAccessConnections").withIndex("by_owner_current", q => q.eq("ownerUserId", args.ownerUserId).eq("isCurrent", phase === "current"))
+        .paginate({ cursor: args.cursor ?? null, numItems: 25, maximumRowsRead: 25, maximumBytesRead: 256 * 1024 });
+      for (const connection of page.page) await eraseItemSearchForConnection(ctx, connection._id);
+      if (!page.isDone || phase === "current") await ctx.scheduler.runAfter(0, internal.mcpPlanning.cleanupItemSearchForDeletedAccount,
+        { ownerUserId: args.ownerUserId, requestId: args.requestId, phase: page.isDone ? "retired" : phase,
+          ...(page.isDone ? {} : { cursor: page.continueCursor }) });
+    }
+    return null;
   },
 });
 

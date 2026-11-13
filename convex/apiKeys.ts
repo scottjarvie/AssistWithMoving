@@ -9,6 +9,7 @@ import { apiKeyScopes, normalizeApiKeyScopes, generateApiKeySecret, hashApiKey, 
 import { reductionArgs, type Reduction } from "./lib/connectionReduction";
 import { connectionAccess, ensureAccess, readAccess, readConnection, connectKey, keyScopes, accessState, narrowConnection, changeByPerson, snapshot } from "./lib/carriedAccess";
 import { connectionChange, safeConnectionText } from "./lib/connectionHistory";
+import { eraseItemSearchForConnection } from "./lib/accountPrivacy";
 
 const scopeValidator = v.union(v.literal("moves/read"), v.literal("moves/write"), v.literal("inventory/read"), v.literal("inventory/write"), v.literal("queue/read"), v.literal("queue/write"),
   v.literal("queue/suggest"), v.literal("plans/read"), v.literal("plans/write"), v.literal("photos/write"), v.literal("exports/read"), v.literal("exports/create"), v.literal("members/manage"));
@@ -85,6 +86,7 @@ export async function rotateApiKeyForUser(ctx: MutationCtx, args: { householdId:
   const apiKeyId = await ctx.db.insert("apiKeys", { householdId: key.householdId, moveId: access.moveIds?.length === 1 ? access.moveIds[0] : undefined, accessOwnerId: access._id, name: `${key.name} rotated`, prefix: apiKeyPrefix(rawKey), tokenPreview: apiKeyPreview(rawKey), secretHash: await hashApiKey(rawKey), scopes: keyScopes(access), scopeChoice: "chosen", status: "active", version: 1, expiresAt: access.endsAt, rotatedFromApiKeyId: key._id, createdByUserId: actorUserId, createdAt: now, updatedAt: now });
   await ctx.db.patch(key._id, { credentialRetiredAt: now, status: "revoked", revokedAt: now, updatedAt: now });
   await ctx.db.patch(connection._id, { isCurrent: false, supersededAt: now });
+  await eraseItemSearchForConnection(ctx, connection._id);
   await ctx.db.patch(access._id, { connectionCount: Math.max(0, access.connectionCount - 1) });
   const replacement = (await ctx.db.get(apiKeyId))!;
   const linked = await connectKey(ctx, replacement, true);

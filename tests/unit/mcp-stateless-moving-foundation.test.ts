@@ -9,10 +9,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
-import { internal } from "../../convex/_generated/api";
+import { api, internal } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { createMovingServer, STATELESS_MOVING_TOOL_NAMES } from "../../convex/httpRoutes/mcp";
 import schema from "../../convex/schema";
+import { ACCOUNT_DELETION_CONFIRMATION, ITEM_SEARCH_STATE_TTL_MS } from "../../convex/lib/accountPrivacy";
+import { nativeWebsiteIdentity } from "../helpers/website-session";
 
 type ModuleMap = Record<string, () => Promise<unknown>>;
 
@@ -264,7 +266,204 @@ async function seedMove() {
   return { t, ...ids };
 }
 
+async function seedSearchRetention() {
+  const f = await seedMove();
+  await f.t.run(async ctx => {
+    for (let i = 0; i < 3; i++) await ctx.db.insert("items", {
+      householdId: f.householdId, moveId: f.moveId, name: "ordinary", normalizedName: "ordinary",
+      quantity: 1, status: "active", condition: "good", disposition: "take", weightConfidence: "none",
+      volumeConfidence: "none", fragility: "low", stackable: false, hazardousFlag: false, highValue: false,
+      requiresPersonalTransport: false, planningDefaultKeys: [], needsReview: false, reviewFlags: [], aiTags: [],
+      createdVia: "manual", createdByUserId: f.userId, updatedByUserId: f.userId, createdAt: i, updatedAt: i,
+    });
+  });
+  const person = f.t.withIdentity(nativeWebsiteIdentity(SUBJECT, undefined, "sess_search_privacy"));
+  const input = { principal: PRINCIPAL, moveId: f.moveId, pageSize: 1 };
+  return { ...f, person, input };
+}
+
 describe("stateless Moving MCP foundation", () => {
+  it("bounds physical expiry recovery and erases abandoned legacy plaintext without touching a live digest session", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const f = await seedSearchRetention();
+      vi.useFakeTimers();
+      try {
+        const first = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        const row = await f.t.run(async ctx => (await ctx.db.get(first.nextCursor.id as Id<"itemSearchContinuations">))!);
+        await f.t.run(async ctx => {
+          const { _id, _creationTime, ...state } = row;
+          void _id; void _creationTime;
+          for (let i = 0; i < 61; i++) await ctx.db.insert("itemSearchContinuations", {
+            ...state, binding: "legacy-sensitive-query", ownerUserId: undefined, expiryScheduled: undefined, expiryJobId: undefined,
+            expiresAt: i < 30 ? Date.now() - 1 : Date.now() + 1000,
+          });
+        });
+        const batch = await f.t.mutation(mcpInternal.cleanupExpiredItemSearchContinuations, {});
+        expect(batch.deleted).toBe(50); // two fixed25-row indexed pages
+        expect(await f.t.run(ctx => ctx.db.query("itemSearchContinuations").collect())).toHaveLength(12);
+        await f.t.mutation(mcpInternal.cleanupExpiredItemSearchContinuations, {});
+        const remaining = await f.t.run(ctx => ctx.db.query("itemSearchContinuations").collect());
+        expect(remaining.map(state => state._id)).toEqual([row._id]);
+        expect(JSON.stringify(remaining)).not.toContain("legacy-sensitive-query");
+      } finally { vi.clearAllTimers(); vi.useRealTimers(); }
+    });
+  });
+
+  it("minimizes private query/filter retention, excludes capabilities from export and physically expires abandoned state", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const f = await seedSearchRetention();
+      vi.useFakeTimers();
+      try {
+        const input = { ...f.input, query: "sensitive-query-47291", room: "sensitive-room-47291", category: "sensitive-category-47291" };
+        const first = await f.t.mutation(mcpInternal.searchItemPagePrototype, input);
+        const row = await f.t.run(async ctx => (await ctx.db.get(first.nextCursor.id as Id<"itemSearchContinuations">))!);
+        expect(row.binding).toMatch(/^sha256-v2:[a-f0-9]{64}$/);
+        for (const marker of [input.query, input.room, input.category]) expect(JSON.stringify(row)).not.toContain(marker);
+        const jobs = await f.t.run(ctx => ctx.db.system.query("_scheduled_functions").collect());
+        for (const marker of [input.query, input.room, input.category, row.binding]) expect(JSON.stringify(jobs)).not.toContain(marker);
+        const exported = await f.person.mutation(api.accountPrivacy.createAccountExport, {});
+        const artifact = await f.person.query(api.accountPrivacy.getAccountExportArtifact, { exportJobId: exported.exportJobId });
+        expect(JSON.parse(artifact.artifactText!).ephemeralSearchState.included).toBe(false);
+        for (const marker of [input.query, input.room, input.category, row.binding]) expect(artifact.artifactText).not.toContain(marker);
+        await vi.advanceTimersByTimeAsync(ITEM_SEARCH_STATE_TTL_MS + 1);
+        await f.t.finishInProgressScheduledFunctions();
+        expect(await f.t.run(ctx => ctx.db.get(row._id))).toBeNull();
+        const fresh = await f.t.mutation(mcpInternal.searchItemPagePrototype, input);
+        expect(fresh.nextCursor.id).not.toBe(row._id);
+        await expect(f.t.mutation(mcpInternal.searchItemPagePrototype, { ...input, cursor: first.nextCursor })).rejects.toThrow(/stale/);
+      } finally { vi.clearAllTimers(); vi.useRealTimers(); }
+    });
+  });
+
+  it("reuses one expiry chain on restart, erases terminal state and preserves new state against old expiry callbacks", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const f = await seedSearchRetention();
+      vi.useFakeTimers();
+      try {
+        const first = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        await vi.advanceTimersByTimeAsync(1000);
+        let page = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        expect(page.nextCursor.id).toBe(first.nextCursor.id);
+        const jobs = await f.t.run(ctx => ctx.db.system.query("_scheduled_functions").collect());
+        expect(jobs.filter(row => row.name.includes("expireItemSearchContinuation") && row.state.kind === "pending")).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(ITEM_SEARCH_STATE_TTL_MS - 999);
+        await f.t.finishInProgressScheduledFunctions();
+        expect(await f.t.run(ctx => ctx.db.get(first.nextCursor.id as Id<"itemSearchContinuations">))).not.toBeNull();
+        const old = page.nextCursor;
+        while (page.nextCursor) page = await f.t.mutation(mcpInternal.searchItemPagePrototype, { ...f.input, cursor: page.nextCursor });
+        expect(await f.t.run(ctx => ctx.db.get(old.id as Id<"itemSearchContinuations">))).toBeNull();
+        expect((await f.t.run(ctx => ctx.db.system.query("_scheduled_functions").collect()))
+          .filter(row => row.name.includes("expireItemSearchContinuation") && row.state.kind === "pending")).toHaveLength(0);
+        const fresh = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        await f.t.mutation(mcpInternal.expireItemSearchContinuation, { id: old.id });
+        expect(fresh.nextCursor.id).not.toBe(old.id);
+        expect(await f.t.run(ctx => ctx.db.get(fresh.nextCursor.id as Id<"itemSearchContinuations">))).not.toBeNull();
+      } finally { vi.clearAllTimers(); vi.useRealTimers(); }
+    });
+  });
+
+  it("physically drains bounded account state including legacy retired rows and blocks deletion-hold recreation", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const f = await seedSearchRetention();
+      vi.useFakeTimers();
+      try {
+        const first = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        const row = await f.t.run(async ctx => (await ctx.db.get(first.nextCursor.id as Id<"itemSearchContinuations">))!);
+        const foreignId = await f.t.run(async ctx => {
+          const connection = (await ctx.db.get(row.connectionId))!;
+          const { _id, _creationTime, ...state } = row;
+          const { _id: cid, _creationTime: ct, ...credential } = connection;
+          void _id; void _creationTime; void cid; void ct;
+          for (let i = 0; i < 30; i++) {
+            const connectionId = await ctx.db.insert("aiAccessConnections", { ...credential, verifiedClientId: `retention-${i}`, isCurrent: i !== 0 });
+            await ctx.db.insert("itemSearchContinuations", { ...state, connectionId, expiryJobId: undefined,
+              ownerUserId: i === 0 ? undefined : f.userId, binding: i === 0 ? "legacy-sensitive-query" : state.binding });
+          }
+          const foreignConnection = await ctx.db.insert("aiAccessConnections", { ...credential, ownerUserId: f.guestUserId, verifiedClientId: "retention-foreign" });
+          return ctx.db.insert("itemSearchContinuations", { ...state, connectionId: foreignConnection, expiryJobId: undefined, ownerUserId: f.guestUserId });
+        });
+        const requestId = await f.person.mutation(api.accountPrivacy.requestAccountDeletion, {});
+        expect((await f.t.run(ctx => ctx.db.query("itemSearchContinuations").withIndex("by_owner", q => q.eq("ownerUserId", f.userId)).collect())).length).toBeLessThanOrEqual(6);
+        await expect(f.t.mutation(mcpInternal.searchItemPagePrototype, f.input)).rejects.toThrow(/deletion is pending/);
+        await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+        const remaining = await f.t.run(ctx => ctx.db.query("itemSearchContinuations").collect());
+        expect(remaining.map(state => state._id)).toEqual([foreignId]);
+        expect(JSON.stringify(remaining)).not.toContain("legacy-sensitive-query");
+        await f.person.mutation(api.accountPrivacy.completeAccountDeletion, { requestId, confirmation: ACCOUNT_DELETION_CONFIRMATION });
+        await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+        await expect(f.t.mutation(mcpInternal.searchItemPagePrototype, f.input)).rejects.toThrow();
+        expect((await f.t.run(ctx => ctx.db.query("itemSearchContinuations").collect())).map(state => state._id)).toEqual([foreignId]);
+      } finally { vi.clearAllTimers(); vi.useRealTimers(); }
+    });
+  });
+
+  it("cancellation never revives a pre-hold handle and cancelled cleanup cannot delete a new session", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const f = await seedSearchRetention();
+      vi.useFakeTimers();
+      try {
+        const first = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        const requestId = await f.person.mutation(api.accountPrivacy.requestAccountDeletion, {});
+        await f.person.mutation(api.accountPrivacy.cancelAccountDeletion, { requestId });
+        const fresh = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        await f.t.mutation(mcpInternal.cleanupItemSearchForDeletedAccount, { ownerUserId: f.userId, requestId });
+        expect(await f.t.run(ctx => ctx.db.get(fresh.nextCursor.id as Id<"itemSearchContinuations">))).not.toBeNull();
+        expect(fresh.nextCursor.id).not.toBe(first.nextCursor.id);
+        await expect(f.t.mutation(mcpInternal.searchItemPagePrototype, { ...f.input, cursor: first.nextCursor })).rejects.toThrow(/stale/);
+      } finally { vi.clearAllTimers(); vi.useRealTimers(); }
+    });
+  });
+
+  it("supported connection reductions, restore and Forget erase request state without reviving old handles", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const f = await seedSearchRetention();
+      vi.useFakeTimers();
+      try {
+        const first = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        const state = await f.t.run(async ctx => (await ctx.db.get(first.nextCursor.id as Id<"itemSearchContinuations">))!);
+        let description = await f.t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId: PRINCIPAL.clientId });
+        await f.t.mutation(internal.aiGrants.reduceConnection, { subject: SUBJECT, clientId: PRINCIPAL.clientId, opId: "retention-pause", expectedVersion: description.version!, action: "pause" });
+        expect(await f.t.run(ctx => ctx.db.get(state._id))).toBeNull();
+        description = await f.t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId: PRINCIPAL.clientId });
+        await f.person.mutation(api.connectionSettings.change, { connectionId: state.connectionId, expectedVersion: description.version!, opId: "retention-resume", action: "resume" });
+        const resumed = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        expect(resumed.nextCursor.id).not.toBe(state._id);
+        await expect(f.t.mutation(mcpInternal.searchItemPagePrototype, { ...f.input, cursor: first.nextCursor })).rejects.toThrow(/stale/);
+        description = await f.t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId: PRINCIPAL.clientId });
+        await f.t.mutation(internal.aiGrants.reduceConnection, { subject: SUBJECT, clientId: PRINCIPAL.clientId, opId: "retention-revoke", expectedVersion: description.version!, action: "revoke" });
+        description = await f.t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId: PRINCIPAL.clientId });
+        await f.person.mutation(api.connectionSettings.change, { connectionId: state.connectionId, expectedVersion: description.version!, opId: "retention-restore", action: "restore" });
+        const restored = await f.t.mutation(mcpInternal.searchItemPagePrototype, f.input);
+        expect(restored.nextCursor.id).not.toBe(resumed.nextCursor.id);
+        await expect(f.t.mutation(mcpInternal.searchItemPagePrototype, { ...f.input, cursor: resumed.nextCursor })).rejects.toThrow(/stale/);
+        description = await f.t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId: PRINCIPAL.clientId });
+        await f.t.mutation(internal.aiGrants.reduceConnection, { subject: SUBJECT, clientId: PRINCIPAL.clientId, opId: "retention-revoke-again", expectedVersion: description.version!, action: "revoke" });
+        description = await f.t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId: PRINCIPAL.clientId });
+        await f.person.mutation(api.connectionSettings.change, { connectionId: state.connectionId, expectedVersion: description.version!, opId: "retention-forget", action: "forget" });
+        expect(await f.t.run(ctx => ctx.db.query("itemSearchContinuations").collect())).toEqual([]);
+      } finally { vi.clearAllTimers(); vi.useRealTimers(); }
+    });
+  });
+
+  it("retiring a key physically removes legacy continuation state without moving it to the replacement", async () => {
+    await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
+      const f = await seedSearchRetention();
+      vi.useFakeTimers();
+      try {
+        const key = await f.person.mutation(api.apiKeys.create, { householdId: f.householdId, name: "Synthetic retention key" });
+        const connection = await f.t.run(ctx => ctx.db.query("aiAccessConnections").withIndex("by_api_key", q => q.eq("apiKeyId", key.apiKeyId)).unique());
+        const id = await f.t.run(ctx => ctx.db.insert("itemSearchContinuations", {
+          connectionId: connection!._id, binding: "legacy-private-request", position: null,
+          revision: 1, expiresAt: Date.now() + ITEM_SEARCH_STATE_TTL_MS, rows: 0, sourceValueBytes: 0, steps: 1, terminal: false,
+        }));
+        const rotated = await f.person.mutation(api.apiKeys.rotate, { householdId: f.householdId, apiKeyId: key.apiKeyId, expectedVersion: connection!.policy!.revision });
+        expect(rotated.apiKeyId).not.toBe(key.apiKeyId);
+        expect(await f.t.run(ctx => ctx.db.get(id))).toBeNull();
+        expect(await f.t.run(ctx => ctx.db.query("itemSearchContinuations").collect())).toEqual([]);
+      } finally { vi.clearAllTimers(); vi.useRealTimers(); }
+    });
+  });
+
   it.each([100, 2000, 10000])("traverses %i synthetic source items against ID ground truth (local engine model only)", async size => {
     await withEnvironment({ CLERK_JWT_ISSUER_DOMAIN: ISSUER }, async () => {
       const f = await seedMove();
@@ -397,7 +596,7 @@ describe("stateless Moving MCP foundation", () => {
       expect(second.records[0].id).not.toBe(first.records[0].id);
       await expect(f.t.mutation(mcpInternal.searchItemPagePrototype, { ...input, cursor })).rejects.toThrow(/stale/);
       const state = await f.t.run(async ctx => (await ctx.db.get(second.nextCursor.id as Id<"itemSearchContinuations">))!);
-      expect(state.binding).toContain("joined-lowercase-infix-v1");
+      expect(state.binding).toMatch(/^sha256-v2:[a-f0-9]{64}$/);
       expect(state).not.toHaveProperty("seen");
       await f.t.run(ctx => ctx.db.patch(state._id, { expiresAt: 0 }));
       await expect(f.t.mutation(mcpInternal.searchItemPagePrototype, { ...input, cursor: second.nextCursor })).rejects.toThrow(/expired/);
