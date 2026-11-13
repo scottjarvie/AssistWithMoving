@@ -2,12 +2,17 @@ import { summaryFor } from "./usageLimits";
 import { captureNeedsInput, ingestionStatusToQueueState } from "./lib/queue";
 import { queueIsWork, queueNeedsInput, effectiveQueueState, queueWorkFilter } from "./lib/queue";
 import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
-import { effectiveScopes } from "./lib/aiGrants";
+import { effectiveExpiry, effectiveScopes } from "./lib/aiGrants";
+import { oauthIdentity, readConnection } from "./lib/carriedAccess";
+import { resolveMoveAccess } from "./lib/moveAccess";
+import { eraseItemSearchForConnection, eraseItemSearchOwnerPage, eraseItemSearchState, itemSearchAccountLifecycle, ITEM_SEARCH_STATE_TTL_MS } from "./lib/accountPrivacy";
+import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalQuery,
+  internalMutation,
   query,
   type MutationCtx,
   type QueryCtx,
@@ -614,8 +619,8 @@ function shapeQueueSummary(row: Doc<"queueItems">) {
 
 function parseOffset(cursor: string | undefined) {
   if (!cursor) return 0;
-  const match = cursor.match(/^offset:(\d+)$/);
-  if (!match) {
+  const match = cursor.length <= 80 ? cursor.match(/^offset:(\d+)$/) : null;
+  if (!match || !Number.isSafeInteger(Number(match[1]))) {
     mcpError(
       "VALIDATION_ERROR",
       "Search cursor is invalid.",
@@ -624,6 +629,202 @@ function parseOffset(cursor: string | undefined) {
   }
   return Number(match[1]);
 }
+
+// SOURCE-ONLY prototype: deliberately not registered in any public transport.
+// Existing array and offset finders remain available until exact-head clearance.
+const ITEM_PAGE_BYTES = 256 * 1024;
+const ITEM_PAGE_VALUE_BYTES = 1280 * 1024; // byte-budget boundary document allowance
+const ITEM_TRAVERSAL_BYTES = 16 * 1024 * 1024;
+const ITEM_TRAVERSAL_ROWS = 10_000;
+const ITEM_TRAVERSAL_STEPS = 400;
+const ITEM_STATE_TTL = ITEM_SEARCH_STATE_TTL_MS;
+const jsonBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+
+function canonicalItemMatches(item: Pick<Doc<"items">, "name" | "room" | "category" | "description">, needle: string) {
+  return !needle || [item.name, item.room, item.category, item.description]
+    .filter(Boolean).join(" ").toLowerCase().includes(needle);
+}
+
+function restartItemSearch(message: string): never {
+  mcpError("SEARCH_RESTART_REQUIRED", message, "Restart the item search without a cursor; the existing search_move_records finder remains available.");
+}
+
+export const searchItemPagePrototype = internalMutation({
+  args: {
+    principal: mcpPrincipalValidator,
+    moveId: v.id("moves"),
+    query: v.optional(v.string()),
+    room: v.optional(v.string()),
+    category: v.optional(v.string()),
+    disposition: v.optional(itemDisposition),
+    needsReview: v.optional(v.boolean()),
+    pageSize: v.optional(v.number()),
+    cursor: v.optional(v.object({ id: v.id("itemSearchContinuations"), version: v.number() })),
+  },
+  handler: async (ctx, args) => {
+    const { move, policy, grant } = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:read", "moving.context.read");
+    const lifecycle = await itemSearchAccountLifecycle(ctx, policy.user._id);
+    if (lifecycle.blocked) restartItemSearch("Account deletion is pending or completed; search state cannot be created or resumed.");
+    const pageSize = args.pageSize ?? 25;
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 50 ||
+        (args.query?.length ?? 0) > 240 || (args.room?.length ?? 0) > 240 || (args.category?.length ?? 0) > 240) {
+      restartItemSearch("Invalid item query, filters or page size (1 to 50).");
+    }
+    if (args.cursor && (!Number.isSafeInteger(args.cursor.version) || args.cursor.version < 1 || jsonBytes(args.cursor) > 256)) {
+      restartItemSearch("Invalid item cursor version or size.");
+    }
+    const needle = args.query?.trim().toLowerCase() ?? "";
+    const connection = await readConnection(ctx, policy.user._id, oauthIdentity(args.principal.clientId));
+    if (!connection || !connection.isCurrent || connection.grantId !== grant._id) restartItemSearch("The current connection changed.");
+    const live = await resolveMoveAccess(ctx, policy.user._id, move.householdId, move._id);
+    // Effective values, not updatedAt as a fictional monotonic authority revision.
+    // Membership ABA is disclosed; the live gate always wins on each step.
+    const canonicalBinding = JSON.stringify({
+      version: 2, mode: "joined-lowercase-infix-v1", index: "items.by_move_active_updated.desc",
+      principal: [args.principal.issuer.trim().replace(/\/+$/, ""), args.principal.subject, args.principal.clientId],
+      connection: [connection._id, connection.grantId, connection.generation, connection.isCurrent],
+      grant: [grant._id, grant.version, [...effectiveScopes(grant)].sort(), grant.moveScope,
+        [...(grant.moveIds ?? [])].map(String).sort(), effectiveExpiry(grant) ?? null],
+      move: [move._id, move.householdId, move.status, move.archivedAt ?? null],
+      access: [live.role, live.accessKind,
+        live.membership ? [live.membership._id, live.membership.role, live.membership.status, live.membership.apiAccessStatus ?? null] : null,
+        live.participant ? [live.participant._id, live.participant.role, live.participant.status, live.participant.accessKind, live.participant.agentAccessStatus ?? null] : null],
+      needle, room: args.room ?? null, category: args.category ?? null,
+      disposition: args.disposition ?? null, needsReview: args.needsReview ?? null, pageSize,
+      accountLifecycle: lifecycle.cancelledRequest,
+    });
+    if (jsonBytes(canonicalBinding) > 8192) restartItemSearch("Authority binding exceeds the prototype budget.");
+    // Data minimization only. Integrity is the server-owned row + live authority
+    // + atomic expected revision, never a client-editable digest or invented seal.
+    const binding = "sha256-v2:" + Array.from(new Uint8Array(await crypto.subtle.digest(
+      "SHA-256", new TextEncoder().encode(canonicalBinding))), byte => byte.toString(16).padStart(2, "0")).join("");
+    const now = Date.now();
+    const previous = args.cursor
+      ? await ctx.db.get(args.cursor.id)
+      : await ctx.db.query("itemSearchContinuations").withIndex("by_connection", q => q.eq("connectionId", connection._id)).unique();
+    if (args.cursor && (!previous || previous.connectionId !== connection._id || previous.binding !== binding ||
+        previous.revision !== args.cursor.version || previous.expiresAt <= now || previous.terminal)) {
+      restartItemSearch("Cursor is stale, expired, terminal or belongs to another request or authority.");
+    }
+    const continuing = args.cursor ? previous! : null;
+    const rowsBefore = continuing?.rows ?? 0;
+    const page = await ctx.db.query("items")
+      .withIndex("by_move_active_updated", q => q.eq("moveId", move._id).eq("deletedAt", undefined)).order("desc")
+      .paginate({ cursor: continuing?.position ?? null,
+        numItems: Math.min(pageSize, ITEM_TRAVERSAL_ROWS - rowsBefore),
+        maximumRowsRead: Math.min(pageSize, ITEM_TRAVERSAL_ROWS - rowsBefore), maximumBytesRead: ITEM_PAGE_BYTES })
+      .catch(() => restartItemSearch("The source range cursor is unavailable. No completion is inferred."));
+    if (page.page.length > pageSize || jsonBytes(page.page) > ITEM_PAGE_VALUE_BYTES || page.continueCursor.length > 8192) {
+      mcpError("SEARCH_UNAVAILABLE", "Source page exceeds the prototype row/byte budget.", "Use the existing finder; do not assume this traversal is complete.");
+    }
+    const records = [];
+    for (const item of page.page) {
+      // Lifecycle/privacy gate before matching: forbidden terms cannot affect
+      // candidates, source progress, output or continuation.
+      if (item.deletedAt !== undefined) continue;
+      if (args.room !== undefined && item.room !== args.room) continue;
+      if (args.category !== undefined && item.category !== args.category) continue;
+      if (args.disposition !== undefined && item.disposition !== args.disposition) continue;
+      if (args.needsReview !== undefined && item.needsReview !== args.needsReview) continue;
+      if (!canonicalItemMatches(item, needle)) continue;
+      const summary = [item.room, item.category, item.disposition].filter(Boolean).join(" · ");
+      records.push({ kind: "item", id: item._id, title: item.name.slice(0, 160), summary: summary.slice(0, 240),
+        snippetTruncated: item.name.length > 160 || summary.length > 240,
+        status: item.status, needsReview: item.needsReview, updatedAt: item.updatedAt });
+    }
+    const state = {
+      connectionId: connection._id, ownerUserId: policy.user._id, expiryScheduled: true,
+      expiryJobId: previous?.expiryJobId, binding, position: page.continueCursor,
+      revision: (previous?.revision ?? 0) + 1, expiresAt: continuing?.expiresAt ?? now + ITEM_STATE_TTL,
+      rows: rowsBefore + page.page.length,
+      sourceValueBytes: (continuing?.sourceValueBytes ?? 0) + jsonBytes(page.page),
+      steps: (continuing?.steps ?? 0) + 1, terminal: false,
+    };
+    const budgetLimited = !page.isDone && (state.rows >= ITEM_TRAVERSAL_ROWS ||
+      state.sourceValueBytes >= ITEM_TRAVERSAL_BYTES || state.steps >= ITEM_TRAVERSAL_STEPS);
+    state.terminal = page.isDone || budgetLimited;
+    if (!Number.isSafeInteger(state.revision) || jsonBytes(state) > 24 * 1024) restartItemSearch("Continuation state exceeds its storage budget.");
+    let id = previous?._id;
+    if (state.terminal) {
+      if (previous) await eraseItemSearchState(ctx, previous);
+    } else if (previous) {
+      await ctx.db.replace(previous._id, state);
+    } else {
+      id = await ctx.db.insert("itemSearchContinuations", state);
+    }
+    if (!state.terminal && !state.expiryJobId) {
+      // Exactly one expiry chain per live state, canceled on terminal/lifecycle
+      // erasure. No request data is copied into scheduler arguments.
+      const expiryJobId = await ctx.scheduler.runAt(state.expiresAt, internal.mcpPlanning.expireItemSearchContinuation, { id: id! });
+      if (jsonBytes({ ...state, expiryJobId }) > 24 * 1024) restartItemSearch("Continuation state exceeds its storage budget.");
+      await ctx.db.patch(id!, { expiryJobId });
+    }
+    const response = { records, nextCursor: state.terminal ? null : { id, version: state.revision },
+      coverage: { status: page.isDone ? "complete" : budgetLimited ? "budgetLimited" : "continuable",
+        family: "item", mode: "joined-lowercase-infix-v1", ordering: "by_move_active_updated_desc_native",
+        completeScope: "activeSourceRangeTraversal", observedRangeEnd: page.isDone,
+        corpusComplete: false, snapshot: false, exactTotal: null, snippetsBounded: true },
+      next: budgetLimited ? "Traversal budget reached; this lane cannot continue. Existing finders remain available with their own limits. No corpus completion is inferred."
+        : "Continue with the returned handle and identical query/filter/page-size semantics; deduplicate stable IDs under concurrent edits." };
+    if (jsonBytes(response) > 160 * 1024) mcpError("SEARCH_UNAVAILABLE", "Response exceeds the prototype byte budget.", "Use the existing finder.");
+    return response;
+  },
+});
+
+/** One bounded durable expiry chain per state; no cron/workflow is introduced. */
+export const expireItemSearchContinuation = internalMutation({
+  args: { id: v.id("itemSearchContinuations") },
+  handler: async (ctx, { id }): Promise<null> => {
+    const row = await ctx.db.get(id);
+    if (!row) return null;
+    if (row.expiresAt <= Date.now()) await ctx.db.delete(id);
+    else {
+      const expiryJobId = await ctx.scheduler.runAt(row.expiresAt, internal.mcpPlanning.expireItemSearchContinuation, { id });
+      await ctx.db.patch(id, { expiryJobId });
+    }
+    return null;
+  },
+});
+
+/** Recovery for legacy/stranded expiry rows; bounded indexed physical erasure. */
+export const cleanupExpiredItemSearchContinuations = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<{ deleted: number }> => {
+    const rows = await ctx.db.query("itemSearchContinuations").withIndex("by_expiry", q => q.lte("expiresAt", Date.now())).take(25);
+    for (const row of rows) await eraseItemSearchState(ctx, row);
+    // Reset legacy abandoned rows that predate scheduled expiry, even if their
+    // logical deadline has not passed. No raw request text needs to be imported.
+    const legacy = await ctx.db.query("itemSearchContinuations").withIndex("by_expiry_schedule", q => q.eq("expiryScheduled", undefined)).take(25);
+    for (const row of legacy) await eraseItemSearchState(ctx, row);
+    if (rows.length === 25 || legacy.length === 25) await ctx.scheduler.runAfter(0, internal.mcpPlanning.cleanupExpiredItemSearchContinuations, {});
+    return { deleted: rows.length + legacy.length };
+  },
+});
+
+/** Account erasure drains indexed pages; cancelled requests never erase new state. */
+export const cleanupItemSearchForDeletedAccount = internalMutation({
+  args: { ownerUserId: v.id("users"), requestId: v.id("accountDeletionRequests"),
+    phase: v.optional(v.union(v.literal("owned"), v.literal("current"), v.literal("retired"))), cursor: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<null> => {
+    const request = await ctx.db.get(args.requestId);
+    if (!request || request.userId !== args.ownerUserId || request.status === "cancelled") return null;
+    const phase = args.phase ?? "owned";
+    if (phase === "owned") {
+      const count = await eraseItemSearchOwnerPage(ctx, args.ownerUserId);
+      await ctx.scheduler.runAfter(0, internal.mcpPlanning.cleanupItemSearchForDeletedAccount,
+        { ownerUserId: args.ownerUserId, requestId: args.requestId, phase: count === 25 ? "owned" : "current" });
+    } else {
+      // Covers older rows with no ownerUserId, including retired credentials.
+      const page = await ctx.db.query("aiAccessConnections").withIndex("by_owner_current", q => q.eq("ownerUserId", args.ownerUserId).eq("isCurrent", phase === "current"))
+        .paginate({ cursor: args.cursor ?? null, numItems: 25, maximumRowsRead: 25, maximumBytesRead: 256 * 1024 });
+      for (const connection of page.page) await eraseItemSearchForConnection(ctx, connection._id);
+      if (!page.isDone || phase === "current") await ctx.scheduler.runAfter(0, internal.mcpPlanning.cleanupItemSearchForDeletedAccount,
+        { ownerUserId: args.ownerUserId, requestId: args.requestId, phase: page.isDone ? "retired" : phase,
+          ...(page.isDone ? {} : { cursor: page.continueCursor }) });
+    }
+    return null;
+  },
+});
 
 export const searchMoveRecords = internalQuery({
   args: {
@@ -642,6 +843,12 @@ export const searchMoveRecords = internalQuery({
       "inventory:read",
       "moving.context.read",
     );
+    if (args.limit !== undefined && !Number.isFinite(args.limit)) {
+      mcpError("VALIDATION_ERROR", "Search limit must be finite.", "Provide a finite limit from 1 to 50.");
+    }
+    if ((args.query?.length ?? 0) > 240) {
+      mcpError("VALIDATION_ERROR", "Search query exceeds 240 characters.", "Shorten the query and restart without a cursor.");
+    }
     const limit = Math.min(Math.max(Math.trunc(args.limit ?? 25), 1), 50);
     const offset = parseOffset(args.cursor);
     const needle = args.query?.trim().toLowerCase() ?? "";
@@ -658,6 +865,18 @@ export const searchMoveRecords = internalQuery({
       ],
     );
     const candidates: Array<Record<string, unknown> & { updatedAt: number }> = [];
+    const visitedKinds: string[] = [];
+    let candidateWindowMayBeLimited = false;
+    let nativeCoverageUnverified = false;
+    const observeWindow = (kind: string, rowCount: number, nativeSearch = false) => {
+      visitedKinds.push(kind);
+      // Native planning search matches archived text before the live archive
+      // gate. Do not expose its raw exhaustion as a new hidden-text oracle.
+      // Until installed-engine/privacy proof, report coverage as unverified
+      // regardless of those counts. Source windows are query-independent.
+      if (nativeSearch) nativeCoverageUnverified = true;
+      else if (rowCount === MAX_SEARCH_CANDIDATES_PER_KIND) candidateWindowMayBeLimited = true;
+    };
 
     if (requested.has("item")) {
       const rows = await ctx.db
@@ -665,13 +884,10 @@ export const searchMoveRecords = internalQuery({
         .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
         .order("desc")
         .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow("item", rows.length);
       for (const item of rows) {
         if (item.deletedAt !== undefined) continue;
-        const haystack = [item.name, item.room, item.category, item.description]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (needle && !haystack.includes(needle)) continue;
+        if (!canonicalItemMatches(item, needle)) continue;
         candidates.push({
           kind: "item",
           id: item._id,
@@ -689,6 +905,7 @@ export const searchMoveRecords = internalQuery({
         .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
         .order("desc")
         .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow("box", rows.length);
       for (const box of rows) {
         if (box.archivedAt !== undefined) continue;
         const haystack = [box.code, box.label, box.nickname, box.room, box.description]
@@ -713,6 +930,7 @@ export const searchMoveRecords = internalQuery({
           q.eq("moveId", args.moveId).eq("status", "active"),
         )
         .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow("space", rows.length);
       for (const space of rows) {
         const haystack = [space.name, ...space.aliases, space.kind, space.notes]
           .filter(Boolean)
@@ -746,6 +964,7 @@ export const searchMoveRecords = internalQuery({
             )
             .order("desc")
             .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow(kind, rows.length, Boolean(needle));
       for (const row of rows) {
         if (row.archivedAt !== undefined) continue;
         candidates.push({
@@ -769,6 +988,7 @@ export const searchMoveRecords = internalQuery({
         )
         .order("desc")
         .filter(queueWorkFilter).take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      observeWindow("queue", rows.length);
       for (const row of rows) {
         if (!queueIsWork(row)) continue;
         const haystack = [row.directive, row.summary, row.resultSummary, row.requiredAction]
@@ -790,17 +1010,32 @@ export const searchMoveRecords = internalQuery({
     candidates.sort((a, b) => b.updatedAt - a.updatedAt || String(a.id).localeCompare(String(b.id)));
     const page = candidates.slice(offset, offset + limit);
     const nextOffset = offset + page.length;
+    const unsupportedKinds = [...requested].filter((kind) => !visitedKinds.includes(kind));
+    const incomplete = candidateWindowMayBeLimited || nativeCoverageUnverified || unsupportedKinds.length > 0;
     return {
       records: page,
       nextCursor: nextOffset < candidates.length ? `offset:${nextOffset}` : null,
       boundedCandidateCount: candidates.length,
       candidateLimitPerKind: MAX_SEARCH_CANDIDATES_PER_KIND,
-      truncatedBeforeFilter:
-        candidates.length >= requested.size * MAX_SEARCH_CANDIDATES_PER_KIND,
+      // Conservative compatibility flag: a full window MAY have omitted rows;
+      // surviving matches cannot establish source exhaustion.
+      truncatedBeforeFilter: incomplete,
+      coverage: {
+        visitedKinds,
+        unsupportedKinds,
+        candidateWindowStatus: nativeCoverageUnverified
+          ? "unverified"
+          : candidateWindowMayBeLimited ? "possiblyLimited" : "exhausted",
+        continuationScope: "boundedCandidatePool",
+        corpusComplete: !incomplete,
+        exactTotal: null,
+      },
       next:
         nextOffset < candidates.length
-          ? "Continue with nextCursor, or narrow query/kinds for a smaller result."
-          : "Call get_move_records with the IDs that need full context.",
+          ? "Continue within this bounded candidate pool with nextCursor; this does not scan beyond its source windows."
+          : incomplete
+            ? "The bounded pool is exhausted; corpus coverage is not proved. Narrow query/kinds or use the existing typed finders."
+            : "Call get_move_records with the IDs that need full context.",
     };
   },
 });

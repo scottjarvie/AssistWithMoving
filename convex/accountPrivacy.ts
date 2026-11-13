@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import {
   ACCOUNT_DELETION_CONFIRMATION,
   accountDeletionScheduledAt,
@@ -12,6 +13,7 @@ import {
   queueRecordBelongsToAccountExport,
   redactItemForExport,
   retentionPolicy,
+  eraseItemSearchOwnerPage,
   summarizeExportPackage,
 } from "./lib/accountPrivacy";
 import { recordAuditEvent } from "./lib/audit";
@@ -170,6 +172,9 @@ export const requestAccountDeletion = mutation({
       scheduledDeletionAt: accountDeletionScheduledAt(now),
     });
 
+    await eraseItemSearchOwnerPage(ctx, user._id);
+    await ctx.scheduler.runAfter(0, internal.mcpPlanning.cleanupItemSearchForDeletedAccount, { ownerUserId: user._id, requestId });
+
     await recordAuditEvent(ctx, {
       actorType: "user",
       actorUserId: user._id,
@@ -241,6 +246,9 @@ export const completeAccountDeletion = mutation({
       disableUserMoveGrants(ctx, user._id, now),
       disableUserMoveParticipants(ctx, user._id, now),
     ]);
+
+    await eraseItemSearchOwnerPage(ctx, user._id);
+    await ctx.scheduler.runAfter(0, internal.mcpPlanning.cleanupItemSearchForDeletedAccount, { ownerUserId: user._id, requestId: args.requestId });
 
     const completedSummary = {
       revokedApiKeyCount,
@@ -330,6 +338,10 @@ async function buildAccountExportPackage(
   return {
     exportedAt: new Date().toISOString(),
     retentionPolicy,
+    ephemeralSearchState: {
+      included: false,
+      reason: "Short-lived cursor capabilities and request digests are excluded to avoid extending retention or copying access handles. Raw query/filter text is not retained.",
+    },
     account: {
       id: user._id,
       email: user.email,

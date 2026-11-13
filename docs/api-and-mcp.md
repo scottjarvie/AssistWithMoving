@@ -1907,6 +1907,51 @@ Start with `get_move_brief`. Search before creating duplicates. For normal
 finished work, prefer `save_complete_result`; use granular saves for later
 corrections.
 
+`search_move_records` reads at most 120 candidates per implemented kind and
+returns at most 50 records. Its `offset:N` cursor pages the **recomputed bounded
+candidate pool**, not the underlying move corpus; edits can shift that pool.
+`nextCursor: null` therefore does not prove a whole-move search. The additive
+`coverage` object names visited and unsupported kinds, states whether source
+windows were exhausted, possibly limited, or unverified, and reports
+`continuationScope: "boundedCandidatePool"`. `boundedCandidateCount` counts
+surviving matches in that pool, not source rows or an exact corpus total;
+`coverage.exactTotal` is null. `truncatedBeforeFilter` is conservative: true if
+any source window filled, any requested kind was unsupported, or native planning
+coverage is unverified. Exactly 120 source rows still counts as possibly limited
+because there is no lookahead read. Nonempty native planning searches always
+report unverified coverage, without exposing raw archived-text exhaustion.
+Existing typed finders remain available; this metadata does not add complete
+corpus continuation or change the other public doors.
+
+The source-only `mcpPlanning.searchItemPagePrototype` is an internal preparation
+lane, **not registered on any of the four public doors**. It keeps canonical item
+joined substring matching through the same matcher, reads a lifecycle-partitioned
+ordinary range index, and holds continuation position/revision/budgets server-side
+in one expiring state per existing connection. No caller-supplied done/seen/index
+state or new secret is used. Every step rechecks current grant and move/household
+authority; semantic or authority changes require restart. Existing array and
+offset paths remain available. Its `complete` status means an observed end of
+that active source-range traversal; `corpusComplete` stays false because there is
+no frozen concurrent-edit snapshot. A terminal traversal budget is explicitly
+`budgetLimited`. Native text-search options do not enforce scan/byte budgets;
+this prototype's ordinary range options and returned-value byte checks are not
+proof of installed whole-call engine costs. Schema/index installation, real-auth
+runtime proof and a public adapter/read switch remain separately gated. See the
+[site plan](planning/awl-0019-search-plan.md) for frozen budgets and authority,
+transport, writer and release ledgers.
+
+The prototype persists only a server-computed request digest, not plaintext
+query/filter text. The digest is data minimization, **not an integrity seal**;
+server-owned state, atomic revision and current authority enforce continuation.
+One per-state scheduled expiry chain physically erases abandoned state after its
+15-minute deadline (subject to scheduler execution delay), and terminal searches
+or credential changes erase it immediately. Pending/completed account deletion
+blocks recreation and drains state in indexed bounded steps. Account exports
+explicitly exclude short-lived search digests/capabilities so export artifacts do
+not extend retention. Current policy has no legal-hold facility for this ephemeral
+state; household evidence/audit retention is unchanged. These source hooks and
+scheduler behavior are not deployed or runtime-certified by this draft.
+
 **Canonical OAuth can work the Queue.** With `moving.queue.work` the loop is
 list → claim → (ask the smallest question, raising the Needs your input flag (state unchanged), or release) → complete, and
 `save_complete_result` with `completeQueueItem` does the save and the completion

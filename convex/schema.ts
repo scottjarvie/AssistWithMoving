@@ -2502,6 +2502,7 @@ export default defineSchema({
     .index("by_assigned_resource", ["assignedResourceId"])
     .index("by_assigned_trip", ["assignedTripId"])
     .index("by_move_updated", ["moveId", "updatedAt"])
+    .index("by_move_active_updated", ["moveId", "deletedAt", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
     .index("by_move_code", ["moveId", "code"])
     .index("by_household", ["householdId"]),
@@ -2566,6 +2567,24 @@ export default defineSchema({
     .index("by_item", ["itemId"])
     .index("by_platform_status", ["platform", "status"])
     .index("by_household", ["householdId"]),
+
+  itemSearchContinuations: defineTable({
+    connectionId: v.id("aiAccessConnections"),
+    ownerUserId: v.optional(v.id("users")),
+    expiryScheduled: v.optional(v.boolean()),
+    expiryJobId: v.optional(v.id("_scheduled_functions")),
+    binding: v.string(),
+    position: v.union(v.string(), v.null()),
+    revision: v.number(),
+    expiresAt: v.number(),
+    rows: v.number(),
+    sourceValueBytes: v.number(),
+    steps: v.number(),
+    terminal: v.boolean(),
+  }).index("by_connection", ["connectionId"])
+    .index("by_owner", ["ownerUserId"])
+    .index("by_expiry", ["expiresAt"])
+    .index("by_expiry_schedule", ["expiryScheduled"]),
 
   plannedItems: defineTable({
     householdId: v.id("households"),

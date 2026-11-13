@@ -9,6 +9,7 @@ import { connectionChange, connectionRequest, previousChange, safeConnectionText
 import { SETTINGS_REFUSAL, reducedAccess, type Reduction } from "./connectionReduction";
 import { requireHouseholdPermission } from "./permissions";
 import { resolveMoveAccess } from "./moveAccess";
+import { eraseItemSearchForConnection } from "./accountPrivacy";
 
 type Ctx = QueryCtx | MutationCtx;
 export type Access = Doc<"aiAccessOwners">;
@@ -120,7 +121,7 @@ async function seedConnection(ctx: MutationCtx, access: Access, input: {
   if (existing) {
     if (input.isCurrent === false) {
       const prior = existing.grantId && await ctx.db.get(existing.grantId);
-      if (!prior || prior._creationTime >= access._creationTime || retiredGrant(prior)) await ctx.db.patch(existing._id, { isCurrent: false });
+      if (!prior || prior._creationTime >= access._creationTime || retiredGrant(prior)) { await ctx.db.patch(existing._id, { isCurrent: false }); await eraseItemSearchForConnection(ctx, existing._id); }
       return false;
     }
     if (!existing.isCurrent && input.grantId && (await ctx.db.get(input.grantId))!._creationTime < access._creationTime) {
@@ -182,6 +183,7 @@ export async function ensureAccess(ctx: MutationCtx, ownerUserId: Id<"users">): 
         const retiredConnection = await readConnection(ctx, ownerUserId, `key:${key._id}`);
         if (retiredConnection?.isCurrent) {
           await ctx.db.patch(retiredConnection._id, { isCurrent: false, supersededAt: retiredAt });
+          await eraseItemSearchForConnection(ctx, retiredConnection._id);
           next = { ...next, connectionCount: Math.max(0, next.connectionCount - 1) };
         }
         continue;
@@ -194,7 +196,7 @@ export async function ensureAccess(ctx: MutationCtx, ownerUserId: Id<"users">): 
       await ctx.db.patch(key._id, { accessOwnerId: access._id });
       if (key.rotatedFromApiKeyId) {
         const old = await readConnection(ctx, ownerUserId, `key:${key.rotatedFromApiKeyId}`);
-        if (old) await ctx.db.patch(old._id, { isCurrent: false, generation: -1, supersededAt: key.createdAt });
+        if (old) { await ctx.db.patch(old._id, { isCurrent: false, generation: -1, supersededAt: key.createdAt }); await eraseItemSearchForConnection(ctx, old._id); }
         await ctx.db.patch(key.rotatedFromApiKeyId, { credentialRetiredAt: key.createdAt });
       }
     }
@@ -244,7 +246,7 @@ export async function connectKey(ctx: MutationCtx, key: Doc<"apiKeys">, inheritO
     await ctx.db.patch(key._id, { accessOwnerId: access._id });
     access = (await ctx.db.get(access._id))!;
   }
-  if (key.credentialRetiredAt !== undefined && connection.isCurrent) { await ctx.db.patch(connection._id, { isCurrent: false, supersededAt: key.credentialRetiredAt }); connection = (await ctx.db.get(connection._id))!; }
+  if (key.credentialRetiredAt !== undefined && connection.isCurrent) { await ctx.db.patch(connection._id, { isCurrent: false, supersededAt: key.credentialRetiredAt }); await eraseItemSearchForConnection(ctx, connection._id); connection = (await ctx.db.get(connection._id))!; }
   connection = await finalizeConnection(ctx, access, connection);
   return { access: connectionAccess(access, connection), connection };
 }
@@ -289,6 +291,7 @@ export async function narrowConnection(ctx: MutationCtx, connection: Connection,
     revision: access.revision + 1, changedAt: now, changedBy: "ai" as const,
   };
   const next = { ...access, ...patch };
+  await eraseItemSearchForConnection(ctx, connection._id);
   const sourceId = String(connection.grantId ?? connection.apiKeyId ?? connection._id);
   const entry = sourceEntry(sourceId, patch.revision, next);
   const baseline = connection.ownBaseline ?? connection.policy ?? policy(access);
@@ -375,6 +378,7 @@ export async function changeByPerson(ctx: MutationCtx, connection: Connection, i
     endsAt: input.expiresAt === undefined ? baseline.endsAt : input.expiresAt ?? undefined,
     moveIds: input.moveIds === undefined ? baseline.moveIds : input.moveIds ?? undefined,
   };
+  await eraseItemSearchForConnection(ctx, connection._id);
   await ctx.db.patch(connection._id, { policy: policy(next), ownBaseline: chosen, inherited: widens ? false : connection.inherited, inheritedSources: widens ? [] : connection.inheritedSources, forgottenAt: input.action === "forget" ? Date.now() : widens ? undefined : connection.forgottenAt, isCurrent: input.action === "forget" ? false : widens ? true : connection.isCurrent });
   if (connection.kind === "oauth") await writeFloor(ctx, root, entries);
   else await mirrorKey(ctx, connection, next);
