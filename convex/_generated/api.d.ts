@@ -85,6 +85,7 @@ import type * as lib_householdMembers from "../lib/householdMembers.js";
 import type * as lib_imageDerivatives from "../lib/imageDerivatives.js";
 import type * as lib_ingestionQueue from "../lib/ingestionQueue.js";
 import type * as lib_inventoryDuplicates from "../lib/inventoryDuplicates.js";
+import type * as lib_inventorySearch from "../lib/inventorySearch.js";
 import type * as lib_legacyUploadResponse from "../lib/legacyUploadResponse.js";
 import type * as lib_mcpClientIdentity from "../lib/mcpClientIdentity.js";
 import type * as lib_mcpEvidenceMedia from "../lib/mcpEvidenceMedia.js";
@@ -270,6 +271,7 @@ declare const fullApi: ApiFromModules<{
   "lib/imageDerivatives": typeof lib_imageDerivatives;
   "lib/ingestionQueue": typeof lib_ingestionQueue;
   "lib/inventoryDuplicates": typeof lib_inventoryDuplicates;
+  "lib/inventorySearch": typeof lib_inventorySearch;
   "lib/legacyUploadResponse": typeof lib_legacyUploadResponse;
   "lib/mcpClientIdentity": typeof lib_mcpClientIdentity;
   "lib/mcpEvidenceMedia": typeof lib_mcpEvidenceMedia;

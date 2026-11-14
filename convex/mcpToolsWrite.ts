@@ -1,3 +1,4 @@
+import { validateInventoryQuery } from "./lib/inventorySearch";
 import {readConnection} from "./lib/carriedAccess";
 import {requireQueueConnection} from "./lib/queueConnection";
 import {createQueueItem} from "./lib/queueService";
@@ -126,24 +127,42 @@ export const searchInventory = internalQuery({
       "inventory:read",
     );
     const needle = args.query ? normalizedSearchName(args.query) : null;
-    const all = await ctx.db
-      .query("items")
-      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-      .order("desc")
-      .take(1000);
-    const matches = all.filter((item) => {
-      if (item.deletedAt !== undefined) return false;
-      if (needle && !item.normalizedName.includes(needle)) return false;
-      if (args.room && item.room !== args.room) return false;
-      if (args.category && item.category !== args.category) return false;
-      if (args.disposition && item.disposition !== args.disposition) {
-        return false;
-      }
-      if (args.needsReview !== undefined && item.needsReview !== args.needsReview) {
-        return false;
-      }
-      return true;
-    });
+    validateInventoryQuery(needle ?? "");
+    const matchesFilters = (item: import("./_generated/dataModel").Doc<"items">) =>
+      item.deletedAt === undefined &&
+      (!args.room || item.room === args.room) &&
+      (!args.category || item.category === args.category) &&
+      (!args.disposition || item.disposition === args.disposition) &&
+      (args.needsReview === undefined || item.needsReview === args.needsReview);
+    const recent = await ctx.db.query("items")
+      .withIndex("by_move_updated", q => q.eq("moveId", args.moveId))
+      .order("desc").take(121);
+    let matches;
+    if (needle && recent.length > 120) {
+      const indexed = await ctx.db.query("items").withSearchIndex("search_name", q => {
+        let search = q.search("name", needle).eq("moveId", args.moveId).eq("deletedAt", undefined);
+        if (args.room) search = search.eq("room", args.room);
+        if (args.category) search = search.eq("category", args.category);
+        if (args.disposition) search = search.eq("disposition", args.disposition);
+        if (args.needsReview !== undefined) search = search.eq("needsReview", args.needsReview);
+        return search;
+      }).take(READ_LIMIT);
+      const unique = new Map(indexed.filter(matchesFilters).map(row => [row._id, row]));
+      for (const row of recent) if (matchesFilters(row) && row.normalizedName.includes(needle)) unique.set(row._id, row);
+      matches = [...unique.values()];
+    } else if (needle || recent.length <= 120) {
+      matches = recent.filter(item => matchesFilters(item) && (!needle || item.normalizedName.includes(needle)));
+    } else {
+      // Choose an existing selective index; bound residual filtering as before.
+      const query = ctx.db.query("items");
+      const source = args.needsReview !== undefined
+        ? query.withIndex("by_move_needs_review", q => q.eq("moveId", args.moveId).eq("needsReview", args.needsReview!))
+        : args.room ? query.withIndex("by_move_room", q => q.eq("moveId", args.moveId).eq("room", args.room))
+        : args.category ? query.withIndex("by_move_category", q => q.eq("moveId", args.moveId).eq("category", args.category))
+        : args.disposition ? query.withIndex("by_move_disposition", q => q.eq("moveId", args.moveId).eq("disposition", args.disposition!))
+        : query.withIndex("by_move_updated", q => q.eq("moveId", args.moveId));
+      matches = (await source.order("desc").take(1000)).filter(matchesFilters);
+    }
     return matches.slice(0, READ_LIMIT).map((item) => ({
       itemId: item._id,
       name: item.name,

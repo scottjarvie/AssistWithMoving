@@ -1816,6 +1816,10 @@ export default defineSchema({
     .index("by_assigned_resource", ["assignedResourceId"])
     .index("by_assigned_trip", ["assignedTripId"])
     .index("by_current_space", ["currentSpaceId"])
+    .searchIndex("search_label", { searchField: "label", filterFields: ["moveId", "archivedAt"] })
+    .searchIndex("search_nickname", { searchField: "nickname", filterFields: ["moveId", "archivedAt"] })
+    .searchIndex("search_room", { searchField: "room", filterFields: ["moveId", "archivedAt"] })
+    .searchIndex("search_description", { searchField: "description", filterFields: ["moveId", "archivedAt"] })
     .index("by_household", ["householdId"]),
 
   // AI unassignments move the complete relationship here instead of purging it.
@@ -2504,6 +2508,10 @@ export default defineSchema({
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
     .index("by_move_code", ["moveId", "code"])
+    .searchIndex("search_name", { searchField: "name", filterFields: ["moveId", "deletedAt", "room", "category", "disposition", "needsReview"] })
+    .searchIndex("search_room", { searchField: "room", filterFields: ["moveId", "deletedAt"] })
+    .searchIndex("search_category", { searchField: "category", filterFields: ["moveId", "deletedAt"] })
+    .searchIndex("search_description", { searchField: "description", filterFields: ["moveId", "deletedAt"] })
     .index("by_household", ["householdId"]),
 
   saleListings: defineTable({

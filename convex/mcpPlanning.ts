@@ -1,3 +1,4 @@
+import { searchItems, searchBoxes, validateInventoryQuery } from "./lib/inventorySearch";
 import { summaryFor } from "./usageLimits";
 import { captureNeedsInput, ingestionStatusToQueueState } from "./lib/queue";
 import { queueIsWork, queueNeedsInput, effectiveQueueState, queueWorkFilter } from "./lib/queue";
@@ -645,6 +646,7 @@ export const searchMoveRecords = internalQuery({
     const limit = Math.min(Math.max(Math.trunc(args.limit ?? 25), 1), 50);
     const offset = parseOffset(args.cursor);
     const needle = args.query?.trim().toLowerCase() ?? "";
+    validateInventoryQuery(needle);
     const requested = new Set(
       args.kinds ?? [
         "item",
@@ -657,21 +659,13 @@ export const searchMoveRecords = internalQuery({
         "queue",
       ],
     );
+    let sourceTruncated = false;
     const candidates: Array<Record<string, unknown> & { updatedAt: number }> = [];
 
     if (requested.has("item")) {
-      const rows = await ctx.db
-        .query("items")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-        .order("desc")
-        .take(MAX_SEARCH_CANDIDATES_PER_KIND);
-      for (const item of rows) {
-        if (item.deletedAt !== undefined) continue;
-        const haystack = [item.name, item.room, item.category, item.description]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (needle && !haystack.includes(needle)) continue;
+      const found = await searchItems(ctx, args.moveId, needle);
+      sourceTruncated ||= found.truncated;
+      for (const item of found.rows) {
         candidates.push({
           kind: "item",
           id: item._id,
@@ -684,18 +678,9 @@ export const searchMoveRecords = internalQuery({
       }
     }
     if (requested.has("box")) {
-      const rows = await ctx.db
-        .query("boxes")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-        .order("desc")
-        .take(MAX_SEARCH_CANDIDATES_PER_KIND);
-      for (const box of rows) {
-        if (box.archivedAt !== undefined) continue;
-        const haystack = [box.code, box.label, box.nickname, box.room, box.description]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (needle && !haystack.includes(needle)) continue;
+      const found = await searchBoxes(ctx, args.moveId, needle);
+      sourceTruncated ||= found.truncated;
+      for (const box of found.rows) {
         candidates.push({
           kind: "box",
           id: box._id,
@@ -713,6 +698,7 @@ export const searchMoveRecords = internalQuery({
           q.eq("moveId", args.moveId).eq("status", "active"),
         )
         .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      sourceTruncated ||= rows.length === MAX_SEARCH_CANDIDATES_PER_KIND;
       for (const space of rows) {
         const haystack = [space.name, ...space.aliases, space.kind, space.notes]
           .filter(Boolean)
@@ -746,6 +732,7 @@ export const searchMoveRecords = internalQuery({
             )
             .order("desc")
             .take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      sourceTruncated ||= rows.length === MAX_SEARCH_CANDIDATES_PER_KIND;
       for (const row of rows) {
         if (row.archivedAt !== undefined) continue;
         candidates.push({
@@ -769,6 +756,7 @@ export const searchMoveRecords = internalQuery({
         )
         .order("desc")
         .filter(queueWorkFilter).take(MAX_SEARCH_CANDIDATES_PER_KIND);
+      sourceTruncated ||= rows.length === MAX_SEARCH_CANDIDATES_PER_KIND;
       for (const row of rows) {
         if (!queueIsWork(row)) continue;
         const haystack = [row.directive, row.summary, row.resultSummary, row.requiredAction]
@@ -796,7 +784,7 @@ export const searchMoveRecords = internalQuery({
       boundedCandidateCount: candidates.length,
       candidateLimitPerKind: MAX_SEARCH_CANDIDATES_PER_KIND,
       truncatedBeforeFilter:
-        candidates.length >= requested.size * MAX_SEARCH_CANDIDATES_PER_KIND,
+        sourceTruncated || candidates.length >= requested.size * MAX_SEARCH_CANDIDATES_PER_KIND,
       next:
         nextOffset < candidates.length
           ? "Continue with nextCursor, or narrow query/kinds for a smaller result."

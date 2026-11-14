@@ -702,7 +702,7 @@ export function createMovingServer(
     {
       title: "Search Move records",
       description:
-        "Search bounded move inventory, boxes, spaces, decisions, estimates, plan results, source checks, and the person's Queue. Use filters and cursor instead of asking for a raw move dump.",
+        "Search bounded move inventory, boxes, spaces, decisions, estimates, plan results, source checks, and the person's Queue. Items/boxes use substring matching up to 120 rows per source, then word/prefix search across existing text fields (up to 50 hits per field), exact box-code lookup, and recent substring hits. Older indexed matches can participate; truncatedBeforeFilter means narrow the query. Cursors page only the bounded candidates. Use filters and cursor instead of asking for a raw move dump.",
       inputSchema: z
         .object({
           moveId: id,
