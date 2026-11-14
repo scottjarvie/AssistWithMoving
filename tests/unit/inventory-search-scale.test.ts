@@ -1,7 +1,7 @@
 // @vitest-environment node
 /* eslint-disable @typescript-eslint/no-explicit-any -- optional emulator read-volume instrumentation wraps Convex query builders. */
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { internal } from "../../convex/_generated/api";
 import { searchItems, searchBoxes } from "../../convex/lib/inventorySearch";
 import schema from "../../convex/schema";
@@ -90,6 +90,28 @@ describe("source-index inventory search", () => {
     const found = await f.t.run(ctx => searchItems(ctx, f.moveId, "plate"));
     expect(found.rows.length).toBeLessThanOrEqual(120);
     expect(found.truncated).toBe(true);
+    await f.t.run(async ctx => {
+      const user = await ctx.db.query("users").first();
+      await ctx.db.insert("aiGrants", { ownerUserId: user!._id, householdId: f.householdId, label: "Synthetic search grant", scopes: ["moving.context.read"], moveScope: "allMoves", status: "active", consentBoundaryVersion: "2026-08-16", consentSnapshot: [], approvedAt: 1, useCount: 0, version: 1, createdAt: 1, updatedAt: 1 });
+    });
+    vi.useFakeTimers();
+    try {
+      await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: "synthetic-search", clientId: "synthetic-search-client" });
+      await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+    } finally { vi.useRealTimers(); }
+    const previousIssuer = process.env.CLERK_JWT_ISSUER_DOMAIN;
+    process.env.CLERK_JWT_ISSUER_DOMAIN = "https://search.example.test";
+    try {
+      const principal = { issuer: "https://search.example.test", subject: "synthetic-search", clientId: "synthetic-search-client" };
+      const result = await f.t.query(internal.mcpPlanning.searchMoveRecords, { principal, moveId: f.moveId, query: "plate", kinds: ["item"] });
+      expect(result.truncatedBeforeFilter).toBe(true);
+      expect(result.records).toHaveLength(25);
+      expect(result.nextCursor).not.toBeNull();
+      await expect(f.t.query(internal.mcpPlanning.searchMoveRecords, { principal, moveId: f.moveId, query: "x ".repeat(17), kinds: ["item"] })).rejects.toThrow(/16 search terms/);
+    } finally {
+      if (previousIssuer === undefined) delete process.env.CLERK_JWT_ISSUER_DOMAIN;
+      else process.env.CLERK_JWT_ISSUER_DOMAIN = previousIssuer;
+    }
     const noQuery = await f.t.run(ctx => searchItems(ctx, f.moveId, ""));
     expect(noQuery.rows).toHaveLength(120);
     expect(noQuery.truncated).toBe(true);
