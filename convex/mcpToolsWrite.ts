@@ -126,24 +126,28 @@ export const searchInventory = internalQuery({
       "inventory:read",
     );
     const needle = args.query ? normalizedSearchName(args.query) : null;
-    const all = await ctx.db
-      .query("items")
-      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-      .order("desc")
-      .take(1000);
-    const matches = all.filter((item) => {
-      if (item.deletedAt !== undefined) return false;
-      if (needle && !item.normalizedName.includes(needle)) return false;
-      if (args.room && item.room !== args.room) return false;
-      if (args.category && item.category !== args.category) return false;
-      if (args.disposition && item.disposition !== args.disposition) {
-        return false;
-      }
-      if (args.needsReview !== undefined && item.needsReview !== args.needsReview) {
-        return false;
-      }
-      return true;
-    });
+    let source;
+    if (needle) {
+      source = ctx.db.query("items").withSearchIndex("search_name", q => {
+        let search = q.search("name", needle).eq("moveId", args.moveId).eq("deletedAt", undefined);
+        if (args.room) search = search.eq("room", args.room);
+        if (args.category) search = search.eq("category", args.category);
+        if (args.disposition) search = search.eq("disposition", args.disposition);
+        if (args.needsReview !== undefined) search = search.eq("needsReview", args.needsReview);
+        return search;
+      });
+    } else {
+      source = ctx.db.query("items")
+        .withIndex("by_move_updated", q => q.eq("moveId", args.moveId)).order("desc")
+        .filter(q => q.and(
+          q.eq(q.field("deletedAt"), undefined),
+          ...(args.room ? [q.eq(q.field("room"), args.room)] : []),
+          ...(args.category ? [q.eq(q.field("category"), args.category)] : []),
+          ...(args.disposition ? [q.eq(q.field("disposition"), args.disposition)] : []),
+          ...(args.needsReview !== undefined ? [q.eq(q.field("needsReview"), args.needsReview)] : []),
+        ));
+    }
+    const matches = await source.take(READ_LIMIT);
     return matches.slice(0, READ_LIMIT).map((item) => ({
       itemId: item._id,
       name: item.name,

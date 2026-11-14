@@ -168,7 +168,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpQuery({
     name: "search_inventory",
     description:
-      "Find items in a move by text (name), room, category, disposition, or needsReview. Returns up to 200 non-sensitive item summaries.",
+      "Find items in a move by indexed name word/prefix search, room, category, disposition, or needsReview. Filters apply before the limit across the full move, including older items. Returns up to 200 non-sensitive item summaries; narrow filters if full.",
     fn: internal.mcpToolsWrite.searchInventory,
     args: searchInventoryArgs,
     identityArg: "caller",
