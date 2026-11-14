@@ -1816,7 +1816,6 @@ export default defineSchema({
     .index("by_assigned_resource", ["assignedResourceId"])
     .index("by_assigned_trip", ["assignedTripId"])
     .index("by_current_space", ["currentSpaceId"])
-    .searchIndex("search_code", { searchField: "code", filterFields: ["moveId", "archivedAt"] })
     .searchIndex("search_label", { searchField: "label", filterFields: ["moveId", "archivedAt"] })
     .searchIndex("search_nickname", { searchField: "nickname", filterFields: ["moveId", "archivedAt"] })
     .searchIndex("search_room", { searchField: "room", filterFields: ["moveId", "archivedAt"] })

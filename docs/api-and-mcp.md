@@ -2374,14 +2374,17 @@ Requests made through your AI are ordinary Queue items, marked “added by your 
 
 Canonical Queue additions: `add_queue_item`, `list_queue_suggestions`, `withdraw_queue_suggestion` (all `moving.queue.work`; unsolicited adds also require `moving.suggestions.propose`). API-key HTTP/stdio share these names with `queue/write`, `queue/read`, and removable `queue/suggest` on unsolicited adds. Legacy OAuth also exposes these; `capture_to_queue` requires explicit `addedBy` and `operationId`. Record-level generate/approve/reject tools keep their domain behavior; they are not Queue aliases.
 
-Inventory search matching: `search_inventory` uses indexed name word/prefix search
-with room/category/disposition/review filters before its 200-result cap.
+Legacy OAuth (`/mcp/connect`) inventory search matching: `search_inventory` uses indexed name word/prefix search
+with room/category/disposition/review filters before its 200-result cap on large
+inventories. Small inventories (up to 120 rows) retain name substring matching.
+Non-text searches use a selective existing filter index when possible and filter
+at most 1,000 rows, returning at most 200; narrow multiple filters if full.
 `search_move_records` keeps substring matching for items/boxes when that source
 has at most 120 rows; larger sources use word/prefix indexes on item name, room,
-category and description, and box code, label, nickname, room and description.
+category and description, and box label, nickname, room and description. Exact normalized box codes use
+the existing code index. Recent substring matches are retained on large sources.
 Each field contributes at most 50 hits, merged to at most 120 candidates per kind.
 This does not search arbitrary interior substrings on larger inventories or match
 phrases split across fields. `truncatedBeforeFilter` means narrow the query;
 cursors page the bounded candidates, not the entire move. Spaces and Queue
-remain bounded substring searches. These are source contract details for the
-search performance change; production rollout is recorded in the PR.
+remain bounded substring searches.

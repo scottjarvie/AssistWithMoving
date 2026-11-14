@@ -6,6 +6,7 @@ import { internal } from "../../convex/_generated/api";
 import { searchItems, searchBoxes } from "../../convex/lib/inventorySearch";
 import schema from "../../convex/schema";
 
+const benchmark = Boolean(process.env.MOVING_SEARCH_BENCH);
 const modules = import.meta.glob("../../convex/**/*.ts");
 async function fixture(size: number) {
   const t = convexTest(schema, modules);
@@ -34,7 +35,7 @@ describe("source-index inventory search", () => {
   for (const size of [60, 1500, 5000]) {
     it(`finds old inventory without leaking another move (${size} items)`, async () => {
       const f = await fixture(size);
-      if (process.env.MOVING_SEARCH_BENCH) {
+      if (benchmark) {
         for (const after of [false, true]) {
           const stats = { documents: 0, jsonBytes: 0, ranges: 0 };
           const start = performance.now();
@@ -69,6 +70,14 @@ describe("source-index inventory search", () => {
       expect(description.rows).toHaveLength(1);
       const boxes = await f.t.run(ctx => searchBoxes(ctx, f.moveId, "blender"));
       expect(boxes.rows.map(row => row.label)).toEqual(["Blender supplies"]);
+      const code = await f.t.run(ctx => searchBoxes(ctx, f.moveId, "b-0"));
+      expect(code.rows.map(row => row.code)).toContain("B-0");
+      const shortName = await f.t.query(internal.mcpToolsWrite.searchInventory, { caller: { subject: "synthetic-search" }, householdId: f.householdId, moveId: f.moveId, query: "lend" });
+      if (size <= 120) expect(shortName).toHaveLength(1);
+      await f.t.run(ctx => ctx.db.patch(found.rows[0]._id, { needsReview: true }));
+      const rareFilter = await f.t.query(internal.mcpToolsWrite.searchInventory, { caller: { subject: "synthetic-search" }, householdId: f.householdId, moveId: f.moveId, needsReview: true });
+      expect(rareFilter.map(row => row.name)).toEqual(["Vintage blender"]);
+      await f.t.run(ctx => ctx.db.patch(found.rows[0]._id, { needsReview: false }));
       const legacy = await f.t.query(internal.mcpToolsWrite.searchInventory, { caller: { subject: "synthetic-search" }, ...{ householdId: f.householdId, moveId: f.moveId }, query: "blender", room: "Kitchen", needsReview: false });
       expect(legacy.map(row => row.name)).toEqual(["Vintage blender"]);
       await f.t.run(async ctx => { await ctx.db.patch(found.rows[0]._id, { deletedAt: 123 }); await ctx.db.patch(boxes.rows[0]._id, { archivedAt: 123 }); });
@@ -79,7 +88,7 @@ describe("source-index inventory search", () => {
   it("signals broad hit caps instead of claiming completeness", async () => {
     const f = await fixture(150);
     const found = await f.t.run(ctx => searchItems(ctx, f.moveId, "plate"));
-    expect(found.rows).toHaveLength(50);
+    expect(found.rows.length).toBeLessThanOrEqual(120);
     expect(found.truncated).toBe(true);
     const noQuery = await f.t.run(ctx => searchItems(ctx, f.moveId, ""));
     expect(noQuery.rows).toHaveLength(120);
