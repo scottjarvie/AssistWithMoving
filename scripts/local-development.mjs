@@ -18,11 +18,12 @@ export function validate(mode, values, config) {
   if (!['live','sandbox'].includes(mode)) throw new Error('Mode must be live or sandbox');
   const binding = config[mode];
   if (!binding?.deployment) throw new Error(`${mode} binding is not verified: ${binding?.blocker || 'explicit backend and identity configuration required'}`);
-  if (mode === 'sandbox' && (!binding.deployment.startsWith('anonymous:') || binding.deployment.split(':')[1] === config.live?.deployment?.split(':')[1])) throw new Error('Sandbox must be a separate, verified development backend');
+  if (mode === 'sandbox' && !binding.providerIsolationVerified) throw new Error(`Sandbox provider isolation is not verified: ${binding.blocker || 'provider audit required'}`);
+  if (mode === 'sandbox' && (!binding.deployment.startsWith('dev:') || binding.deployment.split(':')[1] === config.live?.deployment?.split(':')[1])) throw new Error('Sandbox must be a separate, verified development backend');
   if (values.CONVEX_DEPLOYMENT !== binding.deployment) throw new Error('Deployment does not match the verified mode binding');
   const slug = binding.deployment.split(':')[1];
-  if (values.NEXT_PUBLIC_CONVEX_URL !== binding.backendURL) throw new Error('Frontend backend URL does not match deployment');
-  if (values.NEXT_PUBLIC_CONVEX_SITE_URL && values.NEXT_PUBLIC_CONVEX_SITE_URL !== (mode === 'sandbox' ? binding.siteURL : `https://${slug}.convex.site`)) throw new Error('HTTP backend URL does not match deployment');
+  if (values.NEXT_PUBLIC_CONVEX_URL !== (mode === 'sandbox' ? `https://${slug}.convex.cloud` : binding.backendURL)) throw new Error('Frontend backend URL does not match deployment');
+  if (values.NEXT_PUBLIC_CONVEX_SITE_URL && values.NEXT_PUBLIC_CONVEX_SITE_URL !== `https://${slug}.convex.site`) throw new Error('HTTP backend URL does not match deployment');
   const key = values.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
   if (!key.startsWith(mode === 'live' ? 'pk_live_' : 'pk_test_')) throw new Error('Clerk identity role does not match mode');
   if (binding.clerkHost && Buffer.from(key.slice(key.indexOf('_',3)+1),'base64').toString().replace(/\$$/,'') !== binding.clerkHost) throw new Error('Clerk identity does not match verified host');
@@ -59,9 +60,9 @@ async function main() {
   if (command === 'status') {
     for (const mode of ['live','sandbox']) {
       let readiness;
-      try { validate(mode,parseEnv(fs.readFileSync(path.join(root,`.env.local-${mode}`),'utf8')),config); readiness = 'public bindings valid; account login and browser persistence unverified; backend watcher disabled'; }
+      try { validate(mode,parseEnv(fs.readFileSync(path.join(root,`.env.local-${mode}`),'utf8')),config); readiness = 'public bindings valid; sign in as the Clerk development test user'; }
       catch (error) { readiness = error.code === 'ENOENT' ? `missing .env.local-${mode}; ${config[mode]?.blocker || 'setup required'}` : error.message; }
-      console.log(JSON.stringify({project:config.project,mode,port:config[mode].port,hostname:config.hostname,deployment:config[mode].deployment || null,readiness}));
+      console.log(JSON.stringify({project:config.project,mode,port:config[mode].port,hostname:mode === 'sandbox' ? config.sandbox.hostname : config.hostname,deployment:config[mode].deployment || null,readiness}));
     }
     return;
   }
@@ -73,12 +74,14 @@ async function main() {
   const env = environment(root,values,mode);
   let args;
   if (command === 'backend') {
-    throw new Error('Native backend startup/source push is coordinator-owned; no cloud watcher allowed.');
+    // The CLI reads only this sanitized file, never the ordinary mixed .env.local.
+    args = [path.join(root,'node_modules/convex/bin/main.js'),'dev','--env-file',file];
+    console.log(`Backend watcher targets ONLY ${values.CONVEX_DEPLOYMENT}; it pushes local backend source to development.`);
   } else {
     await available(config[mode].port);
     const hostname = '127.0.0.1';
     args = [path.join(root,'node_modules/next/dist/bin/next'),'dev','--webpack','--hostname',hostname,'--port',String(config[mode].port)];
-    console.log(`${mode}: http://${hostname}:${config[mode].port} -> ${values.NEXT_PUBLIC_CONVEX_URL}`);
+    console.log(`${mode}: http://${mode === 'sandbox' ? config.sandbox.hostname : hostname}:${config[mode].port} -> ${values.NEXT_PUBLIC_CONVEX_URL}`);
   }
   const child = spawn(process.execPath,args,{cwd:root,env,stdio:'inherit'});
   for (const signal of ['SIGINT','SIGTERM']) process.on(signal,() => child.kill(signal));

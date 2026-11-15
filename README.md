@@ -119,11 +119,14 @@ Secrets live in `.env.local` (never committed). `.env.example` stays placeholder
 
 ```sh
 npm run dev:live      # local code against the real account backend, port 3828 — changes are real
-npm run dev:sandbox   # local code against a separate native synthetic backend, port 3827
+npm run dev:sandbox   # local code against the cloud dev backend grateful-jaguar-369 (synthetic, no provider keys), port 3827
+npm run dev:backend   # push backend source to that Sandbox deployment only
 npm run dev:status    # check both mode bindings without starting anything
 ```
 
 Each mode reads its own sanitized `.env.local-live` / `.env.local-sandbox` (ignored by git), refuses any backend or Clerk identity other than the one bound in `scripts/local-development.json`, refuses server secrets, and refuses occupied ports. Both modes refuse to start when `NODE_ENV=production`, `VERCEL` or `CI` is set, and the in-app local auth path (`src/lib/localLiveAuth.ts`) only activates in development with an exact local binding, so hosted production always uses the normal Clerk proxy. Server APIs, media, MCP and provider actions return 503 locally. A banner shows which data the page is using.
+
+Sandbox is the cloud development deployment `dev:grateful-jaguar-369` (`jarvie:movingmanifest:dev/sandbox`), created empty with only the public `CLERK_JWT_ISSUER_DOMAIN` (`https://glorious-swine-50.clerk.accounts.dev`). The earlier Mac mini native backend binding stays as `nativeSandbox` in `scripts/local-development.json` for `scripts/prepare-record-only-sandbox.mjs`. For sign-in and screenshots, see AGENTS.md.
 
 ## Checks and tests
 
