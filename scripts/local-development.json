@@ -9,11 +9,21 @@
   },
   "sandbox": {
     "port": 3827,
+    "hostname": "moving.localhost",
+    "deployment": "dev:grateful-jaguar-369",
+    "clerkHost": "glorious-swine-50.clerk.accounts.dev",
+    "providerIsolationVerified": true,
+    "providerEvidence": "2026-11-15 cloud dev deployment jarvie:movingmanifest:dev/sandbox created empty; its only env var name is CLERK_JWT_ISSUER_DOMAIN (public development Clerk issuer). No provider, payment, email, image or AI keys; no data copied.",
+    "blocker": "Public-JWKS local sign-in; local server APIs, media, MCP and provider actions stay unavailable (503)."
+  },
+  "nativeSandbox": {
+    "port": 3827,
     "deployment": "anonymous:anonymous-moving-completion-20261007",
     "backendURL": "http://127.0.0.1:4321",
     "siteURL": "http://127.0.0.1:4322",
     "hostname": "moving.localhost",
     "clerkHost": "glorious-swine-50.clerk.accounts.dev",
-    "recordOnly": true
+    "recordOnly": true,
+    "note": "Mac mini native record-only backend (history). Prepared by scripts/prepare-record-only-sandbox.mjs; no longer the Sandbox binding."
   }
 }

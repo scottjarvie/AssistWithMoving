@@ -51,7 +51,7 @@ describe("local production session boundary", () => {
 
 describe("isolated local Sandbox authentication", () => {
   it("requires the exact development backend and refuses hosted, mixed or secret-bearing profiles", () => {
-    const env = { NODE_ENV: "development", LOCAL_DEVELOPMENT_MODE: "sandbox", CONVEX_DEPLOYMENT: "anonymous:anonymous-moving-completion-20261007", NEXT_PUBLIC_CONVEX_URL: "http://127.0.0.1:4321" };
+    const env = { NODE_ENV: "development", LOCAL_DEVELOPMENT_MODE: "sandbox", CONVEX_DEPLOYMENT: "dev:grateful-jaguar-369", NEXT_PUBLIC_CONVEX_URL: "https://grateful-jaguar-369.convex.cloud" };
     expect(localSandboxEnabled(env)).toBe(true);
     for (const override of [{ NODE_ENV: "production" }, { VERCEL: "1" }, { CI: "1" }, { CONVEX_DEPLOYMENT: "prod:fine-crocodile-51" }, { NEXT_PUBLIC_CONVEX_URL: "https://fine-crocodile-51.convex.cloud" }, { CLERK_SECRET_KEY: "synthetic-secret" }]) expect(localSandboxEnabled({ ...env, ...override })).toBe(false);
   });
@@ -64,7 +64,7 @@ describe("isolated local Sandbox authentication", () => {
 });
 
 it("moves old Sandbox GET addresses to an isolated host without replaying writes",async()=>{
- const env={"NODE_ENV": "development", "LOCAL_DEVELOPMENT_MODE": "sandbox", "CONVEX_DEPLOYMENT": "anonymous:anonymous-moving-completion-20261007", "NEXT_PUBLIC_CONVEX_URL": "http://127.0.0.1:4321", "CLERK_SECRET_KEY": "", "CLERK_ISSUER_URL": "https://unrelated-instance.clerk.accounts.dev", "VERCEL": "", "CI": ""};
+ const env={"NODE_ENV": "development", "LOCAL_DEVELOPMENT_MODE": "sandbox", "CONVEX_DEPLOYMENT": "dev:grateful-jaguar-369", "NEXT_PUBLIC_CONVEX_URL": "https://grateful-jaguar-369.convex.cloud", "CLERK_SECRET_KEY": "", "CLERK_ISSUER_URL": "https://unrelated-instance.clerk.accounts.dev", "VERCEL": "", "CI": ""};
  for(const [name,value] of Object.entries(env)) vi.stubEnv(name,value);
  try {
   const read=new NextRequest("http://localhost:3827/queue",{headers:{host:"localhost:3827"}});
