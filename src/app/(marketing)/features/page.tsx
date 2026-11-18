@@ -52,8 +52,8 @@ const featureCards = [
     icon: FileStack,
   },
   {
-    title: "AI review, not AI autopilot",
-    copy: "Let AI suggest estimates, categories, box contents, duplicates, and assignments while keeping human approval in the loop.",
+    title: "Optional AI suggestions and review",
+    copy: "Review optional AI suggestions for estimates, categories, box contents, duplicates, and assignments before applying them. A connected AI can also save work you request directly within its permissions; review steps you select still apply.",
     icon: Bot,
   },
   {
