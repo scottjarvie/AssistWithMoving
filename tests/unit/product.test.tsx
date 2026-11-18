@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { BrandMark } from "@/components/brand-mark";
+import { BRAND_MARK_SRC, BrandMark } from "@/components/brand-mark";
 import { buildPhases, product } from "@/lib/product";
 
 describe("product constants", () => {
@@ -24,5 +24,14 @@ describe("BrandMark", () => {
   it("renders the product name", () => {
     render(<BrandMark />);
     expect(screen.getByText("Assist With Moving")).toBeInTheDocument();
+  });
+
+  it("shows the app-icon mark as a decorative image beside the name", () => {
+    const { container } = render(<BrandMark />);
+    const mark = container.querySelector("img");
+    expect(mark).not.toBeNull();
+    expect(mark?.getAttribute("src")).toBe(BRAND_MARK_SRC);
+    expect(mark?.getAttribute("alt")).toBe("");
+    expect(container.querySelector(".lucide-route")).toBeNull();
   });
 });
