@@ -413,11 +413,6 @@
   .moving-connect > svg {
     display: none;
   }
-  .moving-questions:not(.moving-show-all)
-    #moving-faq-list
-    > details:nth-child(n + 4) {
-    display: none;
-  }
   .moving-faq-actions button {
     display: inline-flex;
   }
@@ -428,4 +423,13 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* The compact home diagram replaces the workflow stepper. */
+.moving-freedom-faq { grid-template-columns: 1fr; max-width: 760px; }
+@media (max-width: 599px) {
+  .moving-hero { position: relative; }
+  .moving-hero > div:first-child > h1 { padding-right: 78px; font-size: 2.65rem; }
+  .moving-hero > div:last-child { position: absolute; right: -4px; top: 34px; width: 86px; }
+  .moving-hero .moving-caption { display: none; }
 }

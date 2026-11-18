@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { MovingExamples } from "./moving-examples";
 import { movingParts } from "./moving-content";
 export default function MovingIdeasDialog({
   open,
@@ -44,6 +45,7 @@ export default function MovingIdeasDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="overflow-y-auto px-4 pb-4">
+          <MovingExamples />
           {order.map((p) => (
             <details
               key={p.name}
@@ -53,7 +55,9 @@ export default function MovingIdeasDialog({
               <summary className="min-h-11 cursor-pointer py-3 font-medium">
                 {p.name}
               </summary>
-              <p className="py-3 leading-7">{p.idea}</p>
+              <p className="py-3 leading-7"><strong>Try:</strong> {p.idea}</p>
+              <p className="text-sm leading-7 text-muted-foreground"><strong>Available context:</strong> {p.kept}</p>
+              <p className="mt-2 text-sm leading-7"><strong>Next level:</strong> Ask your AI to identify missing evidence before saving a useful result for this part of your move.</p>
             </details>
           ))}
         </div>

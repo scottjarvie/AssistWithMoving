@@ -5,19 +5,16 @@ import {
   HowItWorksPanel,
 } from "@/components/public-page-chrome";
 import { CopyTextButton } from "@/components/copy-text-button";
-import { AiAccessFaq } from "@/components/ai-access-faq";
+import { MovingExamples } from "@/components/landing/moving-examples";
+import { MovingRecordDiagram } from "@/components/landing/moving-record-diagram";
 import { Button } from "@/components/ui/button";
 import {
   MovingDrawing,
-  MovingAccount,
 } from "@/components/landing/moving-drawings";
 import {
-  MovingParts,
-  MovingKeeps,
   IdeasButton,
-  MovingQuestions,
 } from "@/components/landing/moving-interactions";
-import { movingFaqs } from "@/components/landing/moving-faq";
+import { MovingFaq } from "@/components/landing/moving-faq";
 import "./home-drawn.css";
 
 const starterPrompt =
@@ -63,8 +60,8 @@ export default function MarketingPage() {
           <h2>With the right data, your AI is even more helpful</h2>
           <p className="moving-lede">Pick any part of your move.</p>
           <p>Assist you and your AI with every part of your move.</p>
-          <MovingParts />
-          <MovingKeeps />
+          <MovingRecordDiagram />
+          <Link className="moving-text-button" href="/features#moving-workflows">Explore every part of the move →</Link>
         </section>
         <div className="moving-freedom-faq moving-section">
           <section>
@@ -74,28 +71,11 @@ export default function MarketingPage() {
               Keep the move record here and connect your chosen AI to the
               context you allow it to use.
             </p>
-            <MovingAccount />
-            <dl className="moving-facts">
-              <div>
-                <dt>Switch whenever you like</dt>
-                <dd>
-                  Bring the assistant you choose. Each app connects its own way.
-                </dd>
-              </div>
-              <div>
-                <dt>Nothing to rebuild</dt>
-                <dd>
-                  Your saved move record stays here when you change AI tools.
-                </dd>
-              </div>
-              <div>
-                <dt>Yours to take</dt>
-                <dd>
-                  Export a full owner packet for yourself, or a scoped packet
-                  for someone else.
-                </dd>
-              </div>
-            </dl>
+            <p>
+              Switch assistants without rebuilding your saved record. Each app connects
+              its own way; use the setup guide to check its capabilities and limits.
+              Export a full owner packet for yourself or a scoped packet for someone else.
+            </p>
             <details>
               <summary>You, your AI, and this site</summary>
               <p>
@@ -106,39 +86,15 @@ export default function MarketingPage() {
               </p>
               <HowItWorksPanel />
             </details>
-            <details>
-              <summary>One room, then the next · an example</summary>
-              <p>
-                Start with two places, a few boxes and one vehicle. Ask your AI
-                to help organize a room, then save the result. Return to that
-                context when it is time to pack or prepare a mover packet. This
-                is an illustration, not a live move.
-              </p>
-            </details>
             <IdeasButton />
             <div className="moving-reading">
               <Link href="/pcs-moving">PCS moving →</Link>
               <Link href="/claims-inventory">Claims inventory →</Link>
             </div>
           </section>
-          <section>
-            <h2>Questions before you start</h2>
-            <MovingQuestions>
-              <div id="moving-faq-list">
-                {movingFaqs.map((faq) => (
-                  <details key={faq.question}>
-                    <summary>{faq.question}</summary>
-                    <div className="moving-answer">{faq.answer}</div>
-                  </details>
-                ))}
-              </div>
-            </MovingQuestions>
-            <details>
-              <summary>How can I limit my AI’s access?</summary>
-              <AiAccessFaq />
-            </details>
-          </section>
         </div>
+        <MovingFaq />
+        <MovingExamples />
         <section id="connect" className="moving-connect">
           <div>
             <h2>Connect your AI</h2>
@@ -177,7 +133,7 @@ export default function MarketingPage() {
           <Link href="/features">Features →</Link>
         </nav>
       </div>
-      <PublicFooter />
+      <PublicFooter compact />
     </main>
   );
 }

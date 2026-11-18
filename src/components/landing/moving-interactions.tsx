@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import { movingKeeps, movingParts } from "./moving-content";
 import { MovingDrawing } from "./moving-drawings";
 
@@ -147,25 +146,5 @@ export function IdeasButton({ part }: { part?: number }) {
         />
       )}
     </>
-  );
-}
-export function MovingQuestions({ children }: { children: ReactNode }) {
-  const [more, setMore] = useState(false);
-  return (
-    <div className={`moving-questions ${more ? "moving-show-all" : ""}`}>
-      {children}
-      <div className="moving-faq-actions">
-        <button
-          className="moving-text-button"
-          type="button"
-          aria-expanded={more}
-          aria-controls="moving-faq-list"
-          onClick={() => setMore(!more)}
-        >
-          {more ? "Show fewer" : "Show more"}
-        </button>
-        <a href="/faq">All questions →</a>
-      </div>
-    </div>
   );
 }
