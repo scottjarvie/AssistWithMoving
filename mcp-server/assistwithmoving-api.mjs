@@ -538,30 +538,16 @@ export async function planSnapshot(config, input) {
 }
 
 export async function searchInventory(config, input) {
-  const response = await assistWithMovingRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/items`,
     query: {
       limit: input.limit ?? 50,
+      cursor: input.cursor,
       status: input.status,
       disposition: input.disposition,
+      q: input.query?.trim() || undefined,
     },
   });
-  const query = input.query?.trim().toLowerCase();
-  if (!query) return response;
-  return {
-    ...response,
-    data: response.data.filter((item) =>
-      [
-        item.name,
-        item.description,
-        item.room,
-        item.destinationRoom,
-        item.category,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query))
-    ),
-  };
 }
 
 export async function createItem(config, input) {

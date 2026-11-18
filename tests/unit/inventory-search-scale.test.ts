@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import { internal } from "../../convex/_generated/api";
-import { searchItems, searchBoxes } from "../../convex/lib/inventorySearch";
+import { searchItems, searchBoxes, searchApiItems } from "../../convex/lib/inventorySearch";
 import schema from "../../convex/schema";
 
 const benchmark = Boolean(process.env.MOVING_SEARCH_BENCH);
@@ -20,7 +20,7 @@ async function fixture(size: number) {
     for (const id of [moveId, hiddenMoveId]) {
       for (let i = 0; i < size; i++) {
         const name = i === 0 ? "Vintage blender" : `Synthetic plate ${i}`;
-        await ctx.db.insert("items", { householdId, moveId: id, name, normalizedName: name.toLowerCase(), room: "Kitchen", category: "Appliances", description: i === 1 ? "Old keepsake mixer" : "", disposition: "take", status: "active", quantity: 1, needsReview: false, condition: "unknown", weightConfidence: "none", volumeConfidence: "none", fragility: "low", stackable: false, hazardousFlag: false, highValue: false, requiresPersonalTransport: false, planningDefaultKeys: [], reviewFlags: [], aiTags: [], createdVia: "manual", updatedByUserId: userId, createdByUserId: userId, createdAt: i + 1, updatedAt: i + 1 });
+        await ctx.db.insert("items", { householdId, moveId: id, name, normalizedName: name.toLowerCase(), room: "Kitchen", destinationRoom: i === 0 ? "Workshop" : "", category: "Appliances", description: i === 1 ? "Old keepsake mixer" : "", disposition: "take", status: "active", quantity: 1, needsReview: false, condition: "unknown", weightConfidence: "none", volumeConfidence: "none", fragility: "low", stackable: false, hazardousFlag: false, highValue: false, requiresPersonalTransport: false, planningDefaultKeys: [], reviewFlags: [], aiTags: [], createdVia: "manual", updatedByUserId: userId, createdByUserId: userId, createdAt: i + 1, updatedAt: i + 1 });
       }
       for (let i = 0; i < Math.min(size, 300); i++) {
         await ctx.db.insert("boxes", { householdId, moveId: id, code: `B-${i}`, label: i === 0 ? "Blender supplies" : "", nickname: "", room: "Kitchen", description: "", status: "open", createdByUserId: userId, createdAt: i + 1, updatedAt: i + 1 });
@@ -85,6 +85,17 @@ describe("source-index inventory search", () => {
       expect((await f.t.run(ctx => searchBoxes(ctx, f.moveId, "blender"))).rows).toHaveLength(0);
     }, 60000);
   }
+  it("finds an old destination match and applies move and state filters before limiting matches", async () => {
+    const f = await fixture(150);
+    const found = await f.t.run(ctx => searchApiItems(ctx, f.moveId, "workshop", { status: "active", disposition: "take" }));
+    expect(found.matches.map(item => item.name)).toEqual(["Vintage blender"]);
+    expect(found.truncated).toBe(false);
+    expect((await f.t.run(ctx => searchApiItems(ctx, f.moveId, "workshop", { disposition: "sell" }))).matches).toEqual([]);
+    await f.t.run(ctx => ctx.db.patch(found.matches[0]._id, { deletedAt: 123 }));
+    expect((await f.t.run(ctx => searchApiItems(ctx, f.moveId, "workshop", {}))).matches).toEqual([]);
+    expect((await f.t.run(ctx => searchApiItems(ctx, f.moveId, "plate", {}))).truncated).toBe(true);
+  });
+
   it("signals broad hit caps instead of claiming completeness", async () => {
     const f = await fixture(150);
     const found = await f.t.run(ctx => searchItems(ctx, f.moveId, "plate"));

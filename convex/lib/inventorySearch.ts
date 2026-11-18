@@ -39,6 +39,68 @@ export async function searchItems(ctx: QueryCtx, moveId: Id<"moves">, needle: st
   return { rows: [...unique.values()].sort((a, b) => b.updatedAt - a.updatedAt || a._id.localeCompare(b._id)).slice(0, SMALL_INVENTORY), truncated: unique.size > SMALL_INVENTORY || groups.some(rows => rows.length > SEARCH_HITS_PER_FIELD) };
 }
 
+// API key callers have status and disposition filters and can search the destination.
+export async function searchApiItems(
+  ctx: Pick<QueryCtx, "db">,
+  moveId: Id<"moves">,
+  needle: string,
+  filters: { status?: Doc<"items">["status"]; disposition?: Doc<"items">["disposition"] },
+) {
+  const ceiling = 100;
+  const recent = await ctx.db.query("items")
+    .withIndex("by_move_updated", q => q.eq("moveId", moveId))
+    .order("desc").take(SMALL_INVENTORY + 1);
+  const matches = recent.filter(item =>
+    item.deletedAt === undefined &&
+    (!filters.status || item.status === filters.status) &&
+    (!filters.disposition || item.disposition === filters.disposition) &&
+    [item.name, item.room, item.destinationRoom, item.category, item.description]
+      .some(value => value?.toLowerCase().includes(needle)),
+  );
+  if (recent.length <= SMALL_INVENTORY) return { matches, truncated: false };
+
+  const groups = await Promise.all([
+    ctx.db.query("items").withSearchIndex("api_search_name", q => {
+      let search = q.search("name", needle).eq("moveId", moveId).eq("deletedAt", undefined);
+      if (filters.status) search = search.eq("status", filters.status);
+      if (filters.disposition) search = search.eq("disposition", filters.disposition);
+      return search;
+    }).take(ceiling + 1),
+    ctx.db.query("items").withSearchIndex("api_search_room", q => {
+      let search = q.search("room", needle).eq("moveId", moveId).eq("deletedAt", undefined);
+      if (filters.status) search = search.eq("status", filters.status);
+      if (filters.disposition) search = search.eq("disposition", filters.disposition);
+      return search;
+    }).take(ceiling + 1),
+    ctx.db.query("items").withSearchIndex("api_search_destinationRoom", q => {
+      let search = q.search("destinationRoom", needle).eq("moveId", moveId).eq("deletedAt", undefined);
+      if (filters.status) search = search.eq("status", filters.status);
+      if (filters.disposition) search = search.eq("disposition", filters.disposition);
+      return search;
+    }).take(ceiling + 1),
+    ctx.db.query("items").withSearchIndex("api_search_category", q => {
+      let search = q.search("category", needle).eq("moveId", moveId).eq("deletedAt", undefined);
+      if (filters.status) search = search.eq("status", filters.status);
+      if (filters.disposition) search = search.eq("disposition", filters.disposition);
+      return search;
+    }).take(ceiling + 1),
+    ctx.db.query("items").withSearchIndex("api_search_description", q => {
+      let search = q.search("description", needle).eq("moveId", moveId).eq("deletedAt", undefined);
+      if (filters.status) search = search.eq("status", filters.status);
+      if (filters.disposition) search = search.eq("disposition", filters.disposition);
+      return search;
+    }).take(ceiling + 1),
+  ]);
+  const unique = new Map(matches.map(item => [item._id, item]));
+  for (const group of groups) {
+    for (const item of group.slice(0, ceiling)) unique.set(item._id, item);
+  }
+  return {
+    matches: [...unique.values()].sort((a, b) => b.updatedAt - a.updatedAt || a._id.localeCompare(b._id)),
+    truncated: groups.some(group => group.length > ceiling),
+  };
+}
+
 export async function searchBoxes(ctx: QueryCtx, moveId: Id<"moves">, needle: string) {
   const recent = await ctx.db.query("boxes")
     .withIndex("by_move_updated", q => q.eq("moveId", moveId))

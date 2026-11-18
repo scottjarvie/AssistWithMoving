@@ -168,6 +168,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/moveId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search item names, descriptions, rooms, destination rooms and categories. With text, truncated indicates that page.total counts only the candidates found within the search limit.",
+            "schema": { "type": "string", "maxLength": 240 }
           }
         ],
         "responses": {

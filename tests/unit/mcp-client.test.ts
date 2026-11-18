@@ -435,28 +435,29 @@ describe("Assist With Moving MCP API client", () => {
     );
   });
 
-  it("filters inventory search text locally after API filters", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({
-          data: [
-            { itemId: "1", name: "Desk lamp", room: "Office" },
-            { itemId: "2", name: "Garden hose", room: "Garage" },
-          ],
-          page: { limit: 50, nextCursor: null, total: 2 },
-        }),
-      }))
-    );
+  it("sends inventory search and its continuation to the API", async () => {
+    const body = {
+      data: [{ itemId: "1", name: "Desk lamp", room: "Office" }],
+      page: { limit: 50, nextCursor: null, total: 1 },
+      truncated: false,
+    };
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => body,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
 
     const result = await searchInventory(
       { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
-      { moveId: "move1", query: "office" }
+      { moveId: "move1", query: " office ", status: "active", cursor: "50" }
     );
 
-    expect(result.data).toEqual([{ itemId: "1", name: "Desk lamp", room: "Office" }]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/items?limit=50&cursor=50&status=active&q=office"),
+      expect.anything(),
+    );
+    expect(result).toEqual(body);
   });
 
   it("fetches move summaries through the compact summary endpoint", async () => {
