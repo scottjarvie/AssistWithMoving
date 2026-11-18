@@ -2092,7 +2092,9 @@ names, and known launch blockers.
 | `plan_apply_ops` | Apply Layout Studio ops directly, with `dryRun` support. |
 | `plan_propose_ops` | Create a pending Layout Studio proposal, with `dryRun` support. |
 | `plan_snapshot` | Fetch a no-underlay SVG snapshot for visual self-checks. |
-| `search_inventory` | Search item data with optional filters. |
+| `search_inventory` | Search item data with optional status and disposition filters. Pass the returned `page.nextCursor` with the same filters and query for the next page. |
+
+With text, this API-key tool sends `q` to `GET /moves/:moveId/items`. Small moves match substrings in names, descriptions, rooms, destination rooms and categories. Larger moves also use indexed words and prefixes across the move. When `truncated` is true, `page.total` counts only returned candidates. Narrow the query for a more complete result.
 | `create_item` | Create an item, with `dryRun` support. |
 | `add_item_from_photo` | Plain-language fastest MCP intake for one household item from one photo plus a few words: defaults omitted quantity to 1, leaves missing weight/size/disposition/condition blank, stores the original image, creates derivatives server-side, attaches the photo, and returns item/photo IDs plus `agentReview`. |
 | `create_item_with_images` | Fast MCP intake for one new household item plus one or more photos: creates the item, defaults omitted quantity to 1, uploads original images attached to it, and returns item/photo IDs with derivative status. |

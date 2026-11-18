@@ -1283,10 +1283,11 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "search_inventory", {
     title: "Search inventory",
     description:
-      "Search inventory by text after applying optional API-side status/disposition filters.",
+      "Search inventory by text with optional status and disposition filters. Larger moves use word search and can report truncated candidates. Narrow the query when truncated.",
     inputSchema: {
       moveId: z.string(),
       query: z.string().optional(),
+      cursor: z.string().optional(),
       status: z.string().optional(),
       disposition: z.string().optional(),
       limit: z.number().int().min(1).max(100).optional(),

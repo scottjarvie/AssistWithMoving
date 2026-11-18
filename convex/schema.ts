@@ -2512,6 +2512,11 @@ export default defineSchema({
     .searchIndex("search_room", { searchField: "room", filterFields: ["moveId", "deletedAt"] })
     .searchIndex("search_category", { searchField: "category", filterFields: ["moveId", "deletedAt"] })
     .searchIndex("search_description", { searchField: "description", filterFields: ["moveId", "deletedAt"] })
+    .searchIndex("api_search_name", { searchField: "name", filterFields: ["moveId", "deletedAt", "status", "disposition"] })
+    .searchIndex("api_search_room", { searchField: "room", filterFields: ["moveId", "deletedAt", "status", "disposition"] })
+    .searchIndex("api_search_destinationRoom", { searchField: "destinationRoom", filterFields: ["moveId", "deletedAt", "status", "disposition"] })
+    .searchIndex("api_search_category", { searchField: "category", filterFields: ["moveId", "deletedAt", "status", "disposition"] })
+    .searchIndex("api_search_description", { searchField: "description", filterFields: ["moveId", "deletedAt", "status", "disposition"] })
     .index("by_household", ["householdId"]),
 
   saleListings: defineTable({

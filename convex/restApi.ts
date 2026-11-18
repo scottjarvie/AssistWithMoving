@@ -1,3 +1,4 @@
+import { searchApiItems, validateInventoryQuery } from "./lib/inventorySearch";
 import { summaryFor, uploadPolicy } from "./usageLimits";
 import {queueNeedsInput} from "./lib/queue";
 import {queueWorkFilter} from "./lib/queue";
@@ -3068,6 +3069,21 @@ async function routeItems(
   itemIdSegment?: string
 ) {
   if (args.method === "GET" && !itemIdSegment) {
+    const needle = args.query.q?.trim().toLowerCase();
+    if (needle) {
+      try {
+        validateInventoryQuery(needle);
+      } catch {
+        return restError({ status: 400, code: "invalid_search", message: "Use at most 240 characters and 16 search terms." });
+      }
+      const status = parseItemStatus(args.query.status);
+      const disposition = parseDisposition(args.query.disposition);
+      if ((args.query.status && !status) || (args.query.disposition && !disposition)) {
+        return restOk({ ...paginate([], args.query), truncated: false });
+      }
+      const { matches, truncated } = await searchApiItems(ctx, moveId, needle, { status, disposition });
+      return restOk({ ...paginate(matches.map(item => safeItem(item, auth.visibility)), args.query), truncated });
+    }
     const items = await ctx.db
       .query("items")
       .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
