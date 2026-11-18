@@ -1,3 +1,6 @@
+import { MovingExamples } from "@/components/landing/moving-examples";
+import { MovingParts, MovingKeeps } from "@/components/landing/moving-interactions";
+import "../home-drawn.css";
 import type { Metadata } from "next";
 import {
   Bot,
@@ -67,6 +70,7 @@ export default function FeaturesPage() {
       title="Everything needed to turn a move into a usable record."
       description="Assist With Moving combines inventory, boxes, photos, load planning, privacy, packet exports, and AI-assisted review in one workspace."
     >
+      <PublicBand><MovingExamples /></PublicBand>
       <PublicBand>
         <FeatureGrid cards={featureCards} />
       </PublicBand>
@@ -100,6 +104,7 @@ export default function FeaturesPage() {
           </ul>
         </div>
       </PublicBand>
+      <PublicBand><section id="moving-workflows" className="moving-home"><h2 className="text-2xl font-semibold">Every part of the move</h2><MovingParts /><MovingKeeps /></section></PublicBand>
     </PublicPageChrome>
   );
 }

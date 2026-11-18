@@ -1,3 +1,4 @@
+import { AiAccessFaq } from "@/components/ai-access-faq";
 import Link from "next/link";
 import { supportDesk, supportDeskUrl } from "@/lib/support";
 
@@ -9,19 +10,7 @@ type Faq = {
 };
 
 export const movingFaqs: Faq[] = [
-  {
-    question: "What is Assist With Moving?",
-    answer: (
-      <>
-        Assist With Moving is a structured system of record for a move. You
-        catalog your inventory, pack and label boxes with their contents, attach
-        photo evidence, plan how everything loads onto trucks, vehicles,
-        storage, or movers, and export scoped documentation packets when someone
-        needs a copy. The goal is one organized record of your move instead of a
-        pile of spreadsheets, photos, and sticky notes.
-      </>
-    ),
-  },
+  { question: "Can I use it without AI?", answer: <>Yes. Use the website to catalog items, pack boxes, attach evidence, plan loads and export packets. Connecting your AI is optional.</> },
   {
     question: "Do I need an account?",
     answer: (
@@ -53,8 +42,7 @@ export const movingFaqs: Faq[] = [
         You bring your own assistant — Claude, ChatGPT, Codex, or another tool
         you already use. Assist With Moving does not bundle its own AI. You
         connect your assistant either through hosted MCP OAuth or with a scoped
-        API key you create yourself and can revoke at any time. The product is
-        the structured place your assistant reads from and writes to. See the{" "}
+        API key you create yourself and can revoke at any time. Your AI needs a compatible MCP or API client; check /ai for current connection proof and limits. The product is the structured place your assistant reads from and writes to. See the{" "}
         <Link
           href="/ai"
           className="text-primary underline-offset-4 hover:underline"
@@ -149,4 +137,32 @@ export const movingFaqs: Faq[] = [
       </>
     ),
   },
+  {
+    question: "What is Assist With Moving?",
+    answer: (
+      <>
+        Assist With Moving is a structured system of record for a move. You
+        catalog your inventory, pack and label boxes with their contents, attach
+        photo evidence, plan how everything loads onto trucks, vehicles,
+        storage, or movers, and export scoped documentation packets when someone
+        needs a copy. The goal is one organized record of your move instead of a
+        pile of spreadsheets, photos, and sticky notes.
+      </>
+    ),
+  },
 ];
+
+export function MovingFaq() {
+  const question = (faq: Faq) => <details key={faq.question} className="rounded-md border border-border p-4 open:bg-muted/25">
+    <summary className="min-h-11 cursor-pointer py-2 font-medium">{faq.question}</summary>
+    <div className="mt-2 text-sm leading-7 text-muted-foreground">{faq.answer}</div>
+  </details>;
+  return <section id="faq" aria-labelledby="moving-faq-title" className="py-10">
+    <h2 id="moving-faq-title" className="text-2xl font-semibold">Questions before you start</h2>
+    <div id="moving-faq-list" className="mt-6 space-y-3">{movingFaqs.slice(0, 5).map(question)}</div>
+    <details className="mt-4 rounded-md border border-border p-4">
+      <summary className="min-h-11 cursor-pointer py-2 font-medium">More questions about PCS, exports, support and access</summary>
+      <div className="mt-3 space-y-3">{movingFaqs.slice(5).map(question)}<AiAccessFaq /></div>
+    </details>
+  </section>;
+}

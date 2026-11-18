@@ -1,3 +1,4 @@
+import { MovingExamples } from "@/components/landing/moving-examples";
 import connectionPolicy from "../../../../shared/ai-connection-policy.json";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -381,6 +382,7 @@ export default function AiAssistantPage() {
         </div>
       </PublicBand>
 
+      <PublicBand><MovingExamples /></PublicBand>
       <PublicBand>
         <div className="grid gap-3 lg:grid-cols-3">
           <ExpandableSection title="Examples of what your AI can do">

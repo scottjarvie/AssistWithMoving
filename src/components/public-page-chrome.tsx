@@ -167,13 +167,14 @@ export function PublicHeader() {
   );
 }
 
-export function PublicFooter() {
+export function PublicFooter({ compact = false }: { compact?: boolean }) {
   return (
     <footer>
       <FamilyRow />
       <div className="border-t border-border">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
         <div className="max-w-xl space-y-1">
+          {compact ? <p>{product.name}</p> : <>
           <p>{product.name} organizes move records, evidence, and documentation packets.</p>
           <p>
             Need help? Everything goes through the{" "}
@@ -186,6 +187,7 @@ export function PublicFooter() {
             . There is no support email address — {product.name} does not run a
             mailbox.
           </p>
+          </>}
         </div>
         <div className="flex flex-wrap gap-4">
           {footerNav.map((item) => (
