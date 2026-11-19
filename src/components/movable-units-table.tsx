@@ -22,13 +22,13 @@ import { ImageOff, PackageOpen, PackagePlus, Search, Truck } from "lucide-react"
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { MovableUnitsIllustration } from "@/components/movable-units-illustration";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DataTable,
   DataTableColumnHeader,
-  EmptyState,
   isRowOpenIgnoredTarget,
   type OnBatchAction,
 } from "@/components/ui/data-table";
@@ -738,39 +738,43 @@ export function MovableUnitsTable({
           Movable units
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="secondary">{summary.total} units</Badge>
-          <StatChip
-            label={`${summary.boxes} boxes`}
-            active={statFilter === "boxes"}
-            onClick={() => toggleStatFilter("boxes")}
-          />
-          <StatChip
-            label={`${summary.looseItems} loose`}
-            active={statFilter === "loose"}
-            onClick={() => toggleStatFilter("loose")}
-          />
-          <StatChip
-            label={`${summary.unassigned} unassigned`}
-            active={statFilter === "unassigned"}
-            tone={summary.unassigned ? "destructive" : "default"}
-            onClick={() => toggleStatFilter("unassigned")}
-          />
-          {summary.missingWeight ? (
-            <StatChip
-              label={`${summary.missingWeight} missing weight`}
-              active={statFilter === "missingWeight"}
-              onClick={() => toggleStatFilter("missingWeight")}
-            />
-          ) : null}
-          {statFilter ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setStatFilter(null)}
-            >
-              Clear filter
-            </Button>
+          {!loading ? (
+            <>
+              <Badge variant="secondary">{summary.total} units</Badge>
+              <StatChip
+                label={`${summary.boxes} boxes`}
+                active={statFilter === "boxes"}
+                onClick={() => toggleStatFilter("boxes")}
+              />
+              <StatChip
+                label={`${summary.looseItems} loose`}
+                active={statFilter === "loose"}
+                onClick={() => toggleStatFilter("loose")}
+              />
+              <StatChip
+                label={`${summary.unassigned} unassigned`}
+                active={statFilter === "unassigned"}
+                tone={summary.unassigned ? "destructive" : "default"}
+                onClick={() => toggleStatFilter("unassigned")}
+              />
+              {summary.missingWeight ? (
+                <StatChip
+                  label={`${summary.missingWeight} missing weight`}
+                  active={statFilter === "missingWeight"}
+                  onClick={() => toggleStatFilter("missingWeight")}
+                />
+              ) : null}
+              {statFilter && visibleUnits.length > 0 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setStatFilter(null)}
+                >
+                  Clear filter
+                </Button>
+              ) : null}
+            </>
           ) : null}
           <SortMenu
             value={sortField}
@@ -790,7 +794,7 @@ export function MovableUnitsTable({
             <PackagePlus aria-hidden="true" />
             Add unit
           </Button>
-          <Button asChild size="sm">
+          <Button asChild size="sm" className="min-h-11 sm:min-h-0">
             <Link href={captureHref}>
               <PackagePlus aria-hidden="true" />
               Add to Queue
@@ -854,18 +858,22 @@ export function MovableUnitsTable({
           />
         )}
         emptyState={
-          <EmptyState
-            title="No movable units yet"
-            description="Boxes and large loose items appear here once they exist for this move. Capture a few from a photo or paste to get started."
-            action={
-              <Button asChild size="sm">
-                <Link href={captureHref}>
-                  <PackagePlus aria-hidden="true" />
-                  Add to Queue
-                </Link>
+          units.length === 0 ? (
+            <div className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 sm:gap-6 sm:p-6">
+              <MovableUnitsIllustration className="size-14 shrink-0 text-primary [--spot-accent:var(--primary)] sm:size-20" />
+              <h2 className="font-semibold">No movable units yet</h2>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1" role="status">
+              <p className="text-sm text-muted-foreground">No units match this view</p>
+              <Button type="button" variant="outline" className="min-h-11" onClick={() => {
+                setSearch("");
+                setStatFilter(null);
+              }}>
+                Clear filters
               </Button>
-            }
-          />
+            </div>
+          )
         }
       />
 
