@@ -50,7 +50,6 @@ import {
   type ColumnMeta,
   DataTable,
   DataTableColumnHeader,
-  EmptyState,
   InlineCheckboxCell,
   InlineSelectCell,
   isRowOpenIgnoredTarget,
@@ -1108,7 +1107,7 @@ export function InventoryTable({
   // instance (autoResetPageIndex), so the adapter no longer manages it.
   const selectedCount = Object.values(rowSelection).filter(Boolean).length;
   const loadingItems = Boolean(moveId) && faceted === undefined;
-  const totalItemCount = items?.length ?? filteredItems.length;
+  const totalItemCount = items?.length ?? 0;
   const activeSavedFilter = inventorySavedFilters.find(
     (filter) => filter.key === savedFilter,
   );
@@ -1125,13 +1124,15 @@ export function InventoryTable({
     search.trim().length > 0 ||
     ownerFilter !== "all" ||
     savedFilter !== "all" ||
-    dispositionGroup !== "all";
+    dispositionGroup !== "all" ||
+    columnFilters.length > 0;
 
   function clearBrowseFilters() {
     setSearch("");
     setOwnerFilter("all");
     setSavedFilter("all");
     setDispositionGroup("all");
+    setColumnFilters([]);
   }
 
   return (
@@ -1376,12 +1377,12 @@ export function InventoryTable({
                 <div>
                   <h3 className="text-sm font-semibold">Inventory records</h3>
                   <p className="text-xs text-muted-foreground" role="status">
-                    {filteredItems.length} of {totalItemCount} records
+                    {loadingItems ? "Loading records…" : `${filteredItems.length} of ${totalItemCount} records`}
                     {selectedCount ? ` · ${selectedCount} selected` : ""}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {hasActiveBrowseFilters ? (
+                  {hasActiveBrowseFilters && sortedItems.length > 0 && totalItemCount > 0 ? (
                     <Button
                       type="button"
                       size="sm"
@@ -1581,10 +1582,16 @@ export function InventoryTable({
                   </>
                 )}
                 emptyState={
-                  <EmptyState
-                    title="No inventory records"
-                    description="Add inventory items or change the disposition facet, saved filter, and search terms."
-                  />
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1" role="status">
+                    <p className="text-sm text-muted-foreground">
+                      {totalItemCount === 0 ? "No inventory records yet" : "No inventory records match this view"}
+                    </p>
+                    {totalItemCount > 0 && hasActiveBrowseFilters ? (
+                      <Button type="button" variant="outline" className="min-h-11" onClick={clearBrowseFilters}>
+                        Clear filters
+                      </Button>
+                    ) : null}
+                  </div>
                 }
               />
             </TabsContent>
