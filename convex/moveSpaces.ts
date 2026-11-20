@@ -3,6 +3,8 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { AuthenticationRequiredError, AuthorizationError } from "./lib/auth";
+import { readRoomHistory, recordRoomReceipt, roomReceiptBatch } from "./lib/roomHistory";
 import {
   moveSpaceKindValidator,
   moveSpaceStatusValidator,
@@ -117,7 +119,7 @@ export const listForMove = query({
     includeArchived: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireMovePermission(
+    const { visibility } = await requireMovePermission(
       ctx,
       args.householdId,
       args.moveId,
@@ -147,9 +149,51 @@ export const listForMove = query({
       .filter((space) => args.includeArchived || space.status !== "archived")
       .filter((space) => (args.kind ? space.kind === args.kind : true))
       .map((space) => ({
-        ...space,
+        _id: space._id,
+        _creationTime: space._creationTime,
+        householdId: space.householdId,
+        moveId: space.moveId,
+        kind: space.kind,
+        name: space.name,
+        aliases: space.aliases,
+        notes: visibility.privateNotes ? space.notes : undefined,
+        floorLevel: space.floorLevel,
+        sortOrder: space.sortOrder,
+        status: space.status,
+        transportResourceId: space.transportResourceId,
+        transportZoneId: space.transportZoneId,
+        linkedPlanEntityId: space.linkedPlanEntityId,
+        capacity: space.capacity,
+        createdByUserId: space.createdByUserId,
+        createdByApiKeyId: space.createdByApiKeyId,
+        updatedByUserId: space.updatedByUserId,
+        updatedByApiKeyId: space.updatedByApiKeyId,
+        createdAt: space.createdAt,
+        updatedAt: space.updatedAt,
+        archivedAt: space.archivedAt,
         photoCount: photoCounts.get(String(space._id)) ?? 0,
       }));
+  },
+});
+
+export const history = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    spaceId: v.id("moveSpaces"),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const { actor, visibility } = await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:read");
+      if (actor.type !== "user") return null;
+      const [room, viewer] = await Promise.all([ctx.db.get(args.spaceId), ctx.db.get(actor.userId)]);
+      if (viewer?.status !== "active" || !room || room.householdId !== args.householdId || room.moveId !== args.moveId) return null;
+      return readRoomHistory(ctx, room, actor.userId, visibility.privateNotes, args.limit);
+    } catch (error) {
+      if (error instanceof AuthenticationRequiredError || error instanceof AuthorizationError) return null;
+      throw error;
+    }
   },
 });
 
@@ -192,15 +236,8 @@ export const create = mutation({
       updatedAt: now,
     });
 
-    await recordAuditEvent(ctx, {
-      householdId: args.householdId,
-      moveId: args.moveId,
-      actorType: "user",
-      actorUserId: actor.userId,
-      category: "inventory",
+    await recordRoomReceipt(ctx, { lane: "web", userId: actor.userId }, spaceId, null, {
       action: "space.created",
-      objectTable: "moveSpaces",
-      objectId: spaceId,
       metadata: { name: args.name, kind: args.kind },
     });
 
@@ -276,15 +313,8 @@ export const update = mutation({
     if (args.capacity !== undefined) patch.capacity = args.capacity;
 
     await ctx.db.patch(args.spaceId, patch);
-    await recordAuditEvent(ctx, {
-      householdId: args.householdId,
-      moveId: args.moveId,
-      actorType: "user",
-      actorUserId: actor.userId,
-      category: "inventory",
+    await recordRoomReceipt(ctx, { lane: "web", userId: actor.userId }, args.spaceId, space, {
       action: "space.updated",
-      objectTable: "moveSpaces",
-      objectId: args.spaceId,
       metadata: { changedKeys: Object.keys(patch) },
     });
   },
@@ -321,6 +351,7 @@ export const upsertBatchForMove = mutation({
     );
     const now = Date.now();
     const results = [];
+    const history = roomReceiptBatch(ctx, { lane: "web", userId: actor.userId });
 
     for (const input of args.spaces) {
       await assertSpaceTargets(ctx, {
@@ -347,6 +378,7 @@ export const upsertBatchForMove = mutation({
           updatedByUserId: actor.userId,
           updatedAt: now,
         };
+        history.remember(match._id, match);
         await ctx.db.patch(match._id, patch);
         results.push({ action: "updated" as const, spaceId: match._id, name });
       } else {
@@ -369,10 +401,12 @@ export const upsertBatchForMove = mutation({
           createdAt: now,
           updatedAt: now,
         });
+        history.remember(spaceId, null);
         results.push({ action: "created" as const, spaceId, name });
       }
     }
 
+    await history.record();
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,

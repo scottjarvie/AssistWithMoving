@@ -40,7 +40,7 @@ export const touchLegacyConnection = internalMutation({ args: { subject: v.strin
   const state = accessState(access, connection);
   if (state !== "active") return { grants: [], block: state === "initializing" ? "initializing" as const : state === "superseded" ? "superseded" as const : state === "revoked" ? "revoked" as const : state === "paused" ? "paused" as const : "expired" as const };
   const grant = connection ? await projectedGrant(ctx, connection) : null;
-  return { grants: grant ? [{ scopes: grant.scopes, withheldScopes: grant.withheldScopes, scopeChoice: grant.scopeChoice, status: grant.status, pausedAt: grant.pausedAt, expiresAt: grant.expiresAt, moveScope: grant.moveScope, moveIds: (grant.moveIds ?? []).map(String) }] : [], block: undefined };
+  return { grants: grant ? [{ grantId: grant._id, scopes: grant.scopes, withheldScopes: grant.withheldScopes, scopeChoice: grant.scopeChoice, status: grant.status, pausedAt: grant.pausedAt, expiresAt: grant.expiresAt, moveScope: grant.moveScope, moveIds: (grant.moveIds ?? []).map(String) }] : [], block: undefined };
 } });
 export const grantsForPrincipal = internalQuery({ args: { subject: v.string(), clientId: v.optional(v.string()) }, handler: async (ctx, args) => {
   const user = await ctx.db.query("users").withIndex("by_clerk_user_id", q => q.eq("clerkUserId", args.subject)).unique();

@@ -13,9 +13,11 @@ import { aiMutation, publicationArgs } from "./lib/sharedPublishing";
  */
 import { v } from "convex/values";
 
-import type { Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import { recordAuditEvent } from "./lib/audit";
+import { roomReceiptBatch } from "./lib/roomHistory";
 import {
+  assertRoomGrant,
   mcpError,
   mcpPrincipalValidator,
   requireMcpMove,
@@ -34,6 +36,7 @@ export const archiveMoveRecords = aiMutation({
   args: {
     ...publicationArgs,
     principal: mcpPrincipalValidator,
+    expectedRoomGrantId: v.optional(v.id("aiGrants")),
     moveId: v.id("moves"),
     operationId: v.string(),
     action: v.union(v.literal("archive"), v.literal("restore")),
@@ -41,13 +44,16 @@ export const archiveMoveRecords = aiMutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const { move, policy } = await requireMcpMove(
+    const { move, policy, grant } = await requireMcpMove(
       ctx,
       args.principal,
       args.moveId,
       "inventory:edit",
       "moving.archive",
     );
+    if (args.records.some(record => record.kind === "space")) {
+      assertRoomGrant(args.expectedRoomGrantId, grant, policy.user._id, args.principal.clientId);
+    }
     if (args.records.length === 0 || args.records.length > MAX_ARCHIVE_ROWS) {
       mcpError(
         "VALIDATION_ERROR",
@@ -65,6 +71,7 @@ export const archiveMoveRecords = aiMutation({
     }
 
     const now = Date.now();
+    const history = roomReceiptBatch(ctx, { lane: "mcp", userId: policy.user._id, grantId: grant._id });
     const archiving = args.action === "archive";
     const results: Array<{
       kind: string;
@@ -103,7 +110,7 @@ export const archiveMoveRecords = aiMutation({
             : "movePlanningRecords";
       const id = ctx.db.normalizeId(table, record.id);
       const row = id ? await ctx.db.get(id) : null;
-      if (!row || (row as { moveId?: Id<"moves"> }).moveId !== move._id) {
+      if (!row || row.moveId !== move._id || row.householdId !== move.householdId) {
         results.push({ ...record, outcome: "notFound" });
         continue;
       }
@@ -112,6 +119,10 @@ export const archiveMoveRecords = aiMutation({
         results.push({ ...record, outcome: "alreadyInState" });
         continue;
       }
+      if (record.kind === "space") {
+        const space = row as Doc<"moveSpaces">;
+        history.remember(space._id, space);
+      }
       await ctx.db.patch(row._id, {
         archivedAt: archiving ? now : undefined,
         updatedAt: now,
@@ -119,6 +130,7 @@ export const archiveMoveRecords = aiMutation({
       results.push({ ...record, outcome: "changed" });
     }
 
+    await history.record();
     const changed = results.filter((row) => row.outcome === "changed").length;
     await recordAuditEvent(ctx, {
       householdId: move.householdId,

@@ -194,7 +194,7 @@ async function recentAuditsByCategory(
 ) {
   return await ctx.db
     .query("auditLogs")
-    .withIndex("by_category_time", (q) => q.eq("category", category))
+    .withIndex("by_shared_category_time", (q) => q.eq("category", category).eq("projectionOnly", undefined))
     .order("desc")
     .take(limit);
 }

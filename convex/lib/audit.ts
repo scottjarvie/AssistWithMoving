@@ -20,7 +20,8 @@ function sharedMetadata(value: unknown, hideReason: boolean): unknown {
 }
 
 /** Shared domain receipts retain work facts, never credential identity. Source stays intact. */
-export function sharedAuditEvent(entry: Doc<"auditLogs">): Doc<"auditLogs"> {
+export function sharedAuditEvent({ roomHistory: _roomHistory, ...entry }: Doc<"auditLogs">): Doc<"auditLogs"> {
+  void _roomHistory;
   if (entry.objectTable === "aiGrants" || entry.objectTable === "apiKeys" || entry.action.startsWith("ai_grant.") || entry.action.startsWith("api_key.")) {
     return { ...entry, action: entry.category === "apiKey" ? "api_connection.changed" : "ai_connection.changed", actorApiKeyId: undefined, objectTable: undefined, objectId: undefined, metadata: undefined };
   }
@@ -57,6 +58,8 @@ export type AuditEventInput = {
   objectTable?: string;
   objectId?: string;
   metadata?: AuditMetadata;
+  roomHistory?: Doc<"auditLogs">["roomHistory"];
+  projectionOnly?: true;
 };
 
 function redactValue(value: unknown, depth: number): unknown {

@@ -467,8 +467,13 @@ describe("stateless Moving MCP foundation", () => {
         runMutation: (reference: any, args: any) => fixture.t.mutation(reference, args),
         runAction: (reference: any, args: any) => fixture.t.action(reference, args),
       } as any;
+      const access = await fixture.t.query(internal.aiGrants.grantsForPrincipal, {
+        subject: PRINCIPAL.subject,
+        clientId: PRINCIPAL.clientId,
+      });
+      expect(access.grants).toHaveLength(1);
       const handler = createMcpHandler(
-        () => createMovingServer(actionCtx, PRINCIPAL).server,
+        () => createMovingServer(actionCtx, { ...PRINCIPAL, roomGrantId: access.grants[0].grantId }).server,
         { legacy: "stateless", responseMode: "json" },
       );
 

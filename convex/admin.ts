@@ -208,8 +208,8 @@ export const getUser = mutation({
           .collect(),
         ctx.db
           .query("auditLogs")
-          .withIndex("by_actor_user_time", (q) =>
-            q.eq("actorUserId", args.userId)
+          .withIndex("by_shared_actor_time", (q) =>
+            q.eq("actorUserId", args.userId).eq("projectionOnly", undefined)
           )
           .order("desc")
           .take(20),
@@ -331,8 +331,8 @@ export const getHousehold = mutation({
         .collect(),
       ctx.db
         .query("auditLogs")
-        .withIndex("by_household_time", (q) =>
-          q.eq("householdId", args.householdId)
+        .withIndex("by_shared_household_time", (q) =>
+          q.eq("householdId", args.householdId).eq("projectionOnly", undefined)
         )
         .order("desc")
         .take(25),
@@ -462,7 +462,7 @@ export const getMove = mutation({
         .collect(),
       ctx.db
         .query("auditLogs")
-        .withIndex("by_move_time", (q) => q.eq("moveId", args.moveId))
+        .withIndex("by_shared_move_time", (q) => q.eq("moveId", args.moveId).eq("projectionOnly", undefined))
         .order("desc")
         .take(25),
     ]);
@@ -514,7 +514,7 @@ async function recentAuditsByCategory(
 ) {
   return await ctx.db
     .query("auditLogs")
-    .withIndex("by_category_time", (q) => q.eq("category", category))
+    .withIndex("by_shared_category_time", (q) => q.eq("category", category).eq("projectionOnly", undefined))
     .order("desc")
     .take(limit);
 }

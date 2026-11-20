@@ -84,6 +84,7 @@ type VerifiedPrincipal = {
   /** How this client proved its identity. A fact we record, never a claim. */
   registrationMethod?: ResolvedClientIdentity["registrationMethod"];
   metadataDigest?: string;
+  roomGrantId?: string;
 };
 
 /**
@@ -889,6 +890,7 @@ export function createMovingServer(
           await actionCtx.runMutation(mcpMutations.saveMoveContext, {
             ...input,
             principal: convexPrincipal(principal),
+            ...(principal.roomGrantId ? { expectedRoomGrantId: principal.roomGrantId } : {}),
             requestHash,
             moveId: input.moveId as any,
             spaces: input.spaces as any,
@@ -1006,6 +1008,7 @@ export function createMovingServer(
           await actionCtx.runMutation(mcpMutations.saveCompleteResult, {
             ...input,
             principal: convexPrincipal(principal),
+            ...(principal.roomGrantId ? { expectedRoomGrantId: principal.roomGrantId } : {}),
             requestHash,
             moveId: input.moveId as any,
             items: input.items as any,
@@ -1333,6 +1336,7 @@ export function createMovingServer(
           await actionCtx.runMutation((internal as any).mcpArchive.archiveMoveRecords, {
             ...input,
             principal: convexPrincipal(principal),
+            ...(principal.roomGrantId ? { expectedRoomGrantId: principal.roomGrantId } : {}),
             moveId: input.moveId as any,
           }),
         );
@@ -1423,6 +1427,7 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
     "clientId" | "clientName" | "registrationMethod" | "metadataDigest"
   >;
   let grantedScopes: MovingScope[] = [];
+  let roomGrantId: string | undefined;
   let connectionState: { status: string; changedAt?: number | null; expiresAt?: number | null } | undefined;
   try {
     // Validate required client metadata before any issuance or binding. The
@@ -1442,8 +1447,9 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       const access = (await actionCtx.runQuery(
         (internal as any).aiGrants.grantsForPrincipal,
         { subject, clientId },
-      )) as { scopes: MovingScope[]; connectionState?: { status: string; changedAt?: number | null; expiresAt?: number | null } };
+      )) as { scopes: MovingScope[]; grants: { grantId: string }[]; connectionState?: { status: string; changedAt?: number | null; expiresAt?: number | null } };
       grantedScopes = access.scopes ?? [];
+      roomGrantId = access.grants?.[0]?.grantId;
       connectionState = access.connectionState ?? (connected?.block ? { status: connected.block } : undefined);
     } catch (error) {
       console.error("[MCP] Could not read product grants", error);
@@ -1481,6 +1487,7 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
           clientName: identity.clientName ?? declaredClientName,
           registrationMethod: identity.registrationMethod,
           metadataDigest: identity.metadataDigest,
+          roomGrantId,
         },
         grantedScopes,
         connectionState,

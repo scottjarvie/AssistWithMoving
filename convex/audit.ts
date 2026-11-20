@@ -55,8 +55,8 @@ export const listForHousehold = query({
 
     const rows = await ctx.db
       .query("auditLogs")
-      .withIndex("by_household_time", (q) =>
-        q.eq("householdId", args.householdId)
+      .withIndex("by_shared_household_time", (q) =>
+        q.eq("householdId", args.householdId).eq("projectionOnly", undefined)
       )
       .order("desc")
       .take(Math.min(Math.max(Math.trunc(args.limit ?? 50), 1), 200));
@@ -84,7 +84,7 @@ export const listForMove = query({
     const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
     const entries = await ctx.db
       .query("auditLogs")
-      .withIndex("by_move_time", (q) => q.eq("moveId", args.moveId))
+      .withIndex("by_shared_move_time", (q) => q.eq("moveId", args.moveId).eq("projectionOnly", undefined))
       .order("desc")
       .take(limit);
 
@@ -138,8 +138,8 @@ export const listForObject = query({
     const limit = Math.min(Math.max(args.limit ?? 10, 1), 50);
     const entries = await ctx.db
       .query("auditLogs")
-      .withIndex("by_object_time", (q) =>
-        q.eq("objectTable", args.objectTable).eq("objectId", args.objectId)
+      .withIndex("by_shared_object_time", (q) =>
+        q.eq("objectTable", args.objectTable).eq("objectId", args.objectId).eq("projectionOnly", undefined)
       )
       .order("desc")
       .take(limit);

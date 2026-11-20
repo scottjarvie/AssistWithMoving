@@ -36,7 +36,9 @@ import {
   type LegacyGrantBlock,
 } from "./lib/mcpLegacyGrantGate";
 import { oauthClientIdFromClaims, resolveClientIdentity } from "./lib/mcpClientIdentity";
-import type { GrantDecisionInput as LegacyGrantDecisionRow } from "./lib/aiGrants";
+import type { GrantDecisionInput } from "./lib/aiGrants";
+import { roomGrantClaim } from "./lib/mcpGrantAccess";
+type LegacyGrantDecisionRow = GrantDecisionInput & { grantId?: string };
 
 const http = httpRouter();
 http.route({ path: "/ai-upload", method: "PUT", handler: httpAction(async (ctx, request) => {
@@ -151,7 +153,7 @@ const internalMutations = anyApi as unknown as {
       "mutation",
       "internal",
       { subject: string; clientId: string; clientName?: string },
-      { scopes: string[]; block?: LegacyGrantBlock }
+      { grants: LegacyGrantDecisionRow[]; block?: LegacyGrantBlock }
     >;
     noteGrantUse: FunctionReference<
       "mutation",
@@ -1240,6 +1242,14 @@ export function createLegacyGrantGate(
       mode: args.mode,
       block: grant.block,
     });
+
+    if (args.mode === "call" && args.toolName === "upsert_spaces" && decision.allowed) {
+      // The gateway dispatches this same verified identity after authorization,
+      // and strips any caller argument that tries to supply an identity.
+      const grantId = grant.grants.length === 1 ? grant.grants[0].grantId : undefined;
+      if (!args.identity || !grantId) return { allowed: false, reason: "The room-write grant could not be pinned. Retry the call." };
+      args.identity.claims = { ...claims, [roomGrantClaim]: grantId };
+    }
 
     // Write a receipt for real calls only. Filtering `tools/list` would
     // otherwise stamp the activity list with a row per tool per connection.

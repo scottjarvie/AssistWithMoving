@@ -7,6 +7,7 @@ import { DoorOpen, Plus } from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { RoomHistory } from "./room-history";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -120,14 +121,17 @@ function AreaCard({
             {space.floorLevel ? `Floor ${space.floorLevel}` : "No floor set"}
           </p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setEditing((value) => !value)}
-        >
-          {editing ? "Close" : "Edit"}
-        </Button>
+        <div className="flex shrink-0 items-center">
+          <RoomHistory householdId={householdId} moveId={moveId} spaceId={space._id} name={space.name} />
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => setEditing((value) => !value)}
+          >
+            {editing ? "Close" : "Edit"}
+          </Button>
+        </div>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {summary ? (
