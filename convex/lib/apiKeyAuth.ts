@@ -53,7 +53,7 @@ export async function authenticateApiKey(ctx: MutationCtx, {
   return {
     actor: { type: "apiKey" as const, apiKeyId: String(key._id), scopes: permitted },
     version: access.revision, status: state, changedAt: snapshot(access, connection).changedAt, revokedAt: access.revokedAt, pausedAt: access.pausedAt, expiresAt: access.endsAt,
-    apiKeyId: key._id, apiKeyName: key.name, apiKeyTokenPreview: key.tokenPreview,
+    apiKeyId: key._id, connectionId: connection?._id, apiKeyName: key.name, apiKeyTokenPreview: key.tokenPreview,
     createdByUserId: key.createdByUserId, householdId: key.householdId,
     moveId: singleMoveId, allowedMoveIds: access.moveIds, moveRestricted: restricted,
     householdVisible: membership?.status === "active", scopes: permitted,

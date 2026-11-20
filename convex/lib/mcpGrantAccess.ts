@@ -7,11 +7,26 @@
  */
 import { ConvexError, v } from "convex/values";
 
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { activeGrantsForUser } from "../aiGrants";
 import { effectiveScopeChoice, effectiveScopes, effectiveExpiry, findPermittingGrant, type MovingScope } from "./aiGrants";
+import { sameOAuthClientHistory } from "./mcpClientIdentity";
 import { requireMoveForSubject, requireUserBySubject } from "./mcpIdentity";
+
+export const roomGrantClaim = "movingInternalRoomGrant";
+
+export function assertRoomGrant(
+  expected: string | undefined,
+  actual: Doc<"aiGrants">,
+  owner: Id<"users">,
+  clientId: string,
+) {
+  if ((expected !== undefined && expected !== actual._id) || actual.ownerUserId !== owner ||
+      !actual.clientId || !sameOAuthClientHistory(clientId, actual.clientId)) {
+    throw new ConvexError("The room-write grant changed. Retry with the current connection.");
+  }
+}
 
 export const MCP_ERROR_MARKER = "MCP_MOVING_ERROR:";
 

@@ -15,12 +15,14 @@ import {
 } from "./_generated/server";
 import { generateItemCode } from "./items";
 import { recordAuditEvent } from "./lib/audit";
+import { roomReceiptBatch } from "./lib/roomHistory";
 import { activeGrantsForUser } from "./aiGrants";
 import { grantError } from "./lib/aiGrants";
 import {
   hasQueueWorkGrant,
   mcpError,
   mcpPrincipalValidator,
+  assertRoomGrant,
   requireMcpMove,
   requireMcpUser,
   type McpPrincipal,
@@ -1218,7 +1220,7 @@ async function upsertPlanningRecord(
 
 async function saveSpaces(
   ctx: MutationCtx,
-  principal: McpPrincipal,
+  grantId: Id<"aiGrants">,
   userId: Id<"users">,
   householdId: Id<"households">,
   moveId: Id<"moves">,
@@ -1242,6 +1244,7 @@ async function saveSpaces(
     .first();
   let nextSort = (last?.sortOrder ?? 0) + 1;
   const results = [];
+  const history = roomReceiptBatch(ctx, { lane: "mcp", userId, grantId });
   for (const input of spaces) {
     const name = cleanText(input.name, "space name", 200);
     const existing = input.spaceId
@@ -1250,13 +1253,14 @@ async function saveSpaces(
           .query("moveSpaces")
           .withIndex("by_move_name", (q) => q.eq("moveId", moveId).eq("name", name))
           .first();
-    if (existing && (existing.moveId !== moveId || existing.archivedAt !== undefined)) {
+    if (existing && (existing.moveId !== moveId || existing.householdId !== householdId || existing.archivedAt !== undefined)) {
       mcpError("NOT_FOUND", "Space is unavailable in this move.", "Refresh the Move Brief and use a returned space ID.");
     }
     if (input.spaceId && existing && input.expectedUpdatedAt !== existing.updatedAt) {
       mcpError("STALE_VERSION", `Space ${name} changed after it was read.`, "Refresh the space and retry with expectedUpdatedAt.");
     }
     if (existing) {
+      history.remember(existing._id, existing);
       await ctx.db.patch(existing._id, {
         name,
         kind: input.kind ?? existing.kind,
@@ -1285,9 +1289,11 @@ async function saveSpaces(
         createdAt: now,
         updatedAt: now,
       });
+      history.remember(id, null);
       results.push({ spaceId: id, action: "created" as const, name, updatedAt: now });
     }
   }
+  await history.record();
   return results;
 }
 
@@ -1455,6 +1461,7 @@ export const saveMoveContext = aiMutation({
   args: {
     ...publicationArgs,
     principal: mcpPrincipalValidator,
+    expectedRoomGrantId: v.optional(v.id("aiGrants")),
     moveId: v.id("moves"),
     operationId: v.string(),
     requestHash: v.string(),
@@ -1474,7 +1481,10 @@ export const saveMoveContext = aiMutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const { move, policy } = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:edit", "moving.work.write");
+    const { move, policy, grant } = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:edit", "moving.work.write");
+    if (args.spaces?.length) {
+      assertRoomGrant(args.expectedRoomGrantId, grant, policy.user._id, args.principal.clientId);
+    }
     const replay = await replayResult(ctx, policy.user._id, args.principal, "save_move_context", args.operationId, args.requestHash);
     if (replay) return replay;
     if (args.expectedUpdatedAt !== undefined && args.expectedUpdatedAt !== move.updatedAt) {
@@ -1494,7 +1504,7 @@ export const saveMoveContext = aiMutation({
       if (field in args.patch) patch[field] = finiteNumber(args.patch[field], field) ?? undefined;
     }
     await ctx.db.patch(move._id, patch);
-    const spaces = await saveSpaces(ctx, args.principal, policy.user._id, move.householdId, move._id, args.spaces ?? []);
+    const spaces = await saveSpaces(ctx, grant._id, policy.user._id, move.householdId, move._id, args.spaces ?? []);
     await recordAuditEvent(ctx, {
       householdId: move.householdId,
       moveId: move._id,
@@ -1581,6 +1591,7 @@ export const saveCompleteResult = aiMutation({
   args: {
     ...publicationArgs,
     principal: mcpPrincipalValidator,
+    expectedRoomGrantId: v.optional(v.id("aiGrants")),
     moveId: v.id("moves"),
     operationId: v.string(),
     requestHash: v.string(),
@@ -1603,7 +1614,10 @@ export const saveCompleteResult = aiMutation({
   handler: async (ctx, args) => {
     const inventoryAccess = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:edit", "moving.work.write");
     await requireMcpMove(ctx, args.principal, args.moveId, "plan:edit", "moving.work.write");
-    const { move, policy } = inventoryAccess;
+    const { move, policy, grant } = inventoryAccess;
+    if (args.spaces?.length) {
+      assertRoomGrant(args.expectedRoomGrantId, grant, policy.user._id, args.principal.clientId);
+    }
     const replay = await replayResult(ctx, policy.user._id, args.principal, "save_complete_result", args.operationId, args.requestHash);
     if (replay) return replay;
     const reason = cleanText(args.reason, "reason", 500);
@@ -1616,7 +1630,7 @@ export const saveCompleteResult = aiMutation({
     if (totalPlanningRows > MAX_WRITE_ROWS) {
       mcpError("VALIDATION_ERROR", `A complete result may save at most ${MAX_WRITE_ROWS} planning records.`, "Split unusually large work into complete and granular saves.");
     }
-    const spaces = await saveSpaces(ctx, args.principal, policy.user._id, move.householdId, move._id, args.spaces ?? []);
+    const spaces = await saveSpaces(ctx, grant._id, policy.user._id, move.householdId, move._id, args.spaces ?? []);
     const items = await saveItems(ctx, args.principal, policy.user._id, move.householdId, move._id, args.items ?? []);
     const umbrella = await upsertPlanningRecord(ctx, args.principal, policy.user._id, move.householdId, move._id, args.operationId, {
       stableKey: `complete:${args.resultKey}`,

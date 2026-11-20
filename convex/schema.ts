@@ -87,6 +87,14 @@ export const moveRole = v.union(
   v.literal("guest")
 );
 
+const roomHistoryValidator = v.object({
+  version: v.literal(1),
+  operation: v.union(v.literal("created"), v.literal("updated"), v.literal("archived"), v.literal("restored")),
+  fields: v.array(v.string()),
+  lane: v.union(v.literal("web"), v.literal("mcp"), v.literal("rest")),
+  grantId: v.optional(v.id("aiGrants")),
+});
+
 export const auditActorType = v.union(
   v.literal("user"),
   v.literal("apiKey"),
@@ -1278,12 +1286,14 @@ export default defineSchema({
     objectTable: v.optional(v.string()),
     objectId: v.optional(v.string()),
     metadata: v.optional(v.any()),
+    roomHistory: v.optional(roomHistoryValidator),
     createdAt: v.number(),
   })
     .index("by_household_time", ["householdId", "createdAt"])
     .index("by_move_time", ["moveId", "createdAt"])
     .index("by_object_time", ["objectTable", "objectId", "createdAt"])
     .index("by_actor_user_time", ["actorUserId", "createdAt"])
+    .index("by_room_history", ["objectTable", "objectId", "roomHistory.version", "createdAt"])
     // Answer "what did THIS agent (api key) do" efficiently — previously a scan.
     .index("by_actor_apikey_time", ["actorApiKeyId", "createdAt"])
     .index("by_category_time", ["category", "createdAt"]),
@@ -1461,6 +1471,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     archivedAt: v.optional(v.number()),
+    roomHistoryOmitted: v.optional(v.boolean()),
   })
     .index("by_move_sort", ["moveId", "sortOrder"])
     .index("by_move_kind", ["moveId", "kind"])

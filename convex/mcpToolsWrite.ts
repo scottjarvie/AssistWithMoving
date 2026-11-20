@@ -14,6 +14,10 @@ import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import { internalQuery } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { roomReceiptBatch } from "./lib/roomHistory";
+import { activeGrantsForUser } from "./aiGrants";
+import { assertRoomGrant, roomGrantClaim } from "./lib/mcpGrantAccess";
+import { oauthClientIdFromClaims } from "./lib/mcpClientIdentity";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import { assertCaptureStructuredRefs } from "./ingestionQueue";
 import {
@@ -422,6 +426,16 @@ export const upsertSpaces = aiMutation({
     );
     const userId = policy.actor.userId;
     const now = Date.now();
+    const clientId = oauthClientIdFromClaims(args.caller.claims);
+    const expected = args.caller.claims?.[roomGrantClaim];
+    const [user, [grant]] = await Promise.all([ctx.db.get(userId), activeGrantsForUser(ctx, userId, clientId, now)]);
+    if (user?.status !== "active" || typeof expected !== "string" || !clientId ||
+        !grant || !grant.scopes.includes("moving.work.write") ||
+        (grant.moveScope === "selectedMoves" && !grant.moveIds?.includes(args.moveId))) {
+      throw new ConvexError("A verified room-write grant for this move is required.");
+    }
+    assertRoomGrant(expected, grant, userId, clientId);
+    const history = roomReceiptBatch(ctx, { lane: "mcp", userId, grantId: grant._id });
     const results: Array<{
       spaceId: string;
       action: "created" | "updated" | "archived";
@@ -451,6 +465,7 @@ export const upsertSpaces = aiMutation({
         ) {
           throw new ConvexError(`Space ${draft.spaceId} not found in this move.`);
         }
+        history.remember(draft.spaceId, existing);
         await ctx.db.patch(draft.spaceId, {
           status: "archived",
           updatedByUserId: userId,
@@ -469,6 +484,7 @@ export const upsertSpaces = aiMutation({
         ) {
           throw new ConvexError(`Space ${draft.spaceId} not found in this move.`);
         }
+        history.remember(draft.spaceId, existing);
         await ctx.db.patch(draft.spaceId, {
           name: draft.name.trim() || existing.name,
           kind: draft.kind ?? existing.kind,
@@ -504,10 +520,12 @@ export const upsertSpaces = aiMutation({
           createdAt: now,
           updatedAt: now,
         });
+        history.remember(spaceId, null);
         results.push({ spaceId: String(spaceId), action: "created" });
       }
     }
 
+    await history.record();
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,

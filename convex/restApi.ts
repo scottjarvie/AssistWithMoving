@@ -16,6 +16,8 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { agentAccessDisabled, resolveMoveAccess } from "./lib/moveAccess";
+import { recordRoomReceipt, roomReceiptBatch } from "./lib/roomHistory";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
 import { SETTINGS_REFUSAL } from "./lib/connectionReduction";
 import { hashApiKey } from "./lib/apiKeys";
@@ -356,9 +358,65 @@ export const commitRequest = internalMutation({
   args: { request: v.any(), auth: v.any() },
   handler: async (ctx, { request, auth }): Promise<RestResponse> => {
     const args = request as RestRequestInput;
-    return withSharedPublishing(ctx, { ownerUserId: auth.createdByUserId, verifiedClientId: `key:${auth.apiKeyId}` }, bodyObject(args.body), checked => withIdempotency(checked, args, auth, () => routeRequest(checked, args, parseRestPath(args.path), auth)));
+    const segments = parseRestPath(args.path);
+    const isSetup = args.method === "POST" && segments[1] === "setup" && segments.length === 2;
+    const body = bodyObject(args.body);
+    const writesSpace = segments[2] === "spaces" && (
+      (args.method === "POST" && !segments[3]) ||
+      ((args.method === "PATCH" || args.method === "PUT") && segments[3])
+    );
+    if (segments[0] === "moves" && (writesSpace || (isSetup && !body.dryRun && setupSpaceInputs(body).length))) {
+      await requireCurrentRoomKey(ctx, args, auth, segments);
+    }
+    return withSharedPublishing(ctx, { ownerUserId: auth.createdByUserId, verifiedClientId: `key:${auth.apiKeyId}` }, body, checked => withIdempotency(checked, args, auth, () => routeRequest(checked, args, segments, auth)));
   },
 });
+
+// Room writes cross an internal transaction boundary after bearer verification.
+async function requireCurrentRoomKey(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  segments: string[],
+) {
+  const [key, root, connection] = await Promise.all([
+    ctx.db.get(auth.apiKeyId),
+    readAccess(ctx, auth.createdByUserId),
+    readConnection(ctx, auth.createdByUserId, `key:${auth.apiKeyId}`),
+  ]);
+  const access = root && connection && connectionAccess(root, connection);
+  const body = bodyObject(args.body);
+  const setup = segments[1] === "setup";
+  const requestedMove = setup ? optionalString(body.moveId) : segments[1];
+  const title = normalizeOptionalText(asString(body.title));
+  const moveId = requestedMove ? ctx.db.normalizeId("moves", requestedMove)
+    : setup && title && body.updateExisting !== false
+      ? (await findApiMoveByTitle(ctx, auth.householdId, title))?._id
+      : undefined;
+  const powers = requiredScopesForRestRoute({ method: args.method, segments });
+  const currentScopes = access ? keyScopes(access) : [];
+  if (!key || key.createdByUserId !== auth.createdByUserId || key.householdId !== auth.householdId ||
+      key.credentialRetiredAt !== undefined || !connection || connection._id !== auth.connectionId ||
+      connection.apiKeyId !== key._id || !access || accessState(access, connection) !== "active" ||
+      powers.some(power => !currentScopes.includes(power)) ||
+      (access.moveIds && (!moveId || !access.moveIds.includes(moveId)))) {
+    throw new Error("This API credential is not authorized to write rooms with its current access.");
+  }
+  const user = await ctx.db.get(key.createdByUserId);
+  if (user?.status !== "active") throw new Error("This API credential is not authorized because its owner is inactive.");
+  // Let the route keep its native malformed/not-found response.
+  if (requestedMove && !moveId) return;
+  if (moveId) {
+    const moveAccess = await resolveMoveAccess(ctx, user._id, key.householdId, moveId);
+    if (!agentAccessDisabled(moveAccess) && canPerformHouseholdAction(moveAccess.role, "inventory:edit")) return;
+  } else {
+    const membership = await ctx.db.query("householdMemberships").withIndex("by_household_user", q =>
+      q.eq("householdId", key.householdId).eq("userId", user._id)).unique();
+    if (membership?.status === "active" && membership.apiAccessStatus !== "disabled" &&
+        canPerformHouseholdAction(membership.role, "inventory:edit")) return;
+  }
+  throw new Error("This API credential is not authorized to edit rooms in this move.");
+}
 
 export const checkRateLimit = internalMutation({
   args: {
@@ -2018,9 +2076,11 @@ async function routeSetupMove(
   }
 
   const spaceResults = [];
+  const roomHistory = roomReceiptBatch(ctx, { lane: "rest", userId: auth.createdByUserId, keyId: auth.apiKeyId });
   for (const [index, input] of setupSpaceInputs(body).entries()) {
-    spaceResults.push(await upsertApiMoveSpaceForSetup(ctx, auth, moveId, input, index));
+    spaceResults.push(await upsertApiMoveSpaceForSetup(ctx, auth, moveId, input, index, roomHistory));
   }
+  await roomHistory.record();
 
   const resourceResults = [];
   for (const [index, input] of setupTransportInputs(body).entries()) {
@@ -2311,9 +2371,9 @@ async function routeMoveSpaces(
       createdAt: now,
       updatedAt: now,
     });
-    await auditApiWrite(ctx, auth, moveId, "space.api_created", "moveSpaces", spaceId, {
-      name,
-      kind,
+    await recordRoomReceipt(ctx, { lane: "rest", userId: auth.createdByUserId, keyId: auth.apiKeyId }, spaceId, null, {
+      action: "space.api_created",
+      metadata: { name, kind },
     });
     const created = await ctx.db.get(spaceId);
     return restOk({ data: created ? safeMoveSpace(created) : { spaceId } }, 201);
@@ -2344,8 +2404,9 @@ async function routeMoveSpaces(
     }
     if (body.capacity !== undefined) patch.capacity = parseCapacity(body.capacity) ?? {};
     await ctx.db.patch(spaceId, patch);
-    await auditApiWrite(ctx, auth, moveId, "space.api_updated", "moveSpaces", spaceId, {
-      changedKeys: Object.keys(patch),
+    await recordRoomReceipt(ctx, { lane: "rest", userId: auth.createdByUserId, keyId: auth.apiKeyId }, spaceId, space, {
+      action: "space.api_updated",
+      metadata: { changedKeys: Object.keys(patch) },
     });
     const updated = await ctx.db.get(spaceId);
     return restOk({ data: updated ? safeMoveSpace(updated) : { spaceId } });
@@ -7635,6 +7696,7 @@ async function upsertApiMoveSpaceForSetup(
   moveId: Id<"moves">,
   input: Record<string, unknown>,
   index: number,
+  history: ReturnType<typeof roomReceiptBatch>,
 ) {
   const name = requiredBodyString(input.name, "spaces[].name is required.");
   const kind = parseMoveSpaceKind(input.kind) ?? "custom";
@@ -7667,6 +7729,7 @@ async function upsertApiMoveSpaceForSetup(
   };
 
   if (existing) {
+    history.remember(existing._id, existing);
     await ctx.db.patch(existing._id, patch);
     return { action: "updated" as const, spaceId: existing._id, name, kind };
   }
@@ -7697,10 +7760,7 @@ async function upsertApiMoveSpaceForSetup(
     createdAt: now,
     updatedAt: now,
   });
-  await auditApiWrite(ctx, auth, moveId, "space.api_setup_created", "moveSpaces", spaceId, {
-    name,
-    kind,
-  });
+  history.remember(spaceId, null, { action: "space.api_setup_created", metadata: { name, kind } });
   return { action: "created" as const, spaceId, name, kind };
 }
 
