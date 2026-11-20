@@ -359,25 +359,29 @@ export const commitRequest = internalMutation({
   handler: async (ctx, { request, auth }): Promise<RestResponse> => {
     const args = request as RestRequestInput;
     const segments = parseRestPath(args.path);
-    const isSetup = args.method === "POST" && segments[1] === "setup" && segments.length === 2;
+    const isSetup = args.method === "POST" && segments.join("/") === "moves/setup";
     const body = bodyObject(args.body);
     const writesSpace = segments[2] === "spaces" && (
       (args.method === "POST" && !segments[3]) ||
       ((args.method === "PATCH" || args.method === "PUT") && segments[3])
     );
-    if (segments[0] === "moves" && (writesSpace || (isSetup && !body.dryRun && setupSpaceInputs(body).length))) {
-      await requireCurrentRoomKey(ctx, args, auth, segments);
+    if (isSetup || (segments[0] === "moves" && writesSpace)) {
+      const editsRooms = !isSetup || (!body.dryRun && setupSpaceInputs(body).length > 0);
+      const refusal = await recheckRoomRequest(ctx, args, auth, segments, isSetup, editsRooms);
+      if (refusal) return refusal;
     }
     return withSharedPublishing(ctx, { ownerUserId: auth.createdByUserId, verifiedClientId: `key:${auth.apiKeyId}` }, body, checked => withIdempotency(checked, args, auth, () => routeRequest(checked, args, segments, auth)));
   },
 });
 
-// Room writes cross an internal transaction boundary after bearer verification.
-async function requireCurrentRoomKey(
+// Setup and room writes cross an internal transaction boundary after bearer verification.
+async function recheckRoomRequest(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   segments: string[],
+  setup: boolean,
+  editsRooms: boolean,
 ) {
   const [key, root, connection] = await Promise.all([
     ctx.db.get(auth.apiKeyId),
@@ -385,21 +389,31 @@ async function requireCurrentRoomKey(
     readConnection(ctx, auth.createdByUserId, `key:${auth.apiKeyId}`),
   ]);
   const access = root && connection && connectionAccess(root, connection);
+  const powers = requiredScopesForRestRoute({ method: args.method, segments });
+  const currentScopes = access ? keyScopes(access) : [];
+  if (!key || key.createdByUserId !== auth.createdByUserId || key.householdId !== auth.householdId ||
+      key.credentialRetiredAt !== undefined || !connection || connection._id !== auth.connectionId ||
+      connection.apiKeyId !== key._id || !access || accessState(access, connection) !== "active" ||
+      powers.some(power => !currentScopes.includes(power))) {
+    throw new Error("This API credential is not authorized to write rooms with its current access.");
+  }
+  if (setup && (access.moveIds !== undefined || auth.moveRestricted)) {
+    return restError({
+      status: 403,
+      code: "move_restricted_key",
+      message: "Move-restricted API keys cannot create or select moves.",
+    });
+  }
+  if (!editsRooms) return;
+
   const body = bodyObject(args.body);
-  const setup = segments[1] === "setup";
   const requestedMove = setup ? optionalString(body.moveId) : segments[1];
   const title = normalizeOptionalText(asString(body.title));
   const moveId = requestedMove ? ctx.db.normalizeId("moves", requestedMove)
     : setup && title && body.updateExisting !== false
       ? (await findApiMoveByTitle(ctx, auth.householdId, title))?._id
       : undefined;
-  const powers = requiredScopesForRestRoute({ method: args.method, segments });
-  const currentScopes = access ? keyScopes(access) : [];
-  if (!key || key.createdByUserId !== auth.createdByUserId || key.householdId !== auth.householdId ||
-      key.credentialRetiredAt !== undefined || !connection || connection._id !== auth.connectionId ||
-      connection.apiKeyId !== key._id || !access || accessState(access, connection) !== "active" ||
-      powers.some(power => !currentScopes.includes(power)) ||
-      (access.moveIds && (!moveId || !access.moveIds.includes(moveId)))) {
+  if (access.moveIds && (!moveId || !access.moveIds.includes(moveId))) {
     throw new Error("This API credential is not authorized to write rooms with its current access.");
   }
   const user = await ctx.db.get(key.createdByUserId);
@@ -1950,14 +1964,6 @@ async function routeSetupMove(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>
 ) {
-  if (auth.moveRestricted) {
-    return restError({
-      status: 403,
-      code: "move_restricted_key",
-      message: "Move-restricted API keys cannot create or select moves.",
-    });
-  }
-
   const body = bodyObject(args.body);
   const dryRun = Boolean(body.dryRun);
   const updateExisting = body.updateExisting !== false;
@@ -2276,7 +2282,7 @@ async function routeAgentContext(
           (space) =>
             space.householdId === auth.householdId && space.status !== "archived",
         )
-        .map((space) => safeMoveSpace(space)),
+        .map((space) => safeMoveSpace(space, auth.visibility.privateNotes)),
       transportResources: resources
         .filter(
           (resource) =>
@@ -2334,7 +2340,7 @@ async function routeMoveSpaces(
         spaces
           .filter((space) => space.householdId === auth.householdId)
           .filter((space) => space.status !== "archived")
-          .map((space) => safeMoveSpace(space)),
+          .map((space) => safeMoveSpace(space, auth.visibility.privateNotes)),
         args.query,
       ),
     );
@@ -2376,7 +2382,7 @@ async function routeMoveSpaces(
       metadata: { name, kind },
     });
     const created = await ctx.db.get(spaceId);
-    return restOk({ data: created ? safeMoveSpace(created) : { spaceId } }, 201);
+    return restOk({ data: created ? safeMoveSpace(created, auth.visibility.privateNotes) : { spaceId } }, 201);
   }
 
   if ((args.method === "PATCH" || args.method === "PUT") && spaceIdSegment) {
@@ -2409,7 +2415,7 @@ async function routeMoveSpaces(
       metadata: { changedKeys: Object.keys(patch) },
     });
     const updated = await ctx.db.get(spaceId);
-    return restOk({ data: updated ? safeMoveSpace(updated) : { spaceId } });
+    return restOk({ data: updated ? safeMoveSpace(updated, auth.visibility.privateNotes) : { spaceId } });
   }
 
   return restError({
@@ -7312,13 +7318,13 @@ function safeTransportZone(zone: Doc<"transportZones">) {
   };
 }
 
-function safeMoveSpace(space: Doc<"moveSpaces">) {
+function safeMoveSpace(space: Doc<"moveSpaces">, showNotes: boolean) {
   return {
     spaceId: space._id,
     kind: space.kind,
     name: space.name,
     aliases: space.aliases,
-    notes: space.notes,
+    notes: showNotes ? space.notes : undefined,
     floorLevel: space.floorLevel,
     sortOrder: space.sortOrder,
     status: space.status,

@@ -22,7 +22,7 @@ export function assertRoomGrant(
   owner: Id<"users">,
   clientId: string,
 ) {
-  if ((expected !== undefined && expected !== actual._id) || actual.ownerUserId !== owner ||
+  if (expected !== actual._id || actual.ownerUserId !== owner ||
       !actual.clientId || !sameOAuthClientHistory(clientId, actual.clientId)) {
     throw new ConvexError("The room-write grant changed. Retry with the current connection.");
   }

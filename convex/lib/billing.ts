@@ -255,8 +255,8 @@ export async function usageSnapshotForHousehold(
       .collect(),
     ctx.db
       .query("auditLogs")
-      .withIndex("by_household_time", (q) =>
-        q.eq("householdId", householdId).gte("createdAt", monthStart)
+      .withIndex("by_shared_household_time", (q) =>
+        q.eq("householdId", householdId).eq("projectionOnly", undefined).gte("createdAt", monthStart)
       )
       .collect(),
     ctx.db

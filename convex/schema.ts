@@ -93,6 +93,7 @@ const roomHistoryValidator = v.object({
   fields: v.array(v.string()),
   lane: v.union(v.literal("web"), v.literal("mcp"), v.literal("rest")),
   grantId: v.optional(v.id("aiGrants")),
+  shared: v.optional(v.boolean()),
 });
 
 export const auditActorType = v.union(
@@ -1287,13 +1288,20 @@ export default defineSchema({
     objectId: v.optional(v.string()),
     metadata: v.optional(v.any()),
     roomHistory: v.optional(roomHistoryValidator),
+    projectionOnly: v.optional(v.literal(true)),
     createdAt: v.number(),
   })
     .index("by_household_time", ["householdId", "createdAt"])
     .index("by_move_time", ["moveId", "createdAt"])
     .index("by_object_time", ["objectTable", "objectId", "createdAt"])
     .index("by_actor_user_time", ["actorUserId", "createdAt"])
+    .index("by_shared_household_time", ["householdId", "projectionOnly", "createdAt"])
+    .index("by_shared_move_time", ["moveId", "projectionOnly", "createdAt"])
+    .index("by_shared_object_time", ["objectTable", "objectId", "projectionOnly", "createdAt"])
+    .index("by_shared_actor_time", ["actorUserId", "projectionOnly", "createdAt"])
+    .index("by_shared_category_time", ["category", "projectionOnly", "createdAt"])
     .index("by_room_history", ["objectTable", "objectId", "roomHistory.version", "createdAt"])
+    .index("by_room_history_visibility", ["objectTable", "objectId", "roomHistory.version", "roomHistory.shared", "createdAt"])
     // Answer "what did THIS agent (api key) do" efficiently — previously a scan.
     .index("by_actor_apikey_time", ["actorApiKeyId", "createdAt"])
     .index("by_category_time", ["category", "createdAt"]),
@@ -1471,7 +1479,8 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     archivedAt: v.optional(v.number()),
-    roomHistoryOmitted: v.optional(v.boolean()),
+    sharedRoomHistoryOmitted: v.optional(v.boolean()),
+    privateRoomHistoryOmitted: v.optional(v.boolean()),
   })
     .index("by_move_sort", ["moveId", "sortOrder"])
     .index("by_move_kind", ["moveId", "kind"])

@@ -102,6 +102,13 @@ it("pins canonical saves, preserves native replay, and never resolves an old sta
       spaces: [{ name: "Synthetic studio", notes }],
       reason: "Synthetic room correction",
     });
+  await expect(f.t.mutation(internal.mcpPlanning.saveMoveContext, {
+    principal: { subject, issuer, clientId },
+    moveId: f.moveId, operationId: "missing-pin", requestHash: "missing-pin", patch: {},
+    spaces: [{ name: "Synthetic studio", notes: "Denied" }], reason: "Missing verified grant",
+  })).rejects.toThrow(/grant changed/);
+  await expect(save("mismatched-pin", second)).rejects.toThrow(/grant changed/);
+  expect((await f.read())?.rows).toHaveLength(1);
   const first = await save("initial");
   expect(await save("initial")).toMatchObject({ ...first, replay: true });
   const noChange = await save("no-change");
@@ -152,6 +159,10 @@ it("records complete-result rooms when saved with independently listed source ch
     }],
     reason: "Record the synthetic room study",
   };
+  await expect(f.t.mutation(internal.mcpPlanning.saveCompleteResult, {
+    ...args, expectedRoomGrantId: undefined,
+  })).rejects.toThrow(/grant changed/);
+  expect((await f.read())?.rows).toHaveLength(1);
   const result = await f.t.mutation(internal.mcpPlanning.saveCompleteResult, args);
   expect(await f.t.mutation(internal.mcpPlanning.saveCompleteResult, args)).toMatchObject({ ...result, replay: true });
   const history = await f.read();
@@ -173,6 +184,9 @@ it("carries the persisted gateway's verified grant into the internal room mutati
     { spaceId: f.spaceId, name: "Synthetic studio", floorLevel: "Changed" },
     { spaceId: f.spaceId, name: "Synthetic studio", floorLevel: "Final" },
   ];
+  await expect(f.t.mutation(internal.mcpToolsWrite.upsertSpaces, {
+    ...f.scope, caller: { subject, claims: { client_id: clientId } }, spaces,
+  })).rejects.toThrow(/verified room-write grant/);
   expect(await gate({} as never, {
     mode: "call", toolName: "upsert_spaces", toolKind: "mutation", identity,
     toolMetadata: null, args: { ...f.scope, spaces },
@@ -245,11 +259,13 @@ it("records only the settled room change in website bulk and keeps canonical arc
   await bulk();
   await bulk();
   expect((await f.read())?.rows).toHaveLength(2);
-  const archive = (action: "archive" | "restore") => f.t.mutation(internal.mcpArchive.archiveMoveRecords, {
+  const archive = (action: "archive" | "restore", pinRoom = true) => f.t.mutation(internal.mcpArchive.archiveMoveRecords, {
     principal: { issuer, subject, clientId: "archiver" },
-    expectedRoomGrantId: grantId, moveId: f.moveId, operationId: action, action,
+    expectedRoomGrantId: pinRoom ? grantId : undefined, moveId: f.moveId, operationId: action, action,
     records: [{ kind: "space", id: f.spaceId }], reason: "Synthetic archive status",
   });
+  await expect(archive("archive", false)).rejects.toThrow(/grant changed/);
+  expect((await f.read())?.rows).toHaveLength(2);
   await archive("archive");
   await archive("archive");
   await archive("restore");
@@ -262,8 +278,64 @@ it("records only the settled room change in website bulk and keeps canonical arc
   expect((await f.read())?.rows).toHaveLength(4);
 });
 
-it("a real packet token grants its packet only", async () => {
+async function restrictedMover(f: Awaited<ReturnType<typeof roomFixture>>) {
+  await f.t.run(async ctx => {
+    const now = Date.now();
+    const userId = await ctx.db.insert("users", {
+      clerkUserId: "restricted-mover", name: "Synthetic mover", appRole: "member", status: "active",
+      createdAt: now, updatedAt: now, lastSeenAt: now,
+    });
+    await ctx.db.insert("moveParticipants", {
+      ...f.scope, userId, role: "viewer", accessKind: "moveOnly",
+      participantType: "mover", status: "active", createdAt: now, updatedAt: now,
+    });
+  });
+  return f.t.withIdentity(nativeWebsiteIdentity("restricted-mover"));
+}
+
+it("keeps authorized recent entries through private churn and confines a valid token to its packet", async () => {
   const f = await roomFixture();
+  const mover = await restrictedMover(f);
+  const history = (limit: number) => mover.query(api.moveSpaces.history, { ...f.args, limit });
+  const activity = () => mover.query(api.audit.listForMove, { ...f.scope, limit: 2 });
+  const objectActivity = () => mover.query(api.audit.listForObject, {
+    ...f.scope, objectTable: "moveSpaces", objectId: f.spaceId, limit: 1,
+  });
+  const batch = (notes: string, floorLevel = "Upper") =>
+    f.person.mutation(api.moveSpaces.upsertBatchForMove, {
+      ...f.scope, spaces: [{ kind: "originRoom", name: "Synthetic studio", floorLevel, notes }],
+    });
+  await batch("private-history-marker-first");
+  const expected = await history(12);
+  expect(expected?.rows.map(row => row.operation)).toEqual(["updated", "created"]);
+  expect(expected?.rows[0].fields).toEqual(["floorLevel"]);
+  expect((await history(1))?.hasMore).toBe(true);
+  expect((await history(2))?.hasMore).toBe(false);
+  const claimReceipt = await f.t.mutation(internal.audit.record, {
+    ...f.scope, action: "claim.synthetic", category: "documentation", actorType: "user", actorUserId: f.userId,
+  });
+  const claimTimeline = async () => (await mover.query(api.claimCenter.summaryForMove, f.scope)).timeline;
+  expect((await claimTimeline()).map(event => event.eventId)).toContain(claimReceipt);
+  const before = await activity();
+  const householdActivity = () => f.person.query(api.audit.listForHousehold, { householdId: f.householdId, limit: 2 });
+  const beforeHousehold = await householdActivity();
+  const beforeObject = await objectActivity();
+  expect(beforeObject.map(event => event.action)).toEqual(["space.created"]);
+  await batch("private-history-marker-second");
+  expect((await activity()).slice(1)).toEqual(before.slice(0, 1));
+  expect((await householdActivity()).slice(1)).toEqual(beforeHousehold.slice(0, 1));
+  expect(await objectActivity()).toEqual(beforeObject);
+  for (let index = 0; index < 65; index++) await batch(`private-history-marker-${index}`);
+  expect(await history(12)).toEqual(expected);
+  expect(await objectActivity()).toEqual(beforeObject);
+  expect((await claimTimeline()).map(event => event.eventId)).toContain(claimReceipt);
+  expect((await activity()).map(event => event.action)).toEqual(["spaces.batch_upserted", "spaces.batch_upserted"]);
+  expect(await f.read(64)).toMatchObject({ olderOmitted: true, hasMore: false });
+  expect((await f.receipts()).filter(row => row.roomHistory?.shared === false)).toHaveLength(62);
+  expect((await mover.query(api.moveSpaces.listForMove, f.scope))[0]).toMatchObject({ name: "Synthetic studio", floorLevel: "Upper" });
+  expect(JSON.stringify(await mover.query(api.moveSpaces.listForMove, f.scope))).not.toMatch(/private-history-marker|RoomHistoryOmitted/);
+  expect((await f.person.query(api.moveSpaces.listForMove, f.scope))[0].notes).toBe("private-history-marker-64");
+
   const documentationProfileId = await f.person.mutation(api.documentationProfiles.create, {
     ...f.scope, type: "movingCompany", name: "Synthetic mover packet",
   });
@@ -273,8 +345,55 @@ it("a real packet token grants its packet only", async () => {
   });
   const packet = await f.t.action(api.shareLinks.resolvePublicView, { token });
   expect(packet).toMatchObject({ status: "ready" });
-  expect(JSON.stringify(packet)).not.toMatch(/roomHistory|Connection [A-F0-9]{12}/);
+  expect(JSON.stringify(packet)).not.toMatch(/roomHistory|private-history-marker|Connection [A-F0-9]{12}/);
+  expect(await history(12)).toEqual(expected);
   expect(await f.t.query(api.moveSpaces.history, { ...f.args, limit: 12 })).toBeNull();
+});
+
+it("keeps one retention budget under interleaved shared and private churn", async () => {
+  vi.useFakeTimers();
+  const f = await roomFixture();
+  const controlRoomId = await f.createRoom("Shared-only control");
+  const mover = await restrictedMover(f);
+  const start = Date.now();
+  const sharedTime = (index: number) => start + index * 20;
+  const privateTime = (index: number) => sharedTime(index) + 10;
+  const history = (spaceId: typeof f.spaceId, limit: number) =>
+    mover.query(api.moveSpaces.history, { ...f.scope, spaceId, limit });
+
+  for (let index = 1; index <= 70; index++) {
+    vi.setSystemTime(sharedTime(index));
+    await f.person.mutation(api.moveSpaces.update, { ...f.args, sortOrder: index });
+    await f.person.mutation(api.moveSpaces.update, { ...f.args, spaceId: controlRoomId, sortOrder: index });
+    expect((await f.receipts()).filter(row => row.roomHistory).length).toBeLessThanOrEqual(64);
+
+    vi.setSystemTime(privateTime(index));
+    await f.person.mutation(api.moveSpaces.update, { ...f.args, notes: `Private edit ${index}` });
+    const retained = (await f.receipts()).filter(row => row.roomHistory);
+    expect(retained).toHaveLength(Math.min(64, 2 * index + 1));
+
+    if ([35, 63, 70].includes(index)) {
+      for (const limit of [1, 12, 63, 64, 1000]) {
+        expect(await history(f.spaceId, limit)).toEqual(await history(controlRoomId, limit));
+      }
+      expect(await history(f.spaceId, 64)).toMatchObject({ olderOmitted: index > 63, hasMore: false });
+      expect(await f.read(64)).toMatchObject({ olderOmitted: true, hasMore: false });
+    }
+    if (index === 35) {
+      expect(retained.filter(row => row.roomHistory?.shared === false).map(row => row.createdAt))
+        .toEqual(Array.from({ length: 28 }, (_, offset) => privateTime(offset + 8)));
+    }
+  }
+
+  const audit = await f.receipts();
+  expect(audit.map(row => row.action)).toEqual(["space.created", ...Array(140).fill("space.updated")]);
+  expect(audit.every(row => row.projectionOnly === undefined)).toBe(true);
+  expect(audit.filter(row => row.metadata?.changedKeys instanceof Array && row.metadata.changedKeys.includes("notes")))
+    .toHaveLength(70);
+  expect(audit.filter(row => row.roomHistory).map(row => row.createdAt))
+    .toEqual(Array.from({ length: 64 }, (_, offset) => sharedTime(offset + 7)));
+  expect(await mover.query(api.audit.listForObject, { ...f.scope, objectTable: "moveSpaces", objectId: f.spaceId, limit: 2 }))
+    .toMatchObject([{ createdAt: privateTime(70) }, { createdAt: sharedTime(70) }]);
 });
 
 it("preserves native receipts when trimming room metadata and drains the purged move only", async () => {
@@ -331,10 +450,101 @@ it("keeps a proven legacy creation neutral, and account removal leaves shared wo
     }
   });
   expect(await f.read()).toMatchObject({ rows: [], legacyCreation: { operation: "created" }, olderOmitted: false });
+  await f.person.mutation(api.moveSpaces.update, { ...f.args, notes: "Legacy private edit" });
+  await f.t.run(async ctx => {
+    const now = Date.now();
+    const userId = await ctx.db.insert("users", {
+      clerkUserId: "legacy-viewer", name: "Synthetic viewer", appRole: "member", status: "active",
+      createdAt: now, updatedAt: now, lastSeenAt: now,
+    });
+    await ctx.db.insert("householdMemberships", {
+      householdId: f.householdId, userId, role: "viewer", status: "active", createdAt: now, updatedAt: now,
+    });
+    for (const receipt of await ctx.db.query("auditLogs").withIndex("by_object_time", q =>
+      q.eq("objectTable", "moveSpaces").eq("objectId", f.spaceId)).collect()) {
+      if (receipt.roomHistory) await ctx.db.patch(receipt._id, { roomHistory: { ...receipt.roomHistory, shared: undefined } });
+    }
+  });
+  const viewer = f.t.withIdentity(nativeWebsiteIdentity("legacy-viewer"));
+  expect(await viewer.query(api.moveSpaces.history, { ...f.args, limit: 1 })).toMatchObject({
+    rows: [], hasMore: false, olderOmitted: false, legacyCreation: { operation: "created" },
+  });
   const request = await f.person.mutation(api.accountPrivacy.requestAccountDeletion, {});
   await f.person.mutation(api.accountPrivacy.completeAccountDeletion, {
     requestId: request, confirmation: ACCOUNT_DELETION_CONFIRMATION,
   });
   expect(await f.read()).toBeNull();
-  expect(await f.receipts()).toHaveLength(1);
+  expect(await f.receipts()).toHaveLength(2);
+});
+
+it("applies a key's current move restriction before REST setup routing or replay", async () => {
+  const f = await roomFixture();
+  const key = await f.legacyKey();
+  await f.finish();
+  const setupPath = "/moves/setup";
+  const setup = {
+    moveId: f.moveId,
+    spaces: [{ kind: "originRoom", name: "Synthetic studio", floorLevel: "Authorized" }],
+  };
+  const request = { method: "POST" as const, path: setupPath, query: {}, body: setup, idempotencyKey: "setup-replay" };
+  const authorization = `Bearer ${key.rawKey}`;
+  expect((await f.t.mutation(internal.restApi.handle, { ...request, authorization })).status).toBe(200);
+  const auth = await f.t.run(ctx => authenticateApiKey(ctx, {
+    rawKey: key.rawKey, requiredScopes: ["moves/write"], action: "POST /api/v1/moves/setup", moveId: f.moveId,
+  }));
+  expect(auth.moveRestricted).toBe(false);
+  await f.t.mutation(internal.apiKeys.reduceCallingKey, {
+    apiKeyId: key.apiKeyId, expectedVersion: auth.version, opId: "restrict-before-commit", moveIds: [f.moveId],
+  });
+
+  const expected = {
+    status: 403, body: { error: { code: "move_restricted_key", message: "Move-restricted API keys cannot create or select moves." } },
+  };
+  for (const body of [
+    setup,
+    { ...setup, spaces: [{ ...setup.spaces[0], floorLevel: "Refused" }] },
+    { title: "Private move", spaces: setup.spaces },
+    { title: "Unlisted move", spaces: setup.spaces },
+    { moveId: f.moveId, title: "Refused without rooms" },
+    { ...setup, dryRun: true },
+  ]) {
+    expect(await f.t.mutation(internal.restApi.commitRequest, { auth, request: { ...request, body } })).toMatchObject(expected);
+  }
+  expect(await f.t.mutation(internal.restApi.handle, { ...request, authorization })).toMatchObject(expected);
+  expect(await f.t.run(ctx => ctx.db.get(f.spaceId))).toMatchObject({ floorLevel: "Authorized" });
+  expect((await f.read())?.rows).toHaveLength(2);
+  expect((await f.request(key.rawKey, "PATCH", `/moves/${f.moveId}/spaces/${f.spaceId}`, { floorLevel: "Still allowed" })).status).toBe(200);
+});
+
+it("uses current private-note visibility in projected room reads and note searches", async () => {
+  vi.stubEnv("CLERK_JWT_ISSUER_DOMAIN", issuer);
+  const f = await roomFixture();
+  const notes = "private-projection-marker";
+  await f.person.mutation(api.moveSpaces.update, { ...f.args, notes });
+  const clientId = "projection-client";
+  await connect(f, clientId);
+  const key = await f.legacyKey();
+  const principal = { subject, issuer, clientId };
+  const readMcp = () => f.t.query(internal.mcpPlanning.getMoveRecords, {
+    principal, moveId: f.moveId, records: [{ kind: "space", id: f.spaceId }],
+  });
+  const searchMcp = () => f.t.query(internal.mcpPlanning.searchMoveRecords, {
+    principal, moveId: f.moveId, kinds: ["space"], query: notes,
+  });
+  const readRest = (route: string) => f.request(key.rawKey, "GET", `/moves/${f.moveId}/${route}`);
+  await f.t.run(ctx => ctx.db.patch(f.membershipId, { role: "editor" }));
+  expect(JSON.stringify(await readMcp())).toContain(notes);
+  expect((await searchMcp()).records).toHaveLength(1);
+  expect(JSON.stringify((await readRest("spaces")).body)).toContain(notes);
+  expect(JSON.stringify((await readRest("agent-context")).body)).toContain(notes);
+  await f.t.run(ctx => ctx.db.patch(f.membershipId, { role: "viewer" }));
+  expect(JSON.stringify(await readMcp())).not.toContain(notes);
+  expect(JSON.stringify(await readMcp())).toContain("Synthetic studio");
+  expect((await searchMcp()).records).toEqual([]);
+  for (const route of ["spaces", "agent-context"]) {
+    const response = await readRest(route);
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(response.body)).toContain("Synthetic studio");
+    expect(JSON.stringify(response.body)).not.toContain(notes);
+  }
 });

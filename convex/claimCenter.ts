@@ -34,7 +34,7 @@ export const summaryForMove = query({
         .collect(),
       ctx.db
         .query("auditLogs")
-        .withIndex("by_move_time", (q) => q.eq("moveId", args.moveId))
+        .withIndex("by_shared_move_time", (q) => q.eq("moveId", args.moveId).eq("projectionOnly", undefined))
         .order("desc")
         .take(100),
     ]);

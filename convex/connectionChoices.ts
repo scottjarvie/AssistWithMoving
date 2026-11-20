@@ -10,7 +10,7 @@ export const listReceipts = query({
   handler: async (ctx, args) => {
     await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
-    const page = await ctx.db.query("auditLogs").withIndex("by_actor_user_time", q => q.eq("actorUserId", user._id))
+    const page = await ctx.db.query("auditLogs").withIndex("by_shared_actor_time", q => q.eq("actorUserId", user._id).eq("projectionOnly", undefined))
       .order("desc").paginate({ numItems: 25, cursor: args.cursor ?? null });
     return { ...page, page: page.page.filter(row => row.objectTable === "aiGrants" || row.objectTable === "apiKeys") };
   },

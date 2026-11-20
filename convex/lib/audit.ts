@@ -59,6 +59,7 @@ export type AuditEventInput = {
   objectId?: string;
   metadata?: AuditMetadata;
   roomHistory?: Doc<"auditLogs">["roomHistory"];
+  projectionOnly?: true;
 };
 
 function redactValue(value: unknown, depth: number): unknown {

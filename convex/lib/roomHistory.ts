@@ -10,12 +10,11 @@ const fields = [
 ] as const;
 type Field = (typeof fields)[number];
 const roomFields = new Set<string>(fields);
-const sharedRoomFields = new Set(fields.filter(field => field !== "notes"));
+const sharedRoomFields = new Set<string>(fields.filter(field => field !== "notes"));
 const operations = ["created", "updated", "archived", "restored"] as const;
 type Operation = (typeof operations)[number];
 const contract = { recordKind: "room", fields: roomFields, operations: new Set<string>(operations) };
 const roomHistoryLimit = 64;
-const generatedActionPrefix = "room.";
 
 type Room = Doc<"moveSpaces">;
 type RoomActor =
@@ -53,6 +52,7 @@ export async function recordRoomReceipt(
   const operation: Operation = !before ? "created"
     : isArchived(before) === isArchived(after) ? "updated"
     : isArchived(after) ? "archived" : "restored";
+  const shared = changedFields.some(field => sharedRoomFields.has(field));
   await recordAuditEvent(ctx, {
     householdId: after.householdId,
     moveId: after.moveId,
@@ -60,7 +60,8 @@ export async function recordRoomReceipt(
     actorUserId: actor.userId,
     actorApiKeyId: actor.lane === "rest" ? actor.keyId : undefined,
     category: actor.lane === "rest" ? "apiKey" : "inventory",
-    action: native?.action ?? `${generatedActionPrefix}${actor.lane}_${operation}`,
+    action: native?.action ?? `room.${actor.lane}_${operation}`,
+    projectionOnly: native ? undefined : true,
     metadata: native?.metadata,
     objectTable: "moveSpaces",
     objectId: roomId,
@@ -68,24 +69,31 @@ export async function recordRoomReceipt(
       version: 1,
       operation,
       fields: changedFields,
+      shared,
       lane: actor.lane,
       grantId: actor.lane === "mcp" ? actor.grantId : undefined,
     } : undefined,
   });
   if (!changedFields.length) return;
-  // Generated object receipts exist only for History. Keep native object
-  // receipts and the original aggregate audit records for their usual lifetime.
-  // The first eviction sets a persistent watermark. After that, each material
-  // write adds one receipt and evicts the single oldest receipt.
-  const retained = roomReceipts(ctx, roomId);
-  const evicted = after.roomHistoryOmitted
-    ? await retained.first()
-    : (await retained.order("desc").take(roomHistoryLimit + 1))[roomHistoryLimit];
-  if (evicted) {
-    if (evicted.action.startsWith(generatedActionPrefix)) await ctx.db.delete(evicted._id);
+  // A prior two-lane implementation could retain 64 per class alongside
+  // up to 64 unclassified stamps. A Room already on this budget reads at most 65.
+  const retained = await roomReceipts(ctx, after).order("desc").take(3 * roomHistoryLimit + 1);
+  if (retained.length <= roomHistoryLimit) return;
+
+  // Shared edits keep first claim on the budget. Unclassified receipts remain
+  // editor-only and compete with private receipts by recency.
+  const sharedReceipts = retained.filter(receipt => receipt.roomHistory?.shared === true);
+  const privateReceipts = retained.filter(receipt => receipt.roomHistory?.shared !== true);
+  const droppedShared = sharedReceipts.slice(roomHistoryLimit);
+  const droppedPrivate = privateReceipts.slice(Math.max(0, roomHistoryLimit - sharedReceipts.length));
+  for (const evicted of [...droppedShared, ...droppedPrivate]) {
+    if (evicted.projectionOnly) await ctx.db.delete(evicted._id);
     else await ctx.db.patch(evicted._id, { roomHistory: undefined });
-    if (!after.roomHistoryOmitted) await ctx.db.patch(roomId, { roomHistoryOmitted: true });
   }
+  const omission: Partial<Room> = {};
+  if (droppedShared.length && !after.sharedRoomHistoryOmitted) omission.sharedRoomHistoryOmitted = true;
+  if (droppedPrivate.length && !after.privateRoomHistoryOmitted) omission.privateRoomHistoryOmitted = true;
+  if (Object.keys(omission).length) await ctx.db.patch(roomId, omission);
 }
 
 /** Compare the first state to the final state, even if a bulk call names a room twice. */
@@ -103,14 +111,19 @@ export function roomReceiptBatch(ctx: MutationCtx, actor: RoomActor) {
   };
 }
 
-function roomReceipts(ctx: QueryCtx | MutationCtx, roomId: Id<"moveSpaces">) {
-  return ctx.db.query("auditLogs").withIndex("by_room_history", q =>
-    q.eq("objectTable", "moveSpaces").eq("objectId", roomId).eq("roomHistory.version", 1));
+function roomReceipts(ctx: QueryCtx | MutationCtx, room: Room, shared?: boolean) {
+  const rows = shared === undefined
+    ? ctx.db.query("auditLogs").withIndex("by_room_history", q =>
+      q.eq("objectTable", "moveSpaces").eq("objectId", room._id).eq("roomHistory.version", 1))
+    : ctx.db.query("auditLogs").withIndex("by_room_history_visibility", q =>
+      q.eq("objectTable", "moveSpaces").eq("objectId", room._id).eq("roomHistory.version", 1).eq("roomHistory.shared", shared));
+  return rows.filter(q => q.and(q.eq(q.field("householdId"), room.householdId), q.eq(q.field("moveId"), room.moveId)));
 }
 
 export async function readRoomHistory(ctx: QueryCtx, room: Room, viewer: Id<"users">, showNotes: boolean, requestedLimit: number) {
   const limit = Math.min(roomHistoryLimit, Math.max(1, Math.floor(requestedLimit) || 1));
-  const receipts = await roomReceipts(ctx, room._id).order("desc").take(limit + 1);
+  // Unclassified legacy stamps are excluded from the shared range.
+  const receipts = await roomReceipts(ctx, room, showNotes ? undefined : true).order("desc").take(limit + 1);
   const rows = await Promise.all(receipts.slice(0, limit).map(async receipt => {
     const stamp = receipt.roomHistory!;
     const actor = stamp.lane === "web" && receipt.actorUserId
@@ -124,7 +137,7 @@ export async function readRoomHistory(ctx: QueryCtx, room: Room, viewer: Id<"use
       record: { kind: "room", scopeRef: room.moveId, ref: room._id },
       operation: stamp.operation, fields: stamp.fields, committedAt: receipt.createdAt,
     }, { actor, transport: stamp.lane, source: stamp.lane === "web" ? "manual" : "unknown" });
-    if (receipt.householdId !== room.householdId || receipt.moveId !== room.moveId || !event) return null;
+    if (!event) return null;
     return projectHistoryRow(event, {
       visibleFields: showNotes ? roomFields : sharedRoomFields,
       // Only the connection owner can see a stable connection-specific code.
@@ -138,13 +151,17 @@ export async function readRoomHistory(ctx: QueryCtx, room: Room, viewer: Id<"use
     });
   }));
 
-  const hasMore = receipts.length > limit;
+  const foundMore = receipts.length > limit;
+  const hasMore = limit < roomHistoryLimit && foundMore;
+  const olderOmitted = room.sharedRoomHistoryOmitted === true ||
+    (showNotes && room.privateRoomHistoryOmitted === true) ||
+    (limit === roomHistoryLimit && foundMore);
   // A native object creation proves a legacy event. Old update receipts only
   // list submitted keys; neither they nor count-only batches prove a delta.
   let legacyCreation: { committedAt: number; operation: "created" } | null = null;
-  if (!hasMore && !room.roomHistoryOmitted && !receipts.some(receipt => receipt.roomHistory?.operation === "created")) {
-    const early = await ctx.db.query("auditLogs").withIndex("by_object_time", q =>
-      q.eq("objectTable", "moveSpaces").eq("objectId", room._id)).take(12);
+  if (!hasMore && !olderOmitted && !receipts.some(receipt => receipt.roomHistory?.operation === "created")) {
+    const early = await ctx.db.query("auditLogs").withIndex("by_shared_object_time", q =>
+      q.eq("objectTable", "moveSpaces").eq("objectId", room._id).eq("projectionOnly", undefined)).take(12);
     const creation = early.find(row => row.householdId === room.householdId && row.moveId === room.moveId &&
       ["space.created", "space.api_created", "space.api_setup_created"].includes(row.action));
     if (creation) legacyCreation = { committedAt: creation.createdAt, operation: "created" };
@@ -153,6 +170,6 @@ export async function readRoomHistory(ctx: QueryCtx, room: Room, viewer: Id<"use
     rows: rows.filter(row => row !== null),
     hasMore,
     legacyCreation,
-    olderOmitted: room.roomHistoryOmitted === true,
+    olderOmitted,
   };
 }

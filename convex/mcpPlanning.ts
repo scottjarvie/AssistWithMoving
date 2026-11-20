@@ -702,7 +702,7 @@ export const searchMoveRecords = internalQuery({
         .take(MAX_SEARCH_CANDIDATES_PER_KIND);
       sourceTruncated ||= rows.length === MAX_SEARCH_CANDIDATES_PER_KIND;
       for (const space of rows) {
-        const haystack = [space.name, ...space.aliases, space.kind, space.notes]
+        const haystack = [space.name, ...space.aliases, space.kind, policy.visibility.privateNotes ? space.notes : undefined]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -907,7 +907,7 @@ export const getMoveRecords = internalQuery({
           name: space.name,
           aliases: space.aliases,
           spaceKind: space.kind,
-          notes: space.notes ?? null,
+          notes: policy.visibility.privateNotes ? space.notes ?? null : null,
           floorLevel: space.floorLevel ?? null,
           updatedAt: space.updatedAt,
         });

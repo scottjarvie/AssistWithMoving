@@ -119,7 +119,7 @@ export const listForMove = query({
     includeArchived: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireMovePermission(
+    const { visibility } = await requireMovePermission(
       ctx,
       args.householdId,
       args.moveId,
@@ -149,7 +149,28 @@ export const listForMove = query({
       .filter((space) => args.includeArchived || space.status !== "archived")
       .filter((space) => (args.kind ? space.kind === args.kind : true))
       .map((space) => ({
-        ...space,
+        _id: space._id,
+        _creationTime: space._creationTime,
+        householdId: space.householdId,
+        moveId: space.moveId,
+        kind: space.kind,
+        name: space.name,
+        aliases: space.aliases,
+        notes: visibility.privateNotes ? space.notes : undefined,
+        floorLevel: space.floorLevel,
+        sortOrder: space.sortOrder,
+        status: space.status,
+        transportResourceId: space.transportResourceId,
+        transportZoneId: space.transportZoneId,
+        linkedPlanEntityId: space.linkedPlanEntityId,
+        capacity: space.capacity,
+        createdByUserId: space.createdByUserId,
+        createdByApiKeyId: space.createdByApiKeyId,
+        updatedByUserId: space.updatedByUserId,
+        updatedByApiKeyId: space.updatedByApiKeyId,
+        createdAt: space.createdAt,
+        updatedAt: space.updatedAt,
+        archivedAt: space.archivedAt,
         photoCount: photoCounts.get(String(space._id)) ?? 0,
       }));
   },

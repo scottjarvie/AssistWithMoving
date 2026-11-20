@@ -103,7 +103,7 @@ export function RoomHistory({
                 </li>}
               </ol>
               {history.olderOmitted
-                ? <p className="text-xs text-muted-foreground">Older activity was omitted after the most recent 64 changes.</p>
+                ? <p className="text-xs text-muted-foreground">Some recorded changes are no longer available.</p>
                 : <p className="text-xs text-muted-foreground">Earlier changes may not have been tracked.</p>}
             </>}
           {history !== null && (history?.hasMore || limit > pageSize) && (
@@ -114,7 +114,7 @@ export function RoomHistory({
               aria-disabled={!history?.hasMore}
               onClick={() => { if (history?.hasMore) setLimit(limit + pageSize); }}
             >
-              {history && !history.hasMore ? "All recorded changes shown" : "Show older changes"}
+              {history && !history.hasMore ? "All available changes shown" : "Show older changes"}
             </Button>
           )}
         </div>
