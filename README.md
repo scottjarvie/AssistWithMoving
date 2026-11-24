@@ -94,9 +94,11 @@ the `api.<module>.<function>` calls into `convex/<module>.ts`, then into the
 | Layout plan | `/app/moves/[moveId]/plan`; `floorPlans`, `planLevels`, `planEntities`, `planPlacements`, `planOps`, `planProposals` | `floorPlans.ts`, `planOps.ts`, `src/components/layout-studio/`, `src/lib/plan-*`; REST `/plans` |
 | Packets and sharing | `/app/moves/[moveId]/packets` and `/share/[token]`; `documentationProfiles`, `shareLinks`, `shareLinkComments`, `exportJobs` | `publicPackets.ts`, `documentation-packet-builder.tsx`, `public-share-viewer.tsx`; REST move routes `/documentation-profiles`, `/share-links`, `/exports` |
 
-Convex calls using `(internal as any)` in `httpRoutes/mcp.ts`, `http.ts` and
-`shareLinks.ts`, and the hand-typed `internalFunctions` in `convex/lib/rest/functionReferences.ts`,
-can bypass generated address checks. Trace these call sites when changing a registration.
+Some Convex calls bypass generated address checks: `(internal as any)` in
+`httpRoutes/mcp.ts`; hand-typed `anyApi` blocks in `http.ts`, `shareLinks.ts` and
+`convex/lib/rest/functionReferences.ts`; and `makeFunctionReference("module:name")`
+strings in `restApi.ts`, `lib/apiKeyAuth.ts` and `lib/carriedAccess.ts`. Trace these
+call sites when changing a registration.
 
 **The MCP surfaces** (easy to confuse — check the right catalog before assuming
 a capability is missing). Three code surfaces serve four public doors: `/mcp`,
