@@ -1,20 +1,25 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { InventoryTable } from "@/components/inventory-table";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const fixture = vi.hoisted(() => ({
   sign: vi.fn(),
-  photos: [] as { _id: string; itemId: string }[],
+  batch: vi.fn(),
+  sessionId: "owner-session",
+  photos: [] as { _id: string; itemId: string; updatedAt: number; derivativeRefs: { thumb?: string } }[],
   items: [] as object[],
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ sessionId: fixture.sessionId }) }));
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   const noop = vi.fn();
   return {
-    useAction: () => fixture.sign,
+    useAction: (ref: Parameters<typeof getFunctionName>[0]) =>
+      getFunctionName(ref) === "photos:getThumbnailUrls" ? fixture.batch : fixture.sign,
+    useConvexAuth: () => ({ isAuthenticated: true }),
     useMutation: () => noop,
     useQuery: (ref: Parameters<typeof getFunctionName>[0]) => {
       switch (getFunctionName(ref)) {
@@ -34,6 +39,8 @@ const moveId = "move-test" as Id<"moves">;
 
 function seed(rows: number) {
   fixture.sign.mockReset();
+  fixture.batch.mockReset();
+  fixture.sessionId = "owner-session";
   fixture.items = Array.from({ length: rows }, (_, index) => ({
     _id: `item-${index}`,
     name: `Synthetic chair ${String(index).padStart(2, "0")}`,
@@ -43,44 +50,105 @@ function seed(rows: number) {
     signals: { boxCodes: [], assignedResourceNames: [], assignedZoneNames: [] },
   }));
   fixture.photos = fixture.items.map((_, index) => ({
-    _id: `photo-${index}`, itemId: `item-${index}`,
+    _id: `photo-${index}`, itemId: `item-${index}`, updatedAt: 1,
+    derivativeRefs: { thumb: `cover-${index}` },
   }));
 }
 
-it("requests card URLs only for the ten mounted covers while text renders immediately", async () => {
+it("signs the ten mounted covers in one call, signs only the next page, and reuses fresh URLs", async () => {
   seed(11);
-  fixture.sign.mockImplementation(({ photoId }) => Promise.resolve({ url: `https://example.test/${photoId}` }));
+  fixture.batch.mockImplementation(async ({ photoIds }: { photoIds: string[] }) =>
+    photoIds.map((photoId) => ({ photoId, url: `https://example.test/${photoId}`, expiresAt: Date.now() + 300_000 })),
+  );
   const { container } = render(<InventoryTable {...{ householdId, moveId }} />);
   expect(screen.getByRole("button", { name: "Open Synthetic chair 00" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "Open Synthetic chair 10" })).toBeNull();
   expect(container.querySelectorAll("img")).toHaveLength(0);
-  expect(fixture.sign).toHaveBeenCalledTimes(10);
-  expect(fixture.sign).toHaveBeenCalledWith({ householdId, moveId, photoId: "photo-0", variant: "card" });
   await act(async () => {});
+  expect(fixture.sign).not.toHaveBeenCalled();
+  expect(fixture.batch).toHaveBeenCalledExactlyOnceWith({
+    householdId, moveId, photoIds: fixture.photos.slice(0, 10).map((photo) => photo._id),
+  });
+  expect(container.querySelectorAll("img")).toHaveLength(10);
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await act(async () => {});
+  expect(fixture.batch).toHaveBeenLastCalledWith({ householdId, moveId, photoIds: ["photo-10"] });
+  expect(container.querySelectorAll("img")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "Prev" }));
+  await act(async () => {});
+  expect(fixture.batch).toHaveBeenCalledTimes(2);
   expect(container.querySelectorAll("img")).toHaveLength(10);
 });
 
 it("skips absent scope and covers, shows an icon on rejection and ignores a late unmounted response", async () => {
   seed(1);
   const noMove = render(<InventoryTable householdId={householdId} moveId={null} />);
-  expect(fixture.sign).not.toHaveBeenCalled();
+  await act(async () => {});
+  expect(fixture.batch).not.toHaveBeenCalled();
   noMove.unmount();
 
   const [photo] = fixture.photos;
   fixture.photos = [];
   const noCover = render(<InventoryTable {...{ householdId, moveId }} />);
-  expect(fixture.sign).not.toHaveBeenCalled();
+  await act(async () => {});
+  expect(fixture.batch).not.toHaveBeenCalled();
   expect(noCover.container.querySelector(".lucide-package")).toBeInTheDocument();
   noCover.unmount();
 
   fixture.photos = [photo];
-  let resolveLate!: (result: { url: string }) => void;
-  const late = new Promise<{ url: string }>((resolve) => { resolveLate = resolve; });
-  fixture.sign.mockReturnValueOnce(late).mockRejectedValueOnce(new Error("Unavailable"));
+  type Result = { photoId: string; url: string; expiresAt: number }[];
+  let resolveLate!: (result: Result) => void;
+  const late = new Promise<Result>((resolve) => { resolveLate = resolve; });
+  fixture.batch.mockReturnValueOnce(late).mockRejectedValueOnce(new Error("Unavailable"));
   const pending = render(<InventoryTable {...{ householdId, moveId }} />);
+  await act(async () => {});
+  expect(fixture.batch).toHaveBeenCalledTimes(1);
   pending.unmount();
   const replacement = render(<InventoryTable {...{ householdId, moveId }} />);
-  await act(async () => resolveLate({ url: "https://example.test/late" }));
+  await act(async () => resolveLate([{ photoId: photo._id, url: "https://example.test/late", expiresAt: Date.now() + 300_000 }]));
+  expect(fixture.batch).toHaveBeenCalledTimes(2);
   expect(replacement.container.querySelector("img")).toBeNull();
   expect(replacement.container.querySelector(".lucide-image-off")).toBeInTheDocument();
+});
+
+it("drops cached capabilities on redaction and never carries them into another session", async () => {
+  seed(1);
+  const [photo] = fixture.photos;
+  fixture.batch.mockResolvedValueOnce([{ photoId: photo._id, url: "https://example.test/owner", expiresAt: Date.now() + 300_000 }]);
+  fixture.batch.mockResolvedValue([]);
+  const view = render(<InventoryTable {...{ householdId, moveId }} />);
+  await act(async () => {});
+  expect(view.container.querySelector("img")).toHaveAttribute("src", "https://example.test/owner");
+  fixture.photos = [{ ...photo, derivativeRefs: {} }];
+  view.rerender(<InventoryTable {...{ householdId, moveId }} />);
+  expect(view.container.querySelector("img")).toBeNull();
+  await act(async () => {});
+  expect(fixture.batch).toHaveBeenCalledTimes(1);
+
+  fixture.sessionId = "viewer-session";
+  fixture.photos = [photo];
+  view.rerender(<InventoryTable {...{ householdId, moveId }} />);
+  expect(view.container.querySelector("img")).toBeNull();
+  await act(async () => {});
+  expect(fixture.batch).toHaveBeenCalledTimes(2);
+  expect(view.container.querySelector("img")).toBeNull();
+});
+
+it("retires a URL before expiry and renews only the active page", async () => {
+  vi.useFakeTimers();
+  try {
+    seed(1);
+    fixture.batch.mockResolvedValueOnce([{
+      photoId: fixture.photos[0]._id, url: "https://example.test/expiring", expiresAt: Date.now() + 11_000,
+    }]).mockResolvedValue([]);
+    const view = render(<InventoryTable {...{ householdId, moveId }} />);
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(view.container.querySelector("img")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    expect(view.container.querySelector("img")).toBeNull();
+    expect(fixture.batch).toHaveBeenCalledTimes(2);
+    view.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
 });

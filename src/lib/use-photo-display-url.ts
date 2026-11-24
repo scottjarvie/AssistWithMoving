@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+
+export const PhotoThumbnailPageUrls = createContext<Record<string, string> | null>(null);
 
 export function usePhotoDisplayUrl(
   householdId: Id<"households"> | null,
@@ -19,6 +21,7 @@ export function usePhotoDisplayUrls(
   moveId: Id<"moves"> | null,
   photoIds: readonly Id<"itemPhotos">[],
 ) {
+  const pageUrls = useContext(PhotoThumbnailPageUrls);
   const getDisplayUrl = useAction(api.photos.getDisplayUrl);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const photoKey = photoIds.join("|");
@@ -28,7 +31,7 @@ export function usePhotoDisplayUrls(
   );
 
   useEffect(() => {
-    if (!householdId || !moveId || visibleIds.length === 0) return;
+    if (pageUrls !== null || !householdId || !moveId || visibleIds.length === 0) return;
     let cancelled = false;
     void Promise.all(
       visibleIds.map(async (photoId) => {
@@ -45,7 +48,7 @@ export function usePhotoDisplayUrls(
     return () => {
       cancelled = true;
     };
-  }, [getDisplayUrl, householdId, moveId, visibleIds]);
+  }, [getDisplayUrl, householdId, moveId, pageUrls, visibleIds]);
 
-  return urls;
+  return pageUrls ?? urls;
 }

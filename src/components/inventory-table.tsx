@@ -17,6 +17,7 @@ import {
 } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
 import { usePhotoDisplayUrl } from "@/lib/use-photo-display-url";
+import { PhotoThumbnailPage } from "@/components/photo-thumbnail-page";
 import {
   ChevronRight,
   ClipboardList,
@@ -1419,6 +1420,16 @@ export function InventoryTable({
                 rowSelection={rowSelection}
                 onRowSelectionChange={setRowSelection}
                 cardOnly
+                wrapPage={(rows, children) => (
+                  <PhotoThumbnailPage
+                    householdId={householdId}
+                    moveId={moveId}
+                    photoIds={rows.map((item) => photoByItem.get(String(item._id)))}
+                    photos={photosData}
+                  >
+                    {children}
+                  </PhotoThumbnailPage>
+                )}
                 renderMobileCard={({ row, selected, onSelectedChange }) => (
                   <InventoryItemCard
                     item={row}

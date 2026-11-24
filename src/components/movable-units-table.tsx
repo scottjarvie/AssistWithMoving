@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { usePhotoDisplayUrl } from "@/lib/use-photo-display-url";
+import { PhotoThumbnailPage } from "@/components/photo-thumbnail-page";
 import {
   type ColumnDef,
   type RowSelectionState,
@@ -836,6 +837,16 @@ export function MovableUnitsTable({
         onSortingChange={setSorting}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
+        wrapPage={(rows, children) => (
+          <PhotoThumbnailPage
+            householdId={householdId}
+            moveId={moveId}
+            photoIds={rows.map((unit) => photosByUnit.get(unit.id)?.[0])}
+            photos={movePhotos}
+          >
+            {children}
+          </PhotoThumbnailPage>
+        )}
         renderMobileCard={({ row, selected, onSelectedChange, onOpen }) => (
           <MovableUnitCard
             unit={row}
