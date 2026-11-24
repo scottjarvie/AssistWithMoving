@@ -8,13 +8,11 @@ import {
   documentationProfileStatuses,
   normalizeDocumentationFilters,
   normalizeDocumentationProfileConfig,
-  shareLinkActions,
   type DocumentationFieldKey,
   type DocumentationFilters,
   type DocumentationImageRule,
   type DocumentationProfileStatus,
   type DocumentationProfileType,
-  type ShareLinkAction,
 } from "../lib/documentation";
 import {
   documentationProfileTypes,
@@ -29,7 +27,8 @@ import {
   restError,
   restOk,
   type RestRequestInput,
-} from "../lib/restApi";
+} from "../lib/rest/core";
+import { asString, includesLiteral, parseLiteralArray, parseShareLinkActions } from "../lib/rest/parse";
 
 type RestApiAuth = Awaited<ReturnType<typeof authenticateApiKey>>;
 
@@ -349,46 +348,4 @@ function parseDocumentationFilters(value: unknown): DocumentationFilters | undef
     room: asString(input.room),
     destinationRoom: asString(input.destinationRoom),
   });
-}
-
-function parseShareLinkActions(value: unknown): ShareLinkAction[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value)) {
-    throw new Error("allowedActions must be an array.");
-  }
-  const actions: ShareLinkAction[] = [];
-  for (const action of value) {
-    if (!includesLiteral(shareLinkActions, action)) {
-      throw new Error("Unsupported share link action.");
-    }
-    actions.push(action as ShareLinkAction);
-  }
-  return Array.from(new Set(actions));
-}
-
-function parseLiteralArray<TValue extends string>(
-  value: unknown,
-  allowed: readonly TValue[],
-  label: string,
-): TValue[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value)) {
-    throw new Error(`${label} must be an array.`);
-  }
-  const entries: TValue[] = [];
-  for (const entry of value) {
-    if (!includesLiteral(allowed, entry)) {
-      throw new Error(`Unsupported ${label} value.`);
-    }
-    entries.push(entry as TValue);
-  }
-  return Array.from(new Set(entries));
-}
-
-function asString(value: unknown) {
-  return typeof value === "string" ? value : undefined;
-}
-
-function includesLiteral(values: readonly string[], value: unknown) {
-  return typeof value === "string" && values.includes(value);
 }

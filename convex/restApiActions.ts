@@ -26,7 +26,7 @@ import {
   type RestRequestInput,
   type RestResponse,
   withRestRateLimitHeaders,
-} from "./lib/restApi";
+} from "./lib/rest/core";
 import {
   assertImageDerivativeUploadFileShape,
   assertOriginalUploadFileShape,

@@ -12,7 +12,7 @@ import {
   type EstimateValue,
 } from "./lib/estimateEngine";
 import { requireMovePermission } from "./lib/permissions";
-import { isLooseMovableUnitRestItem } from "./lib/restApi";
+import { isLooseMovableUnitRestItem } from "./lib/rest/movableUnits";
 
 type BucketTotals = {
   label: string;

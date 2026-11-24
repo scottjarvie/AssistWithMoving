@@ -1,3 +1,4 @@
+// Canonical stateless OAuth (/mcp) backend for briefs, search, reads and saves.
 import { searchItems, searchBoxes, validateInventoryQuery } from "./lib/inventorySearch";
 import { summaryFor } from "./usageLimits";
 import { captureNeedsInput, ingestionStatusToQueueState } from "./lib/queue";

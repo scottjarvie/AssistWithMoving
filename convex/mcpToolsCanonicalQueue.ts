@@ -1,3 +1,4 @@
+// Queue tools for the legacy persisted OAuth door (/mcp/connect).
 import { queueWorkFilter } from "./lib/queue";
 import { requireQueueConnection } from "./lib/queueConnection";
 import { queueAddFields } from "./lib/queueSuggestions";

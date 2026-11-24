@@ -13,7 +13,7 @@ for (const file of ["public/ai.txt", "public/llms.txt", "public/llms-full.txt"])
 // Derive the API-key capability catalogue from tool handlers and the exact
 // backend route-to-power function. Composite handlers include helper powers.
 function source(path) { return ts.createSourceFile(path, fs.readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS); }
-const rest = source("convex/lib/restApi.ts");
+const rest = source("convex/lib/rest/core.ts");
 const routeNode = rest.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "requiredScopesForRestRoute");
 const helperNode = rest.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "isShareLinkUnpublish");
 const routeJs = ts.transpileModule([helperNode, routeNode].map(node => node.getText(rest).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
