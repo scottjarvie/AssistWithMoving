@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api, internal } from "../../convex/_generated/api";
-import { parseRestPath, requiredScopesForRestRoute } from "../../convex/lib/restApi";
+import { parseRestPath, requiredScopesForRestRoute } from "../../convex/lib/rest/core";
 import * as registrations from "../../convex/restApi";
 import { restRouteManifest } from "../../scripts/contract-drift-check.mjs";
 import { accessFixture } from "../helpers/ai-access";

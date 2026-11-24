@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { isLooseMovableUnitRestItem } from "../../convex/lib/restApi";
+import { isLooseMovableUnitRestItem } from "../../convex/lib/rest/movableUnits";
 import { isLooseMovableUnitItem } from "../../src/lib/movable-units";
 
 type Item = Parameters<typeof isLooseMovableUnitItem>[0];

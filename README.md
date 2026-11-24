@@ -63,7 +63,8 @@ convex/lib/         helpers that hold most of the rules: access and roles
                     photo visibility and delivery, upload sessions, Queue
                     service, publishing checks, connector instructions
                     (mcpConnector/)
-convex/rest/        REST handlers split out of restApi.ts (documentation profiles)
+convex/lib/rest/    REST request, access, parsing, patching and response helpers
+convex/rest/        REST route handlers called by restApi.ts
 shared/             limits and policy shared by the site, backend and stdio server:
                     media and upload limits, AI connection policy, API tool access, the
                     moving_ tool-name prefix (moving-mcp-tool-names.mjs)

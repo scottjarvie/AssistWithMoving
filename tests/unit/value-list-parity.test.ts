@@ -80,7 +80,7 @@ it("pins ordered value lists independently across the backend, REST, MCP and Ope
       ? [`${name}: ${value.join(", ")}`]
       : [])
     .sort();
-  const rest = source("convex/restApi.ts");
+  const rest = source("convex/lib/rest/parse.ts");
   const restLists = [
     "boxContainerTypes", "restExportJobTypes", "restShareLinkStatuses",
     "restShareLinkScopes", "restShareLinkRoles", "restEstimateConfidences",
@@ -100,7 +100,7 @@ it("pins ordered value lists independently across the backend, REST, MCP and Ope
 it("records deliberate door-specific confidence and disposition lists", () => {
   const lists = mcpLists();
   const schemas = JSON.parse(readFileSync("public/openapi.json", "utf8")).components.schemas;
-  expect(namedList(source("convex/restApi.ts"), "restEstimateConfidences")).toEqual(moveFields.estimateConfidences);
+  expect(namedList(source("convex/lib/rest/parse.ts"), "restEstimateConfidences")).toEqual(moveFields.estimateConfidences);
   expect(schemas.Confidence.enum).toEqual(moveFields.estimateConfidences);
   expect(lists).toContainEqual([...moveFields.estimateConfidences, "estimated"]);
   expect(lists).toContainEqual(moveFields.itemDispositions);

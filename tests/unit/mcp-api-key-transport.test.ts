@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { apiKeyPrefix, generateApiKeySecret } from "../../convex/lib/apiKeys";
-import { bearerToken } from "../../convex/lib/restApi";
+import { bearerToken } from "../../convex/lib/rest/core";
 import {
   apiKeyFromRequest,
   requestHasQueryStringKey,

@@ -1,26 +1,76 @@
-import { searchApiItems, validateInventoryQuery } from "./lib/inventorySearch";
-import { summaryFor, uploadPolicy } from "./usageLimits";
-import {queueNeedsInput} from "./lib/queue";
-import {queueWorkFilter} from "./lib/queue";
-import { createQueueItem, readQueueSuggestions, reviewQueueSuggestion, type QueueResultRef } from "./lib/queueService";
-import { ConvexError } from "convex/values";
+import {
+  searchApiItems,
+  validateInventoryQuery,
+} from "./lib/inventorySearch";
+import {
+  summaryFor,
+  uploadPolicy,
+} from "./usageLimits";
+import {
+  queueNeedsInput,
+  queueWorkFilter,
+  queueItemMatchesEffectiveState,
+  queueStates,
+  type QueueState,
+} from "./lib/queue";
+import {
+  createQueueItem,
+  readQueueSuggestions,
+  reviewQueueSuggestion,
+  type QueueResultRef,
+  claimQueueItem,
+  completeQueueItem,
+  releaseQueueItem,
+  reportQueueFailure,
+  requestQueueInput,
+  requireQueueItem,
+  requireQueueItemVisible,
+  shapeQueueItemForRead,
+  type QueueAccessActor,
+} from "./lib/queueService";
+import {
+  ConvexError,
+  v,
+} from "convex/values";
 import { withSharedPublishing } from "./lib/sharedPublishing";
-import { readAccess, readConnection, connectionAccess, accessState, keyScopes } from "./lib/carriedAccess";
+import {
+  readAccess,
+  readConnection,
+  connectionAccess,
+  accessState,
+  keyScopes,
+} from "./lib/carriedAccess";
 import { previewPublicPacket } from "./publicPackets";
 import { checkPublishing } from "./lib/publishingCheck";
 import apiToolAccess from "../shared/api-tool-access.json";
-import { apiKeyScopes } from "./lib/apiKeys";
-import { anyApi, makeFunctionReference, type FunctionReference } from "convex/server";
-import { v } from "convex/values";
-
-import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, type MutationCtx } from "./_generated/server";
+import {
+  apiKeyScopes,
+  hashApiKey,
+} from "./lib/apiKeys";
+import {
+  anyApi,
+  makeFunctionReference,
+  type FunctionReference,
+} from "convex/server";
+import type {
+  Doc,
+  Id,
+} from "./_generated/dataModel";
+import {
+  internalMutation,
+  type MutationCtx,
+} from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
-import { agentAccessDisabled, resolveMoveAccess } from "./lib/moveAccess";
-import { recordRoomReceipt, roomReceiptBatch } from "./lib/roomHistory";
+import {
+  agentAccessDisabled,
+  resolveMoveAccess,
+} from "./lib/moveAccess";
+import {
+  recordRoomReceipt,
+  roomReceiptBatch,
+} from "./lib/roomHistory";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
 import { SETTINGS_REFUSAL } from "./lib/connectionReduction";
-import { hashApiKey } from "./lib/apiKeys";
 import { getAiProviderStatus } from "./lib/aiProvider";
 import {
   buildMoveDayChecklist,
@@ -47,16 +97,11 @@ import {
   type ExportVisibility,
 } from "./lib/exportRows";
 import {
-  shareLinkActions,
-  type ShareLinkAction,
-} from "./lib/documentation";
-import {
   boxVolumeCuFt,
   estimateItem,
   finitePercent,
   roundEstimate,
   sumEstimateValues,
-  weightBoundsFromEstimate,
 } from "./lib/estimateEngine";
 import { itemDimensionsConfidenceForRead } from "../src/lib/inventory-measurements";
 import { summarizeMoveQuestionsFromDocs } from "./lib/moveQuestionDocuments";
@@ -67,17 +112,8 @@ import {
 import { addOrInviteHouseholdMemberByEmail } from "./lib/householdInvitations";
 import { convertItemToBoxCore } from "./boxes";
 import {
-  boxStatuses,
-  buildMovePatch,
-  documentationProfileTypes,
   defaultDocumentationProfilesForMoveType,
-  exifHandlingStatuses,
-  itemConditions,
-  itemDispositions,
   itemFragilities,
-  itemStatuses,
-  measurementProvenanceSources,
-  normalizeDocumentationProfileTypes,
   normalizeBoxCode,
   normalizeItemName,
   normalizeOptionalText,
@@ -85,54 +121,20 @@ import {
   normalizeSortOrder,
   normalizedSearchName,
   planningDefaultKeys,
-  photoPrivacyLevels,
-  photoSources,
-  photoTypes,
-  photoVerificationStatuses,
-  photoVisibilityScopes,
-  moveSpaceKinds,
-  saleListingPlatforms,
-  saleListingStatuses,
-  saleResearchDepths,
-  moveTypes,
-  pcsBranches,
-  pcsDependentStatuses,
-  pcsShipmentTypes,
-  transportResourcePresetKeys,
-  transportResourceTypes,
 } from "./lib/moveFields";
 import {
   createGeneratedShareLink,
   revokeShareLinkRecord,
-  safeShareLinkMetadata,
-  type ShareLinkRole,
 } from "./lib/shareLinks";
 import {
   approvePlanningSuggestions,
   createPlanningSuggestionsForMove,
   rejectPlanningSuggestions,
-  type PlanningSuggestionApprovalInput,
 } from "./lib/aiPlanningSuggestionWorkflow";
 import { suggestFromPhotoIntake } from "./lib/photoIntake";
 import { canUsePhotoDerivativeForAi } from "./lib/photoVisibility";
 import { suggestAssignmentForBox } from "./lib/planningSuggestions";
 import { parseTextIntakeSuggestions } from "./lib/textIntakeParser";
-import {
-  queueItemMatchesEffectiveState,
-  queueStates,
-  type QueueState,
-} from "./lib/queue";
-import {
-  claimQueueItem,
-  completeQueueItem,
-  releaseQueueItem,
-  reportQueueFailure,
-  requestQueueInput,
-  requireQueueItem,
-  requireQueueItemVisible,
-  shapeQueueItemForRead,
-  type QueueAccessActor,
-} from "./lib/queueService";
 import {
   canViewQueueEntry,
   queueManagerRecoveryAllowed,
@@ -140,7 +142,6 @@ import {
 } from "./lib/queueAccess";
 import { canPerformHouseholdAction } from "./lib/roles";
 import { getTransportResourcePreset } from "./lib/transportPresets";
-import { deriveTransportCapacity } from "./transportResources";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 import {
   describePlanDocument,
@@ -171,26 +172,123 @@ import {
   type RestRequestInput,
   type RestRateLimitResult,
   type RestResponse,
-} from "./lib/restApi";
+  errorStatus,
+} from "./lib/rest/core";
 import {
   routeDocumentationProfiles,
   safeDocumentationProfile,
 } from "./rest/documentationProfiles";
 import {
-  boxContainerTypes,
-  exportJobTypes as restExportJobTypes,
-  shareLinkRoles as restShareLinkRoles,
-  plannedItemStatuses as restPlannedItemStatuses,
-  movePersonRoles as restMovePersonRoles,
-  estimateConfidences as restEstimateConfidences,
-  aiPlanningSuggestionStatuses as restPlanningSuggestionStatuses,
-  aiJobStatuses as restAiJobStatuses,
-  aiTextSuggestionStatuses as restAiSuggestionStatuses,
-  shareLinkStatuses as restShareLinkStatuses,
-  shareLinkScopes as restShareLinkScopes,
-} from "../shared/move-vocabulary.mjs";
+  type RestExportJobType,
+  parseDimensionsIn,
+  optionalNumber,
+  positiveNumber,
+  createMoveWeightAllowanceLb,
+  boundedInteger,
+  asString,
+  optionalString,
+  requiredBodyString,
+  externalItemKeyFromInput,
+  parseBoxContainerType,
+  parseMoveType,
+  parseUnitSystem,
+  parsePcsBranch,
+  parsePcsDependentStatus,
+  parsePcsShipmentType,
+  parseItemStatus,
+  parsePlannedItemStatus,
+  parseDisposition,
+  parseMoveSpaceKind,
+  parseMoveSpaceStatus,
+  parseCondition,
+  parseBoxStatus,
+  parseMovePersonRole,
+  parsePlanningSuggestionStatus,
+  parseAiJobStatus,
+  parseAiSuggestionStatus,
+  parsePlanningConfidence,
+  parseFragility,
+  parsePlanningDefaultKeys,
+  parseDocumentationProfileTypes,
+  parseExportJobType,
+  parseLiteralArray,
+  parseShareLinkStatus,
+  parseShareLinkScope,
+  parseShareLinkRole,
+  parseShareLinkActions,
+  parseTransportResourceType,
+  parseTransportResourcePresetKey,
+  parseCapacityReviewStatus,
+  parseCapacity,
+  parseStringArray,
+  parseIdArray,
+  removeUndefined,
+  includesLiteral,
+} from "./lib/rest/parse";
+import {
+  addRestDerivedWeightBounds,
+  addRestDerivedEstimatedVolume,
+  setupMoveStatus,
+  setupMovePatch,
+  movePatch,
+  transportResourcePatch,
+  transportZonePatch,
+  movePersonPatch,
+  parseMeasurementProvenance,
+  inferredApiMeasurementProvenance,
+  itemPatch,
+  plannedItemPatch,
+  boxPatch,
+  photoAttachPatch,
+  normalizePlannedItemPriority,
+  saleListingPatchFromBody,
+  parsePlanningApprovals,
+} from "./lib/rest/patch";
+import {
+  requireApiMove,
+  requireApiPlan,
+  requireApiItem,
+  requireApiPlannedItem,
+  requireApiItemById,
+  requireApiBox,
+  requireApiBoxById,
+  requireApiMovePerson,
+  requireApiPhotoById,
+  requireApiTransportResource,
+  requireApiTransportZone,
+  requireApiDocumentationProfile,
+  requireApiExportJob,
+  requireApiShareLink,
+  requiredQueryMoveId,
+  assertApiObjectMoveAccess,
+  assertRequestedMoveMatches,
+} from "./lib/rest/require";
+import {
+  safeMove,
+  safeItem,
+  safePlannedItem,
+  safeBox,
+  safeMovePerson,
+  safeTransportResource,
+  safeTransportZone,
+  safeMoveSpace,
+  safeSaleListing,
+  safeAssignment,
+  safePlanningSuggestion,
+  safeAiJob,
+  safeAiTextSuggestion,
+  safeAiPhotoSuggestion,
+  safePhoto,
+  safeExportJob,
+  safeApiShareLink,
+  safeApiShareLinkComment,
+  artifactForApiExport,
+} from "./lib/rest/safe";
 
-type RestExportJobType = (typeof restExportJobTypes)[number];
+export { setupMovePatch, movePatch, saleListingPatchFromBody } from "./lib/rest/patch";
+export { createMoveWeightAllowanceLb } from "./lib/rest/parse";
+export { errorStatus } from "./lib/rest/core";
+
 const maxBatchUpsertItems = 100;
 
 const internalFunctions = anyApi as unknown as {
@@ -3451,7 +3549,6 @@ async function routeBatchUpsertItems(
   );
 }
 
-
 type RestMovableUnitBoxRow = {
   unit: Record<string, unknown>;
   unitIndex: number;
@@ -3973,44 +4070,6 @@ async function findApiBoxByCode(
     boxes.find((box) => box.householdId === householdId && !box.archivedAt) ??
     null
   );
-}
-
-// Fill the weight range (low 75% / high 135%) from the point estimate when the
-// caller didn't send explicit bounds — so the REST/MCP AI can send just
-// estimatedWeightLb. Mirrors items.ts. Explicit bounds are never overwritten.
-function addRestDerivedWeightBounds(body: Record<string, unknown>) {
-  const bounds = weightBoundsFromEstimate(optionalNumber(body.estimatedWeightLb));
-  if (!bounds) {
-    return body;
-  }
-  if (
-    body.estimatedWeightLowLb === undefined ||
-    body.estimatedWeightLowLb === null
-  ) {
-    body.estimatedWeightLowLb = bounds.low;
-  }
-  if (
-    body.estimatedWeightHighLb === undefined ||
-    body.estimatedWeightHighLb === null
-  ) {
-    body.estimatedWeightHighLb = bounds.high;
-  }
-  return body;
-}
-
-function addRestDerivedEstimatedVolume(body: Record<string, unknown>) {
-  if (body.estimatedVolumeCuFt !== undefined && body.estimatedVolumeCuFt !== null) {
-    return body;
-  }
-  const dimensions = bodyObject(body.dimensionsIn);
-  const length = optionalNumber(dimensions.lengthIn);
-  const width = optionalNumber(dimensions.widthIn);
-  const height = optionalNumber(dimensions.heightIn);
-  if (!length || !width || !height) {
-    return body;
-  }
-  body.estimatedVolumeCuFt = roundEstimate((length * width * height) / 1728);
-  return body;
 }
 
 function hasRestStableExternalItemKey(unit: Record<string, unknown>) {
@@ -4816,8 +4875,11 @@ async function routeAiPhotoSuggestions(
 }
 
 type RestAiTextItemDraft = NonNullable<Doc<"aiTextSuggestions">["itemDraft"]>;
+
 type RestAiTextBoxDraft = NonNullable<Doc<"aiTextSuggestions">["boxDraft"]>;
+
 type RestAiPhotoItemDraft = NonNullable<Doc<"aiPhotoSuggestions">["itemDraft"]>;
+
 type RestAiPhotoBoxDraft = NonNullable<Doc<"aiPhotoSuggestions">["boxDraft"]>;
 
 type RestAiTextApproval = {
@@ -6679,39 +6741,6 @@ async function withIdempotency(
   return response;
 }
 
-async function requireApiMove(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">
-) {
-  const move = await ctx.db.get(moveId);
-  if (!move || move.householdId !== householdId || move.status === "archived") {
-    throw new Error("Move not found.");
-  }
-  return move;
-}
-
-async function requireApiPlan(
-  ctx: MutationCtx,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  planIdSegment: string
-) {
-  const plan = await ctx.db.get(planIdSegment as Id<"floorPlans">);
-  if (
-    !plan ||
-    plan.householdId !== auth.householdId ||
-    plan.archivedAt ||
-    plan.status !== "active"
-  ) {
-    throw new Error("Plan not found.");
-  }
-  if (auth.moveId && auth.moveId !== plan.moveId) {
-    throw new Error("Plan not found.");
-  }
-  await requireApiMove(ctx, auth.householdId, plan.moveId);
-  return plan;
-}
-
 async function planDocumentForApi(
   ctx: MutationCtx,
   plan: Doc<"floorPlans">
@@ -6891,641 +6920,6 @@ function safePlanProposal(proposal: Doc<"planProposals">) {
   };
 }
 
-async function requireApiItem(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  itemIdSegment: string
-) {
-  const item = await ctx.db.get(itemIdSegment as Id<"items">);
-  if (!item || item.householdId !== householdId || item.moveId !== moveId || item.deletedAt) {
-    throw new Error("Item not found.");
-  }
-  return item;
-}
-
-async function requireApiPlannedItem(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  plannedItemIdSegment: string,
-  includeArchived = false
-) {
-  const plannedItem = await ctx.db.get(plannedItemIdSegment as Id<"plannedItems">);
-  if (
-    !plannedItem ||
-    plannedItem.householdId !== householdId ||
-    plannedItem.moveId !== moveId ||
-    (!includeArchived && plannedItem.archivedAt)
-  ) {
-    throw new Error("Planned item not found.");
-  }
-  return plannedItem;
-}
-
-async function requireApiItemById(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  itemIdSegment: string
-) {
-  const item = await ctx.db.get(itemIdSegment as Id<"items">);
-  if (!item || item.householdId !== householdId || item.deletedAt) {
-    throw new Error("Item not found.");
-  }
-  return item;
-}
-
-async function requireApiBox(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  boxIdSegment: string
-) {
-  const box = await ctx.db.get(boxIdSegment as Id<"boxes">);
-  if (!box || box.householdId !== householdId || box.moveId !== moveId || box.archivedAt) {
-    throw new Error("Box not found.");
-  }
-  return box;
-}
-
-async function requireApiBoxById(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  boxIdSegment: string
-) {
-  const box = await ctx.db.get(boxIdSegment as Id<"boxes">);
-  if (!box || box.householdId !== householdId || box.archivedAt) {
-    throw new Error("Box not found.");
-  }
-  return box;
-}
-
-async function requireApiMovePerson(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  personIdSegment: string,
-  includeArchived = false
-) {
-  const person = await ctx.db.get(personIdSegment as Id<"movePeople">);
-  if (
-    !person ||
-    person.householdId !== householdId ||
-    person.moveId !== moveId ||
-    (!includeArchived && person.archivedAt)
-  ) {
-    throw new Error("Move person not found.");
-  }
-  return person;
-}
-
-async function requireApiPhotoById(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  photoIdSegment: string
-) {
-  const photo = await ctx.db.get(photoIdSegment as Id<"itemPhotos">);
-  if (!photo || photo.householdId !== householdId || photo.archivedAt) {
-    throw new Error("Photo not found.");
-  }
-  return photo;
-}
-
-async function requireApiTransportResource(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  resourceIdSegment: string
-) {
-  const resource = await ctx.db.get(
-    resourceIdSegment as Id<"transportResources">
-  );
-  if (
-    !resource ||
-    resource.householdId !== householdId ||
-    resource.moveId !== moveId ||
-    resource.archivedAt
-  ) {
-    throw new Error("Transport resource not found.");
-  }
-  return resource;
-}
-
-async function requireApiTransportZone(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  zoneIdSegment: string
-) {
-  const zone = await ctx.db.get(zoneIdSegment as Id<"transportZones">);
-  if (
-    !zone ||
-    zone.householdId !== householdId ||
-    zone.moveId !== moveId ||
-    zone.archivedAt
-  ) {
-    throw new Error("Transport zone not found.");
-  }
-  return zone;
-}
-
-async function requireApiDocumentationProfile(
-  ctx: MutationCtx,
-  args: {
-    householdId: Id<"households">;
-    moveId: Id<"moves">;
-    documentationProfileId?: Id<"documentationProfiles">;
-  }
-) {
-  if (!args.documentationProfileId) {
-    throw new Error("Documentation profile export requires a profile.");
-  }
-  const profile = await ctx.db.get(args.documentationProfileId);
-  if (
-    !profile ||
-    profile.householdId !== args.householdId ||
-    profile.moveId !== args.moveId ||
-    profile.status === "archived"
-  ) {
-    throw new Error("Documentation profile not found.");
-  }
-  return profile;
-}
-
-async function requireApiExportJob(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  exportIdSegment: string
-) {
-  const job = await ctx.db.get(exportIdSegment as Id<"exportJobs">);
-  if (!job || job.householdId !== householdId || job.moveId !== moveId) {
-    throw new Error("Export job not found.");
-  }
-  return job;
-}
-
-async function requireApiShareLink(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  shareLinkIdSegment: string
-) {
-  const link = await ctx.db.get(shareLinkIdSegment as Id<"shareLinks">);
-  if (!link || link.householdId !== householdId || link.moveId !== moveId) {
-    throw new Error("Share link not found.");
-  }
-  return link;
-}
-
-function requiredQueryMoveId(query: Record<string, string>) {
-  if (!query.moveId) {
-    throw new Error("moveId query parameter is required.");
-  }
-  return query.moveId as Id<"moves">;
-}
-
-function assertApiObjectMoveAccess(
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  objectMoveId: Id<"moves">
-) {
-  if (auth.moveId && auth.moveId !== objectMoveId) {
-    throw new Error("API key is not allowed for this operation.");
-  }
-}
-
-function assertRequestedMoveMatches(
-  args: RestRequestInput,
-  objectMoveId: Id<"moves">,
-  message: string
-) {
-  const requestedMoveId = optionalRequestMoveId(args);
-  if (requestedMoveId && requestedMoveId !== objectMoveId) {
-    throw new Error(message);
-  }
-}
-
-function optionalRequestMoveId(args: RestRequestInput) {
-  return moveIdFromRestBodyOrQuery({
-    body: args.body,
-    query: args.query,
-  }) as Id<"moves"> | undefined;
-}
-
-function safeMove(move: Doc<"moves">) {
-  return {
-    moveId: move._id,
-    title: move.title,
-    type: move.type,
-    status: move.status,
-    origin: move.origin,
-    destination: move.destination,
-    dateStart: move.dateStart,
-    dateEnd: move.dateEnd,
-    unitSystem: move.unitSystem,
-    documentationProfileTypes: move.documentationProfileTypes,
-    createdAt: move.createdAt,
-    updatedAt: move.updatedAt,
-  };
-}
-
-type ApiVisibility = Awaited<ReturnType<typeof authenticateApiKey>>["visibility"];
-
-function safeItem(item: Doc<"items">, visibility: ApiVisibility) {
-  return {
-    itemId: item._id,
-    name: item.name,
-    externalSource: item.externalSource,
-    externalId: item.externalId,
-    description: item.description,
-    room: item.room,
-    destinationRoom: item.destinationRoom,
-    currentSpaceId: item.currentSpaceId,
-    destinationSpaceId: item.destinationSpaceId,
-    category: item.category,
-    disposition: item.disposition,
-    status: item.status,
-    quantity: item.quantity,
-    condition: item.condition,
-    // Gate value/serial behind the key creator's role (same as the web/gateway).
-    valueCents: visibility.estimatedValue ? item.valueCents : undefined,
-    replacementValueCents: visibility.estimatedValue
-      ? item.replacementValueCents
-      : undefined,
-    serialNumber: visibility.serialNumber ? item.serialNumber : undefined,
-    modelNumber: visibility.serialNumber ? item.modelNumber : undefined,
-    dimensionsIn: item.dimensionsIn,
-    measurementProvenance: item.measurementProvenance,
-    dimensionsConfidence: itemDimensionsConfidenceForRead({
-      dimensionsIn: item.dimensionsIn,
-      dimensionsConfidence: item.dimensionsConfidence,
-    }),
-    estimatedWeightLb: item.estimatedWeightLb,
-    estimatedWeightLowLb: item.estimatedWeightLowLb,
-    estimatedWeightHighLb: item.estimatedWeightHighLb,
-    actualWeightLb: item.actualWeightLb,
-    estimatedVolumeCuFt: item.estimatedVolumeCuFt,
-    estimatedPackedVolumeCuFt: item.estimatedPackedVolumeCuFt,
-    weightConfidence: item.weightConfidence,
-    volumeConfidence: item.volumeConfidence,
-    highValue: item.highValue,
-    needsReview: item.needsReview,
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
-  };
-}
-
-function safePlannedItem(plannedItem: Doc<"plannedItems">) {
-  return {
-    plannedItemId: plannedItem._id,
-    moveId: plannedItem.moveId,
-    name: plannedItem.name,
-    category: plannedItem.category,
-    subcategory: plannedItem.subcategory,
-    description: plannedItem.description,
-    dimensionsIn: plannedItem.dimensionsIn,
-    dimensionsConfidence: plannedItem.dimensionsConfidence,
-    estimatedPriceCents: plannedItem.estimatedPriceCents,
-    url: plannedItem.url,
-    priority: plannedItem.priority,
-    notes: plannedItem.notes,
-    status: plannedItem.status,
-    convertedItemId: plannedItem.convertedItemId,
-    createdVia: plannedItem.createdVia,
-    createdAt: plannedItem.createdAt,
-    updatedAt: plannedItem.updatedAt,
-    archivedAt: plannedItem.archivedAt,
-  };
-}
-
-function safeBox(box: Doc<"boxes">) {
-  return {
-    boxId: box._id,
-    code: box.code,
-    label: box.label,
-    room: box.room,
-    destinationRoom: box.destinationRoom,
-    status: box.status,
-    estimatedWeightLb: box.estimatedWeightLb,
-    actualWeightLb: box.actualWeightLb,
-    estimatedVolumeCuFt: box.estimatedVolumeCuFt,
-    assignedResourceId: box.assignedResourceId,
-    assignedZoneId: box.assignedZoneId,
-    assignmentLocked: box.assignmentLocked,
-    assignmentWarnings: box.assignmentWarnings,
-    assignmentHardBlocks: box.assignmentHardBlocks,
-    createdAt: box.createdAt,
-    updatedAt: box.updatedAt,
-  };
-}
-
-function safeMovePerson(person: Doc<"movePeople">) {
-  return {
-    personId: person._id,
-    name: person.name,
-    role: person.role,
-    email: person.email,
-    phone: person.phone,
-    notes: person.notes,
-    sortOrder: person.sortOrder,
-    archivedAt: person.archivedAt,
-    createdAt: person.createdAt,
-    updatedAt: person.updatedAt,
-  };
-}
-
-function safeTransportResource(resource: Doc<"transportResources">) {
-  return {
-    resourceId: resource._id,
-    type: resource.type,
-    name: resource.name,
-    description: resource.description,
-    capacity: resource.capacity,
-    capacityReviewStatus: resource.capacityReviewStatus ?? "unreviewed",
-    capacityNotes: resource.capacityNotes,
-    capacityReviewedAt: resource.capacityReviewedAt,
-    capacityReviewedByUserId: resource.capacityReviewedByUserId,
-    rules: resource.rules,
-    sortOrder: resource.sortOrder,
-    createdAt: resource.createdAt,
-    updatedAt: resource.updatedAt,
-  };
-}
-
-function safeTransportZone(zone: Doc<"transportZones">) {
-  return {
-    zoneId: zone._id,
-    resourceId: zone.resourceId,
-    name: zone.name,
-    description: zone.description,
-    capacity: zone.capacity,
-    preferredTags: zone.preferredTags,
-    sortOrder: zone.sortOrder,
-    createdAt: zone.createdAt,
-    updatedAt: zone.updatedAt,
-  };
-}
-
-function safeMoveSpace(space: Doc<"moveSpaces">, showNotes: boolean) {
-  return {
-    spaceId: space._id,
-    kind: space.kind,
-    name: space.name,
-    aliases: space.aliases,
-    notes: showNotes ? space.notes : undefined,
-    floorLevel: space.floorLevel,
-    sortOrder: space.sortOrder,
-    status: space.status,
-    transportResourceId: space.transportResourceId,
-    transportZoneId: space.transportZoneId,
-    linkedPlanEntityId: space.linkedPlanEntityId,
-    capacity: space.capacity,
-    createdAt: space.createdAt,
-    updatedAt: space.updatedAt,
-  };
-}
-
-function safeSaleListing(listing: Doc<"saleListings">) {
-  return {
-    listingId: listing._id,
-    itemId: listing.itemId,
-    status: listing.status,
-    platform: listing.platform,
-    platformLabel: listing.platformLabel,
-    listingTitle: listing.listingTitle,
-    listingDescription: listing.listingDescription,
-    category: listing.category,
-    condition: listing.condition,
-    locationLabel: listing.locationLabel,
-    selectedPhotoIds: listing.selectedPhotoIds,
-    listingUrl: listing.listingUrl,
-    listedAt: listing.listedAt,
-    lastRefreshedAt: listing.lastRefreshedAt,
-    suggestedPriceLowCents: listing.suggestedPriceLowCents,
-    suggestedPriceHighCents: listing.suggestedPriceHighCents,
-    officialPriceCents: listing.officialPriceCents,
-    currency: listing.currency,
-    pricingConfidence: listing.pricingConfidence,
-    priceDecisionSource: listing.priceDecisionSource,
-    userOverrodePrice: listing.userOverrodePrice,
-    researchDepth: listing.researchDepth,
-    researchSourceCount: listing.researchSourceCount,
-    researchSources: listing.researchSources,
-    researchedAt: listing.researchedAt,
-    researchedByApiKeyId: listing.researchedByApiKeyId,
-    researchedByLabel: listing.researchedByLabel,
-    researchNotes: listing.researchNotes,
-    interestedCount: listing.interestedCount,
-    inquiryNotes: listing.inquiryNotes,
-    offerNotes: listing.offerNotes,
-    buyerNotes: listing.buyerNotes,
-    pickupStatus: listing.pickupStatus,
-    soldPriceCents: listing.soldPriceCents,
-    soldAt: listing.soldAt,
-    needsMorePhotos: listing.needsMorePhotos,
-    createdAt: listing.createdAt,
-    updatedAt: listing.updatedAt,
-  };
-}
-
-function safeAssignment(assignment: Doc<"boxItems">) {
-  return {
-    assignmentId: assignment._id,
-    boxId: assignment.boxId,
-    itemId: assignment.itemId,
-    quantity: assignment.quantity,
-    notes: assignment.notes,
-    createdAt: assignment.createdAt,
-    updatedAt: assignment.updatedAt,
-  };
-}
-
-function safePlanningSuggestion(suggestion: Doc<"aiPlanningSuggestions">) {
-  return {
-    suggestionId: suggestion._id,
-    aiJobId: suggestion.aiJobId,
-    type: suggestion.type,
-    status: suggestion.status,
-    itemId: suggestion.itemId,
-    boxId: suggestion.boxId,
-    confidence: suggestion.confidence,
-    reasoning: suggestion.reasoning,
-    assumptions: suggestion.assumptions,
-    estimateDraft: suggestion.estimateDraft,
-    assignmentDraft: suggestion.assignmentDraft,
-    reviewedAt: suggestion.reviewedAt,
-    createdAt: suggestion.createdAt,
-    updatedAt: suggestion.updatedAt,
-  };
-}
-
-function safeAiJob(job: Doc<"aiJobs">) {
-  return {
-    aiJobId: job._id,
-    type: job.type,
-    status: job.status,
-    modality: job.modality,
-    provider: job.provider,
-    model: job.model,
-    inputSummary: job.inputSummary,
-    outputSummary: job.outputSummary,
-    confidence: job.confidence,
-    reviewStatus: job.reviewStatus,
-    tokenUsage: job.tokenUsage,
-    cost: job.cost,
-    maxCostCents: job.maxCostCents,
-    retryCount: job.retryCount,
-    maxRetries: job.maxRetries,
-    error: job.error,
-    startedAt: job.startedAt,
-    completedAt: job.completedAt,
-    canceledAt: job.canceledAt,
-    createdAt: job.createdAt,
-    updatedAt: job.updatedAt,
-  };
-}
-
-function safeAiTextSuggestion(suggestion: Doc<"aiTextSuggestions">) {
-  return {
-    suggestionId: suggestion._id,
-    aiJobId: suggestion.aiJobId,
-    type: suggestion.type,
-    status: suggestion.status,
-    sourceLine: suggestion.sourceLine,
-    sourceIndex: suggestion.sourceIndex,
-    confidence: suggestion.confidence,
-    reasoning: suggestion.reasoning,
-    itemDraft: suggestion.itemDraft,
-    boxDraft: suggestion.boxDraft,
-    approvedItemId: suggestion.approvedItemId,
-    approvedBoxId: suggestion.approvedBoxId,
-    reviewedAt: suggestion.reviewedAt,
-    createdAt: suggestion.createdAt,
-    updatedAt: suggestion.updatedAt,
-  };
-}
-
-function safeAiPhotoSuggestion(suggestion: Doc<"aiPhotoSuggestions">) {
-  return {
-    suggestionId: suggestion._id,
-    photoId: suggestion.photoId,
-    aiJobId: suggestion.aiJobId,
-    type: suggestion.type,
-    status: suggestion.status,
-    sourceDerivativeVariant: suggestion.sourceDerivativeVariant,
-    sourceSummary: suggestion.sourceSummary,
-    confidence: suggestion.confidence,
-    reasoning: suggestion.reasoning,
-    itemDraft: suggestion.itemDraft,
-    boxDraft: suggestion.boxDraft,
-    duplicatePhotoIds: suggestion.duplicatePhotoIds,
-    approvedItemId: suggestion.approvedItemId,
-    approvedBoxId: suggestion.approvedBoxId,
-    reviewedAt: suggestion.reviewedAt,
-    createdAt: suggestion.createdAt,
-    updatedAt: suggestion.updatedAt,
-  };
-}
-
-function safePhoto(photo: Doc<"itemPhotos">) {
-  return {
-    photoId: photo._id,
-    itemId: photo.itemId,
-    boxId: photo.boxId,
-    spaceId: photo.spaceId,
-    transportResourceId: photo.transportResourceId,
-    transportZoneId: photo.transportZoneId,
-    room: photo.room,
-    documentationProfileTypes: photo.documentationProfileTypes,
-    photoType: photo.photoType,
-    privacyLevel: photo.privacyLevel,
-    visibilityScope: photo.visibilityScope,
-    verificationStatus: photo.verificationStatus,
-    caption: photo.caption,
-    width: photo.width,
-    height: photo.height,
-    mimeType: photo.mimeType,
-    sizeBytes: photo.sizeBytes,
-    capturedAt: photo.capturedAt,
-    uploadedAt: photo.createdAt,
-    updatedAt: photo.updatedAt,
-  };
-}
-
-function safeExportJob(job: Doc<"exportJobs">) {
-  return {
-    exportJobId: job._id,
-    moveId: job.moveId,
-    documentationProfileId: job.documentationProfileId,
-    type: job.type,
-    format: job.format,
-    status: job.status,
-    filename: job.filename,
-    mimeType: job.mimeType,
-    rowCount: job.rowCount,
-    sizeBytes: job.sizeBytes,
-    createdAt: job.createdAt,
-    completedAt: job.completedAt,
-    expiresAt: job.expiresAt,
-  };
-}
-
-function safeApiShareLink(link: Doc<"shareLinks">) {
-  const safe = safeShareLinkMetadata(link);
-  return {
-    shareLinkId: safe._id,
-    moveId: safe.moveId,
-    documentationProfileId: safe.documentationProfileId,
-    scope: safe.scope,
-    tokenPreview: safe.tokenPreview,
-    label: safe.label,
-    role: safe.role,
-    status: safe.status,
-    allowedActions: safe.allowedActions,
-    expiresAt: safe.expiresAt,
-    revokedAt: safe.revokedAt,
-    accessCount: safe.accessCount,
-    lastAccessedAt: safe.lastAccessedAt,
-    createdAt: safe.createdAt,
-    updatedAt: safe.updatedAt,
-  };
-}
-
-async function safeApiShareLinkComment(
-  ctx: MutationCtx,
-  comment: Doc<"shareLinkComments">
-) {
-  const [link, profile] = await Promise.all([
-    ctx.db.get(comment.shareLinkId),
-    ctx.db.get(comment.documentationProfileId),
-  ]);
-  return {
-    commentId: comment._id,
-    shareLinkId: comment.shareLinkId,
-    documentationProfileId: comment.documentationProfileId,
-    shareLabel: link?.label,
-    profileName: profile?.name,
-    role: comment.role,
-    authorLabel: comment.authorLabel,
-    body: comment.body,
-    createdAt: comment.createdAt,
-  };
-}
-
-function artifactForApiExport(job: Doc<"exportJobs">) {
-  if (job.status !== "completed" || !job.artifactText) {
-    throw new Error("Export artifact is not ready.");
-  }
-  if (job.expiresAt && job.expiresAt < Date.now()) {
-    throw new Error("Export artifact has expired.");
-  }
-  return {
-    ...safeExportJob(job),
-    artifactText: job.artifactText,
-    encoding: "utf-8",
-  };
-}
-
 async function findApiMoveByTitle(
   ctx: MutationCtx,
   householdId: Id<"households">,
@@ -7543,51 +6937,6 @@ async function findApiMoveByTitle(
         move.title.trim().toLowerCase() === normalized,
     ) ?? null
   );
-}
-
-const setupArchiveMessage =
-  "Archiving a move isn't supported via this endpoint — archive it in the app.";
-
-function setupMoveStatus(value: unknown): Doc<"moves">["status"] {
-  if (value === undefined) return "planning";
-  return (
-    buildMovePatch(
-      { status: value },
-      { archivedStatusMessage: setupArchiveMessage },
-    ).status ?? "planning"
-  );
-}
-
-export function setupMovePatch(
-  body: Record<string, unknown>,
-  notes: string | undefined,
-): Partial<Doc<"moves">> {
-  const notesPatch = body.notes === null && notes === undefined ? null : notes;
-  const patch = buildMovePatch(
-    {
-      title: body.title,
-      status: body.status,
-      origin: body.origin,
-      destination: body.destination,
-      dateStart: body.dateStart,
-      dateEnd: body.dateEnd,
-      documentationProfileTypes: body.documentationProfileTypes,
-      moveLevelWeightAllowanceLb: body.moveLevelWeightAllowanceLb,
-      ...(body.notes !== undefined ||
-      body.originRooms !== undefined ||
-      body.destinationRooms !== undefined
-        ? { notes: notesPatch }
-        : {}),
-    },
-    { archivedStatusMessage: setupArchiveMessage },
-  );
-  if (body.type !== undefined) {
-    patch.type = parseMoveType(body.type) ?? "other";
-  }
-  if (body.unitSystem !== undefined) {
-    patch.unitSystem = parseUnitSystem(body.unitSystem) ?? "imperial";
-  }
-  return patch;
 }
 
 function setupRoomsNote(body: Record<string, unknown>) {
@@ -8511,690 +7860,6 @@ function rowsForExport({
   }
 }
 
-export function movePatch(body: unknown): Partial<Doc<"moves">> {
-  return buildMovePatch(bodyObject(body));
-}
-
-function transportResourcePatch(
-  body: unknown,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>
-): Partial<Doc<"transportResources">> {
-  const input = bodyObject(body);
-  const now = Date.now();
-  const patch: Partial<Doc<"transportResources">> = { updatedAt: now };
-  if (input.type !== undefined) {
-    const type = parseTransportResourceType(input.type);
-    if (!type) throw new Error("Invalid transport resource type.");
-    patch.type = type;
-  }
-  if (input.name !== undefined) {
-    const name = normalizeOptionalText(asString(input.name));
-    if (!name) throw new Error("name cannot be empty.");
-    patch.name = name;
-  }
-  if (input.description !== undefined) {
-    patch.description = normalizeOptionalText(asString(input.description));
-  }
-  if (input.capacity !== undefined) {
-    patch.capacity = parseCapacity(input.capacity) ?? {};
-  }
-  if (input.capacityReviewStatus !== undefined) {
-    const status = parseCapacityReviewStatus(input.capacityReviewStatus);
-    if (!status) throw new Error("Invalid capacityReviewStatus.");
-    patch.capacityReviewStatus = status;
-    patch.capacityReviewedAt = now;
-    patch.capacityReviewedByUserId = auth.createdByUserId;
-  }
-  if (input.capacityNotes !== undefined) {
-    patch.capacityNotes = normalizeOptionalText(asString(input.capacityNotes));
-  }
-  if (input.rules !== undefined) {
-    patch.rules = normalizeRuleList(parseStringArray(input.rules) ?? []);
-  }
-  if (input.sortOrder !== undefined) {
-    patch.sortOrder = normalizeSortOrder(optionalNumber(input.sortOrder));
-  }
-  return patch;
-}
-
-async function transportZonePatch(
-  ctx: MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  body: unknown
-): Promise<Partial<Doc<"transportZones">>> {
-  const input = bodyObject(body);
-  const patch: Partial<Doc<"transportZones">> = { updatedAt: Date.now() };
-  if (input.resourceId !== undefined) {
-    const resourceId = optionalString(input.resourceId);
-    if (!resourceId) throw new Error("resourceId cannot be empty.");
-    await requireApiTransportResource(ctx, householdId, moveId, resourceId);
-    patch.resourceId = resourceId as Id<"transportResources">;
-  }
-  if (input.name !== undefined) {
-    const name = normalizeOptionalText(asString(input.name));
-    if (!name) throw new Error("name cannot be empty.");
-    patch.name = name;
-  }
-  if (input.description !== undefined) {
-    patch.description = normalizeOptionalText(asString(input.description));
-  }
-  if (input.capacity !== undefined) {
-    patch.capacity = parseCapacity(input.capacity) ?? {};
-  }
-  if (input.preferredTags !== undefined) {
-    patch.preferredTags = normalizeRuleList(parseStringArray(input.preferredTags) ?? []);
-  }
-  if (input.sortOrder !== undefined) {
-    patch.sortOrder = normalizeSortOrder(optionalNumber(input.sortOrder));
-  }
-  return patch;
-}
-
-function movePersonPatch(
-  body: unknown,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>
-): Partial<Doc<"movePeople">> {
-  const input = bodyObject(body);
-  const patch: Partial<Doc<"movePeople">> = {
-    updatedByUserId: auth.createdByUserId,
-    updatedByApiKeyId: auth.apiKeyId,
-    updatedAt: Date.now(),
-  };
-  if (input.name !== undefined) {
-    const name = normalizeOptionalText(asString(input.name));
-    if (!name) throw new Error("name cannot be empty.");
-    patch.name = name;
-  }
-  if (input.role !== undefined) {
-    const role = parseMovePersonRole(input.role);
-    if (!role) throw new Error("Invalid move person role.");
-    patch.role = role;
-  }
-  if (input.email !== undefined) {
-    patch.email = normalizeOptionalText(asString(input.email));
-  }
-  if (input.phone !== undefined) {
-    patch.phone = normalizeOptionalText(asString(input.phone));
-  }
-  if (input.notes !== undefined) {
-    patch.notes = normalizeOptionalText(asString(input.notes));
-  }
-  if (input.sortOrder !== undefined) {
-    patch.sortOrder = normalizeSortOrder(optionalNumber(input.sortOrder));
-  }
-  if (input.archivedAt !== undefined) {
-    patch.archivedAt = optionalNumber(input.archivedAt);
-  }
-  return patch;
-}
-
-function verificationNeeded(confidence: Doc<"items">["weightConfidence"]) {
-  return confidence !== "manual" && confidence !== "actual";
-}
-
-function hasDimensionsIn(dimensions: Doc<"items">["dimensionsIn"] | undefined) {
-  return Boolean(
-    dimensions &&
-      (dimensions.lengthIn !== undefined ||
-        dimensions.widthIn !== undefined ||
-        dimensions.heightIn !== undefined),
-  );
-}
-
-function parseMeasurementProvenanceSource(value: unknown) {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(measurementProvenanceSources, value)) {
-    throw new Error("Unsupported measurement provenance sourceType.");
-  }
-  return value as NonNullable<
-    NonNullable<Doc<"items">["measurementProvenance"]>["weight"]
-  >["sourceType"];
-}
-
-function apiMeasurementProvenanceEntry({
-  input,
-  auth,
-  now,
-  fallbackSourceType,
-  fallbackConfidence,
-  fallbackLabel,
-  fallbackNotes,
-}: {
-  input: Record<string, unknown>;
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>;
-  now: number;
-  fallbackSourceType: NonNullable<
-    NonNullable<Doc<"items">["measurementProvenance"]>["weight"]
-  >["sourceType"];
-  fallbackConfidence: Doc<"items">["weightConfidence"];
-  fallbackLabel: string;
-  fallbackNotes?: string;
-}): NonNullable<NonNullable<Doc<"items">["measurementProvenance"]>["weight"]> {
-  const confidence =
-    parsePlanningConfidence(input.confidence, "measurementProvenance.confidence") ??
-    fallbackConfidence;
-  const apiKeyLabel = `${auth.apiKeyName} (${auth.apiKeyTokenPreview})`;
-  return {
-    sourceType:
-      parseMeasurementProvenanceSource(input.sourceType) ?? fallbackSourceType,
-    confidence,
-    label: normalizeOptionalText(asString(input.label)) ?? fallbackLabel,
-    notes: normalizeOptionalText(asString(input.notes)) ?? fallbackNotes,
-    recordedAt: optionalNumber(input.recordedAt) ?? now,
-    recordedByUserId: auth.createdByUserId,
-    recordedByApiKeyId: auth.apiKeyId,
-    recordedByLabel:
-      normalizeOptionalText(asString(input.recordedByLabel)) ??
-      `API key: ${apiKeyLabel}`,
-    needsVerification:
-      input.needsVerification === undefined
-        ? verificationNeeded(confidence)
-        : Boolean(input.needsVerification),
-  };
-}
-
-function parseMeasurementProvenance(
-  value: unknown,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  now: number,
-): Doc<"items">["measurementProvenance"] | undefined {
-  if (value === undefined) return undefined;
-  const input = bodyObject(value);
-  const provenance: NonNullable<Doc<"items">["measurementProvenance"]> = {};
-  if (input.dimensions !== undefined) {
-    provenance.dimensions = apiMeasurementProvenanceEntry({
-      input: bodyObject(input.dimensions),
-      auth,
-      now,
-      fallbackSourceType: "api",
-      fallbackConfidence: "low",
-      fallbackLabel: "Dimensions",
-    });
-  }
-  if (input.weight !== undefined) {
-    provenance.weight = apiMeasurementProvenanceEntry({
-      input: bodyObject(input.weight),
-      auth,
-      now,
-      fallbackSourceType: "api",
-      fallbackConfidence: "low",
-      fallbackLabel: "Weight",
-    });
-  }
-  if (input.volume !== undefined) {
-    provenance.volume = apiMeasurementProvenanceEntry({
-      input: bodyObject(input.volume),
-      auth,
-      now,
-      fallbackSourceType: "api",
-      fallbackConfidence: "low",
-      fallbackLabel: "Volume",
-    });
-  }
-  return Object.keys(provenance).length ? provenance : undefined;
-}
-
-function inferredApiMeasurementProvenance(
-  body: Record<string, unknown>,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  now: number,
-  existing?: Doc<"items">,
-): Doc<"items">["measurementProvenance"] | undefined {
-  const provenance: NonNullable<Doc<"items">["measurementProvenance"]> = {
-    ...(existing?.measurementProvenance ?? {}),
-  };
-  let changed = false;
-  const dimensions = parseDimensionsIn(body.dimensionsIn);
-  if (body.dimensionsIn !== undefined && hasDimensionsIn(dimensions)) {
-    changed = true;
-    const confidence =
-      parsePlanningConfidence(body.dimensionsConfidence, "dimensionsConfidence") ??
-      "low";
-    provenance.dimensions = apiMeasurementProvenanceEntry({
-      input: {},
-      auth,
-      now,
-      fallbackSourceType: "api",
-      fallbackConfidence: confidence,
-      fallbackLabel: "Dimensions",
-      fallbackNotes: "Measurement values were supplied through the API.",
-    });
-  }
-  if (
-    body.actualWeightLb !== undefined ||
-    body.estimatedWeightLb !== undefined ||
-    body.estimatedWeightLowLb !== undefined ||
-    body.estimatedWeightHighLb !== undefined
-  ) {
-    changed = true;
-    const confidence =
-      body.actualWeightLb !== undefined
-        ? "actual"
-        : (parsePlanningConfidence(body.weightConfidence, "weightConfidence") ??
-          "low");
-    provenance.weight = apiMeasurementProvenanceEntry({
-      input: {},
-      auth,
-      now,
-      fallbackSourceType: "api",
-      fallbackConfidence: confidence,
-      fallbackLabel: "Weight",
-      fallbackNotes: "Weight values were supplied through the API.",
-    });
-  }
-  if (
-    body.estimatedVolumeCuFt !== undefined ||
-    body.estimatedPackedVolumeCuFt !== undefined
-  ) {
-    changed = true;
-    const confidence =
-      parsePlanningConfidence(body.volumeConfidence, "volumeConfidence") ?? "low";
-    provenance.volume = apiMeasurementProvenanceEntry({
-      input: {},
-      auth,
-      now,
-      fallbackSourceType: "api",
-      fallbackConfidence: confidence,
-      fallbackLabel: "Volume",
-      fallbackNotes: "Volume values were supplied through the API.",
-    });
-  }
-  return changed ? provenance : undefined;
-}
-
-function itemPatch(
-  body: unknown,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  existing?: Doc<"items">,
-): Partial<Doc<"items">> {
-  const input = bodyObject(body);
-  // Recompute volume from dimensions + weight range from the point estimate when
-  // those change without explicit values.
-  addRestDerivedEstimatedVolume(input);
-  addRestDerivedWeightBounds(input);
-  const now = Date.now();
-  const patch: Partial<Doc<"items">> = {
-    updatedByUserId: auth.createdByUserId,
-    updatedAt: now,
-  };
-  if (input.name !== undefined) {
-    const name = normalizeItemName(String(input.name));
-    patch.name = name;
-    patch.normalizedName = normalizedSearchName(name);
-  }
-  if (input.description !== undefined) {
-    patch.description = normalizeOptionalText(asString(input.description));
-  }
-  if (input.room !== undefined) patch.room = normalizeOptionalText(asString(input.room));
-  if (input.destinationRoom !== undefined) {
-    patch.destinationRoom = normalizeOptionalText(asString(input.destinationRoom));
-  }
-  if (input.category !== undefined) {
-    patch.category = normalizeOptionalText(asString(input.category));
-  }
-  if (input.disposition !== undefined) patch.disposition = parseDisposition(input.disposition);
-  if (input.status !== undefined) patch.status = parseItemStatus(input.status);
-  if (input.quantity !== undefined) patch.quantity = positiveNumber(input.quantity) ?? 1;
-  if (input.condition !== undefined) patch.condition = parseCondition(input.condition);
-  if (input.valueCents !== undefined) patch.valueCents = optionalNumber(input.valueCents);
-  if (input.replacementValueCents !== undefined) {
-    patch.replacementValueCents = optionalNumber(input.replacementValueCents);
-  }
-  if (input.serialNumber !== undefined) {
-    patch.serialNumber = normalizeOptionalText(asString(input.serialNumber));
-  }
-  if (input.modelNumber !== undefined) {
-    patch.modelNumber = normalizeOptionalText(asString(input.modelNumber));
-  }
-  if (input.dimensionsIn !== undefined) {
-    patch.dimensionsIn = parseDimensionsIn(input.dimensionsIn);
-  }
-  if (input.measurementProvenance !== undefined) {
-    patch.measurementProvenance = {
-      ...(existing?.measurementProvenance ?? {}),
-      ...parseMeasurementProvenance(input.measurementProvenance, auth, now),
-    };
-  }
-  if (input.dimensionsConfidence !== undefined) {
-    patch.dimensionsConfidence = parsePlanningConfidence(
-      input.dimensionsConfidence,
-      "dimensionsConfidence"
-    );
-  }
-  if (input.estimatedWeightLb !== undefined) {
-    patch.estimatedWeightLb = optionalNumber(input.estimatedWeightLb);
-  }
-  if (input.estimatedWeightLowLb !== undefined) {
-    patch.estimatedWeightLowLb = optionalNumber(input.estimatedWeightLowLb);
-  }
-  if (input.estimatedWeightHighLb !== undefined) {
-    patch.estimatedWeightHighLb = optionalNumber(input.estimatedWeightHighLb);
-  }
-  if (input.actualWeightLb !== undefined) {
-    patch.actualWeightLb = optionalNumber(input.actualWeightLb);
-  }
-  if (input.estimatedVolumeCuFt !== undefined) {
-    patch.estimatedVolumeCuFt = optionalNumber(input.estimatedVolumeCuFt);
-  }
-  if (input.estimatedPackedVolumeCuFt !== undefined) {
-    patch.estimatedPackedVolumeCuFt = optionalNumber(input.estimatedPackedVolumeCuFt);
-  }
-  if (input.weightConfidence !== undefined) {
-    patch.weightConfidence =
-      parsePlanningConfidence(input.weightConfidence, "weightConfidence") ?? "none";
-  }
-  if (input.volumeConfidence !== undefined) {
-    patch.volumeConfidence =
-      parsePlanningConfidence(input.volumeConfidence, "volumeConfidence") ?? "none";
-  }
-  if (input.fragility !== undefined) {
-    patch.fragility = parseFragility(input.fragility) ?? "low";
-  }
-  if (input.stackable !== undefined) patch.stackable = Boolean(input.stackable);
-  if (input.hazardousFlag !== undefined) {
-    patch.hazardousFlag = Boolean(input.hazardousFlag);
-  }
-  if (input.highValue !== undefined) patch.highValue = Boolean(input.highValue);
-  if (input.requiresPersonalTransport !== undefined) {
-    patch.requiresPersonalTransport = Boolean(input.requiresPersonalTransport);
-  }
-  if (input.planningDefaultKeys !== undefined) {
-    patch.planningDefaultKeys = parsePlanningDefaultKeys(input.planningDefaultKeys) ?? [];
-  }
-  if (input.needsReview !== undefined) patch.needsReview = Boolean(input.needsReview);
-  if (input.reviewFlags !== undefined) {
-    patch.reviewFlags = normalizeRuleList(parseStringArray(input.reviewFlags) ?? []);
-  }
-  if (input.privateNotes !== undefined) {
-    patch.privateNotes = normalizeOptionalText(asString(input.privateNotes));
-  }
-  if (input.aiSummary !== undefined) {
-    patch.aiSummary = normalizeOptionalText(asString(input.aiSummary));
-  }
-  if (input.aiTags !== undefined) {
-    patch.aiTags = normalizeRuleList(parseStringArray(input.aiTags) ?? []);
-  }
-  if (input.externalSource !== undefined || input.externalId !== undefined) {
-    const externalKey = externalItemKeyFromInput(input);
-    patch.externalSource = externalKey?.externalSource;
-    patch.externalId = externalKey?.externalId;
-  }
-  if (input.measurementProvenance === undefined) {
-    const inferredProvenance = inferredApiMeasurementProvenance(
-      input,
-      auth,
-      now,
-      existing,
-    );
-    if (inferredProvenance) {
-      patch.measurementProvenance = inferredProvenance;
-    }
-  }
-  return patch;
-}
-
-function plannedItemPatch(
-  body: unknown,
-  userId: Id<"users">
-): Partial<Doc<"plannedItems">> {
-  const input = bodyObject(body);
-  const patch: Partial<Doc<"plannedItems">> = {
-    updatedByUserId: userId,
-    updatedAt: Date.now(),
-  };
-  if (input.name !== undefined) {
-    const name = normalizeItemName(String(input.name));
-    if (!name) {
-      throw new Error("name is required.");
-    }
-    patch.name = name;
-    patch.normalizedName = normalizedSearchName(name);
-  }
-  if (input.category !== undefined) {
-    patch.category = normalizeOptionalText(asString(input.category));
-  }
-  if (input.subcategory !== undefined) {
-    patch.subcategory = normalizeOptionalText(asString(input.subcategory));
-  }
-  if (input.description !== undefined) {
-    patch.description = normalizeOptionalText(asString(input.description));
-  }
-  if (input.dimensionsIn !== undefined) {
-    patch.dimensionsIn = parseDimensionsIn(input.dimensionsIn);
-  }
-  if (input.dimensionsConfidence !== undefined) {
-    patch.dimensionsConfidence = parsePlanningConfidence(
-      input.dimensionsConfidence,
-      "dimensionsConfidence"
-    );
-  }
-  if (input.estimatedPriceCents !== undefined) {
-    patch.estimatedPriceCents = optionalNumber(input.estimatedPriceCents);
-  }
-  if (input.url !== undefined) {
-    patch.url = normalizeOptionalText(asString(input.url));
-  }
-  if (input.priority !== undefined) {
-    patch.priority = normalizePlannedItemPriority(optionalNumber(input.priority));
-  }
-  if (input.notes !== undefined) {
-    patch.notes = normalizeOptionalText(asString(input.notes));
-  }
-  if (input.status !== undefined) {
-    patch.status = parsePlannedItemStatus(input.status) ?? "idea";
-  }
-  return patch;
-}
-
-function parseDimensionsIn(
-  value: unknown
-): Doc<"items">["dimensionsIn"] | undefined {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("dimensionsIn must be an object.");
-  }
-  const input = value as Record<string, unknown>;
-  const dimensions = removeUndefined({
-    lengthIn: optionalNumber(input.lengthIn),
-    widthIn: optionalNumber(input.widthIn),
-    heightIn: optionalNumber(input.heightIn),
-  });
-  return Object.keys(dimensions).length ? dimensions : undefined;
-}
-
-function boxPatch(body: unknown): Partial<Doc<"boxes">> {
-  const input = bodyObject(body);
-  // Recompute volume from dimensions when dims change without an explicit volume.
-  addRestDerivedEstimatedVolume(input);
-  const patch: Partial<Doc<"boxes">> = { updatedAt: Date.now() };
-  if (input.code !== undefined) patch.code = normalizeBoxCode(String(input.code));
-  if (input.label !== undefined) patch.label = normalizeOptionalText(asString(input.label));
-  if (input.room !== undefined) patch.room = normalizeOptionalText(asString(input.room));
-  if (input.destinationRoom !== undefined) {
-    patch.destinationRoom = normalizeOptionalText(asString(input.destinationRoom));
-  }
-  if (input.description !== undefined) {
-    patch.description = normalizeOptionalText(asString(input.description));
-  }
-  if (input.status !== undefined) patch.status = parseBoxStatus(input.status);
-  if (input.dimensionsIn !== undefined) {
-    patch.dimensionsIn = parseDimensionsIn(input.dimensionsIn) as Doc<"boxes">["dimensionsIn"];
-  }
-  if (input.estimatedWeightLb !== undefined) {
-    patch.estimatedWeightLb = optionalNumber(input.estimatedWeightLb);
-  }
-  if (input.actualWeightLb !== undefined) {
-    patch.actualWeightLb = optionalNumber(input.actualWeightLb);
-  }
-  if (input.estimatedVolumeCuFt !== undefined) {
-    patch.estimatedVolumeCuFt = optionalNumber(input.estimatedVolumeCuFt);
-  }
-  if (input.assignedResourceId !== undefined) {
-    patch.assignedResourceId = optionalString(input.assignedResourceId) as
-      | Id<"transportResources">
-      | undefined;
-  }
-  if (input.assignedZoneId !== undefined) {
-    patch.assignedZoneId = optionalString(input.assignedZoneId) as
-      | Id<"transportZones">
-      | undefined;
-  }
-  if (input.assignmentLocked !== undefined) {
-    patch.assignmentLocked = Boolean(input.assignmentLocked);
-  }
-  if (input.assignmentOverrideReason !== undefined) {
-    patch.assignmentOverrideReason = normalizeOptionalText(
-      asString(input.assignmentOverrideReason)
-    );
-  }
-  return patch;
-}
-
-async function photoAttachPatch(
-  ctx: MutationCtx,
-  args: {
-    householdId: Id<"households">;
-    moveId: Id<"moves">;
-    reviewedByUserId: Id<"users">;
-    body: unknown;
-  }
-): Promise<Partial<Doc<"itemPhotos">>> {
-  const input = bodyObject(args.body);
-  const now = Date.now();
-  const patch: Partial<Doc<"itemPhotos">> = { updatedAt: now };
-
-  if (input.itemId !== undefined) {
-    const itemId = optionalString(input.itemId) as Id<"items"> | undefined;
-    if (itemId) {
-      await requireApiItem(ctx, args.householdId, args.moveId, itemId);
-    }
-    patch.itemId = itemId;
-  }
-  if (input.boxId !== undefined) {
-    const boxId = optionalString(input.boxId) as Id<"boxes"> | undefined;
-    if (boxId) {
-      await requireApiBox(ctx, args.householdId, args.moveId, boxId);
-    }
-    patch.boxId = boxId;
-  }
-  if (input.spaceId !== undefined) {
-    const spaceId = optionalString(input.spaceId) as Id<"moveSpaces"> | undefined;
-    if (spaceId) {
-      const space = await ctx.db.get(spaceId);
-      if (
-        !space ||
-        space.householdId !== args.householdId ||
-        space.moveId !== args.moveId ||
-        space.status === "archived"
-      ) {
-        throw new Error("Space not found.");
-      }
-    }
-    patch.spaceId = spaceId;
-  }
-  if (input.transportResourceId !== undefined) {
-    const transportResourceId = optionalString(input.transportResourceId) as
-      | Id<"transportResources">
-      | undefined;
-    if (transportResourceId) {
-      const resource = await ctx.db.get(transportResourceId);
-      if (
-        !resource ||
-        resource.householdId !== args.householdId ||
-        resource.moveId !== args.moveId ||
-        resource.archivedAt
-      ) {
-        throw new Error("Transport resource not found.");
-      }
-    }
-    patch.transportResourceId = transportResourceId;
-  }
-  if (input.transportZoneId !== undefined) {
-    const transportZoneId = optionalString(input.transportZoneId) as
-      | Id<"transportZones">
-      | undefined;
-    if (transportZoneId) {
-      const zone = await ctx.db.get(transportZoneId);
-      if (
-        !zone ||
-        zone.householdId !== args.householdId ||
-        zone.moveId !== args.moveId ||
-        zone.archivedAt
-      ) {
-        throw new Error("Transport zone not found.");
-      }
-    }
-    patch.transportZoneId = transportZoneId;
-  }
-  if (input.room !== undefined) {
-    patch.room = normalizeOptionalText(asString(input.room));
-  }
-  if (input.claimId !== undefined) {
-    patch.claimId = normalizeOptionalText(asString(input.claimId));
-  }
-  if (input.documentationProfileTypes !== undefined) {
-    patch.documentationProfileTypes = parseDocumentationProfileTypes(
-      input.documentationProfileTypes
-    );
-  }
-  if (input.caption !== undefined) {
-    patch.caption = normalizeOptionalText(asString(input.caption));
-  }
-  if (input.photoType !== undefined) {
-    const photoType = parsePhotoType(input.photoType);
-    if (!photoType) throw new Error("Unsupported photoType.");
-    patch.photoType = photoType;
-  }
-  if (input.privacyLevel !== undefined) {
-    const privacyLevel = parsePhotoPrivacyLevel(input.privacyLevel);
-    if (!privacyLevel) throw new Error("Unsupported privacyLevel.");
-    patch.privacyLevel = privacyLevel;
-  }
-  if (input.visibilityScope !== undefined) {
-    const visibilityScope = parsePhotoVisibilityScope(input.visibilityScope);
-    if (!visibilityScope) throw new Error("Unsupported visibilityScope.");
-    patch.visibilityScope = visibilityScope;
-  }
-  if (input.source !== undefined) {
-    const source = parsePhotoSource(input.source);
-    if (!source) throw new Error("Unsupported source.");
-    patch.source = source;
-  }
-  if (input.exifHandlingStatus !== undefined) {
-    const exifHandlingStatus = parseExifHandlingStatus(input.exifHandlingStatus);
-    if (!exifHandlingStatus) throw new Error("Unsupported exifHandlingStatus.");
-    patch.exifHandlingStatus = exifHandlingStatus;
-  }
-  if (input.confidence !== undefined) {
-    const confidence = parseConfidence(input.confidence);
-    if (!confidence) throw new Error("Unsupported confidence.");
-    patch.confidence = confidence;
-  }
-  if (input.notes !== undefined) {
-    patch.notes = normalizeOptionalText(asString(input.notes));
-  }
-  if (input.verificationStatus !== undefined) {
-    const verificationStatus = parsePhotoVerificationStatus(
-      input.verificationStatus
-    );
-    if (!verificationStatus) throw new Error("Unsupported verificationStatus.");
-    patch.verificationStatus = verificationStatus;
-    patch.reviewedAt = now;
-    patch.reviewedByUserId = args.reviewedByUserId;
-  }
-  if (input.aiProcessed !== undefined) {
-    patch.aiProcessed = Boolean(input.aiProcessed);
-  }
-  if (input.capturedAt !== undefined) {
-    patch.capturedAt = optionalNumber(input.capturedAt);
-  }
-
-  return patch;
-}
-
 async function auditApiWrite(
   ctx: MutationCtx,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
@@ -9243,51 +7908,6 @@ async function auditApiMovePerson(
   });
 }
 
-function optionalNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function positiveNumber(value: unknown) {
-  const number = optionalNumber(value);
-  return number && number > 0 ? number : undefined;
-}
-
-export function createMoveWeightAllowanceLb(value: unknown) {
-  if (value === undefined) return undefined;
-  if (value === null) return undefined;
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return value;
-  }
-  throw new Error("moveLevelWeightAllowanceLb must be a positive number.");
-}
-
-function normalizePlannedItemPriority(value: number | undefined) {
-  if (value === undefined || !Number.isFinite(value)) return undefined;
-  return Math.min(4, Math.max(1, Math.round(value)));
-}
-
-function boundedInteger(value: unknown, min: number, max: number, fallback: number) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fallback;
-  }
-  return Math.min(Math.max(Math.floor(value), min), max);
-}
-
-function asString(value: unknown) {
-  return typeof value === "string" ? value : undefined;
-}
-
-function optionalString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function requiredBodyString(value: unknown, message: string) {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(message);
-  }
-  return value.trim();
-}
-
 function requiredOps(value: unknown) {
   if (!Array.isArray(value)) {
     throw new Error("ops must be an array.");
@@ -9318,32 +7938,6 @@ function structuredPlanOpError(error: unknown) {
     return null;
   }
   return null;
-}
-
-function normalizeExternalKeyPart(value: unknown, label: string) {
-  if (value === null) return undefined;
-  if (typeof value !== "string") {
-    throw new Error(`${label} must be a string when provided.`);
-  }
-  const normalized = normalizeOptionalText(value);
-  return normalized ? normalized.slice(0, 160) : undefined;
-}
-
-function externalItemKeyFromInput(input: Record<string, unknown>) {
-  const hasSource = input.externalSource !== undefined;
-  const hasId = input.externalId !== undefined;
-  if (!hasSource && !hasId) return null;
-
-  const externalSource = normalizeExternalKeyPart(
-    input.externalSource,
-    "externalSource"
-  );
-  const externalId = normalizeExternalKeyPart(input.externalId, "externalId");
-  if (!externalSource && !externalId) return null;
-  if (!externalSource || !externalId) {
-    throw new Error("externalSource and externalId must be provided together.");
-  }
-  return { externalSource, externalId };
 }
 
 async function findApiItemByExternalKey(
@@ -9385,604 +7979,6 @@ async function assertExternalItemKeyAvailable(
   if (existing && existing._id !== allowedItemId) {
     throw new Error("External source key already exists for this move.");
   }
-}
-
-function parseBoxContainerType(value: unknown) {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(boxContainerTypes, value)) {
-    throw new Error("containerType must be carton|plasticTote|bin|wardrobe|dishPack|crate|other.");
-  }
-  return value as (typeof boxContainerTypes)[number];
-}
-
-function parseMoveType(value: unknown) {
-  return includesLiteral(moveTypes, value) ? (value as Doc<"moves">["type"]) : undefined;
-}
-
-function parseUnitSystem(value: unknown) {
-  return value === "imperial" || value === "metric"
-    ? (value as Doc<"moves">["unitSystem"])
-    : undefined;
-}
-
-function parsePcsBranch(value: unknown) {
-  return includesLiteral(pcsBranches, value)
-    ? (value as Doc<"moves">["pcsBranch"])
-    : undefined;
-}
-
-function parsePcsDependentStatus(value: unknown) {
-  return includesLiteral(pcsDependentStatuses, value)
-    ? (value as Doc<"moves">["pcsDependentStatus"])
-    : undefined;
-}
-
-function parsePcsShipmentType(value: unknown) {
-  return includesLiteral(pcsShipmentTypes, value)
-    ? (value as Doc<"moves">["pcsShipmentType"])
-    : undefined;
-}
-
-function parseItemStatus(value: unknown) {
-  return includesLiteral(itemStatuses, value)
-    ? (value as Doc<"items">["status"])
-    : undefined;
-}
-
-function parsePlannedItemStatus(value: unknown) {
-  return includesLiteral(restPlannedItemStatuses, value)
-    ? (value as Doc<"plannedItems">["status"])
-    : undefined;
-}
-
-function parseDisposition(value: unknown) {
-  return includesLiteral(itemDispositions, value)
-    ? (value as Doc<"items">["disposition"])
-    : undefined;
-}
-
-function parseMoveSpaceKind(value: unknown) {
-  return includesLiteral(moveSpaceKinds, value)
-    ? (value as Doc<"moveSpaces">["kind"])
-    : undefined;
-}
-
-function parseMoveSpaceStatus(value: unknown) {
-  return value === "active" || value === "archived"
-    ? (value as Doc<"moveSpaces">["status"])
-    : undefined;
-}
-
-function parseSaleListingStatus(value: unknown) {
-  return includesLiteral(saleListingStatuses, value)
-    ? (value as Doc<"saleListings">["status"])
-    : undefined;
-}
-
-function parseSaleListingPlatform(value: unknown) {
-  return includesLiteral(saleListingPlatforms, value)
-    ? (value as Doc<"saleListings">["platform"])
-    : undefined;
-}
-
-function parseSaleResearchDepth(value: unknown) {
-  return includesLiteral(saleResearchDepths, value)
-    ? (value as Doc<"saleListings">["researchDepth"])
-    : undefined;
-}
-
-function parseSaleResearchSources(value: unknown) {
-  if (!Array.isArray(value)) return undefined;
-  return value.slice(0, 25).map((entry) => {
-    const source = bodyObject(entry);
-    return {
-      title: normalizeOptionalText(asString(source.title)),
-      url: normalizeOptionalText(asString(source.url)),
-      summary: normalizeOptionalText(asString(source.summary)),
-      priceCents: optionalNumber(source.priceCents),
-      checkedAt: optionalNumber(source.checkedAt),
-    };
-  });
-}
-
-function parsePhotoIdArray(value: unknown) {
-  if (!Array.isArray(value)) return undefined;
-  return value
-    .map((entry) => optionalString(entry))
-    .filter((entry): entry is string => Boolean(entry))
-    .slice(0, 20) as Id<"itemPhotos">[];
-}
-
-function assertRestPriceCents(value: number | undefined, label: string) {
-  if (value === undefined) return;
-  if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
-    throw new Error(`${label} must be a non-negative whole number of cents.`);
-  }
-}
-
-function optionalPriceCents(
-  body: Record<string, unknown>,
-  key:
-    | "officialPriceCents"
-    | "soldPriceCents"
-    | "suggestedPriceLowCents"
-    | "suggestedPriceHighCents",
-) {
-  const value = body[key];
-  if (value !== undefined && value !== null && typeof value !== "number") {
-    throw new Error(`${key} must be a number of cents.`);
-  }
-  const cents = optionalNumber(value);
-  assertRestPriceCents(cents, key);
-  return cents;
-}
-
-export function saleListingPatchFromBody(
-  body: Record<string, unknown>,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-): Partial<Doc<"saleListings">> {
-  const patch: Partial<Doc<"saleListings">> = {};
-  if (body.status !== undefined) {
-    patch.status = parseSaleListingStatus(body.status) ?? "needsPrep";
-  }
-  if (body.platform !== undefined) {
-    patch.platform = parseSaleListingPlatform(body.platform) ?? "facebookMarketplace";
-  }
-  if (body.platformLabel !== undefined) {
-    patch.platformLabel = normalizeOptionalText(asString(body.platformLabel));
-  }
-  if (body.listingTitle !== undefined) {
-    patch.listingTitle = normalizeOptionalText(asString(body.listingTitle));
-  }
-  if (body.listingDescription !== undefined) {
-    patch.listingDescription = normalizeOptionalText(asString(body.listingDescription));
-  }
-  if (body.category !== undefined) {
-    patch.category = normalizeOptionalText(asString(body.category));
-  }
-  if (body.condition !== undefined) {
-    patch.condition = normalizeOptionalText(asString(body.condition));
-  }
-  if (body.locationLabel !== undefined) {
-    patch.locationLabel = normalizeOptionalText(asString(body.locationLabel));
-  }
-  if (body.selectedPhotoIds !== undefined) {
-    patch.selectedPhotoIds = parsePhotoIdArray(body.selectedPhotoIds) ?? [];
-  }
-  if (body.listingUrl !== undefined) {
-    patch.listingUrl = normalizeOptionalText(asString(body.listingUrl));
-  }
-  if (body.listedAt !== undefined) patch.listedAt = optionalNumber(body.listedAt);
-  if (body.lastRefreshedAt !== undefined) {
-    patch.lastRefreshedAt = optionalNumber(body.lastRefreshedAt);
-  }
-  if (body.suggestedPriceLowCents !== undefined) {
-    patch.suggestedPriceLowCents = optionalPriceCents(
-      body,
-      "suggestedPriceLowCents",
-    );
-  }
-  if (body.suggestedPriceHighCents !== undefined) {
-    patch.suggestedPriceHighCents = optionalPriceCents(
-      body,
-      "suggestedPriceHighCents",
-    );
-  }
-  if (body.officialPriceCents !== undefined) {
-    patch.officialPriceCents = optionalPriceCents(body, "officialPriceCents");
-  }
-  if (body.currency !== undefined) {
-    const currency = normalizeOptionalText(asString(body.currency))?.toUpperCase();
-    patch.currency = currency && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
-  }
-  if (body.pricingConfidence !== undefined) {
-    patch.pricingConfidence = parseConfidence(body.pricingConfidence) ?? "none";
-  }
-  if (body.priceDecisionSource !== undefined) {
-    patch.priceDecisionSource = normalizeOptionalText(asString(body.priceDecisionSource));
-  }
-  if (body.userOverrodePrice !== undefined) {
-    patch.userOverrodePrice = Boolean(body.userOverrodePrice);
-  }
-  if (body.researchDepth !== undefined) {
-    patch.researchDepth = parseSaleResearchDepth(body.researchDepth) ?? "none";
-  }
-  if (body.researchSources !== undefined) {
-    patch.researchSources = parseSaleResearchSources(body.researchSources) ?? [];
-    patch.researchSourceCount = patch.researchSources.length;
-  }
-  if (body.researchSourceCount !== undefined) {
-    patch.researchSourceCount = Math.max(
-      0,
-      Math.floor(optionalNumber(body.researchSourceCount) ?? 0),
-    );
-  }
-  if (
-    body.researchDepth !== undefined ||
-    body.researchSources !== undefined ||
-    body.researchSourceCount !== undefined ||
-    body.researchNotes !== undefined
-  ) {
-    patch.researchedAt = optionalNumber(body.researchedAt) ?? Date.now();
-    patch.researchedByApiKeyId = auth.apiKeyId;
-    patch.researchedByLabel = `API key: ${auth.apiKeyName} (${auth.apiKeyTokenPreview})`;
-  }
-  if (body.researchNotes !== undefined) {
-    patch.researchNotes = normalizeOptionalText(asString(body.researchNotes));
-  }
-  if (body.interestedCount !== undefined) {
-    patch.interestedCount = Math.max(
-      0,
-      Math.floor(optionalNumber(body.interestedCount) ?? 0),
-    );
-  }
-  if (body.inquiryNotes !== undefined) {
-    patch.inquiryNotes = normalizeOptionalText(asString(body.inquiryNotes));
-  }
-  if (body.offerNotes !== undefined) {
-    patch.offerNotes = normalizeOptionalText(asString(body.offerNotes));
-  }
-  if (body.buyerNotes !== undefined) {
-    patch.buyerNotes = normalizeOptionalText(asString(body.buyerNotes));
-  }
-  if (body.pickupStatus !== undefined) {
-    patch.pickupStatus = normalizeOptionalText(asString(body.pickupStatus));
-  }
-  if (body.soldPriceCents !== undefined) {
-    patch.soldPriceCents = optionalPriceCents(body, "soldPriceCents");
-  }
-  if (body.soldAt !== undefined) patch.soldAt = optionalNumber(body.soldAt);
-  if (body.needsMorePhotos !== undefined) {
-    patch.needsMorePhotos = Boolean(body.needsMorePhotos);
-  }
-  return patch;
-}
-
-function parseCondition(value: unknown) {
-  return includesLiteral(itemConditions, value)
-    ? (value as Doc<"items">["condition"])
-    : undefined;
-}
-
-function parseBoxStatus(value: unknown) {
-  return includesLiteral(boxStatuses, value)
-    ? (value as Doc<"boxes">["status"])
-    : undefined;
-}
-
-function parseMovePersonRole(value: unknown) {
-  return includesLiteral(restMovePersonRoles, value)
-    ? (value as Doc<"movePeople">["role"])
-    : undefined;
-}
-
-function parsePhotoType(value: unknown) {
-  return includesLiteral(photoTypes, value)
-    ? (value as Doc<"itemPhotos">["photoType"])
-    : undefined;
-}
-
-function parsePhotoPrivacyLevel(value: unknown) {
-  return includesLiteral(photoPrivacyLevels, value)
-    ? (value as Doc<"itemPhotos">["privacyLevel"])
-    : undefined;
-}
-
-function parsePhotoVisibilityScope(value: unknown) {
-  return includesLiteral(photoVisibilityScopes, value)
-    ? (value as Doc<"itemPhotos">["visibilityScope"])
-    : undefined;
-}
-
-function parsePhotoSource(value: unknown) {
-  return includesLiteral(photoSources, value)
-    ? (value as Doc<"itemPhotos">["source"])
-    : undefined;
-}
-
-function parseExifHandlingStatus(value: unknown) {
-  return includesLiteral(exifHandlingStatuses, value)
-    ? (value as Doc<"itemPhotos">["exifHandlingStatus"])
-    : undefined;
-}
-
-function parsePhotoVerificationStatus(value: unknown) {
-  return includesLiteral(photoVerificationStatuses, value)
-    ? (value as Doc<"itemPhotos">["verificationStatus"])
-    : undefined;
-}
-
-function parseConfidence(value: unknown) {
-  return includesLiteral(restEstimateConfidences, value)
-    ? (value as Doc<"itemPhotos">["confidence"])
-    : undefined;
-}
-
-function parsePlanningSuggestionStatus(value: unknown) {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(restPlanningSuggestionStatuses, value)) {
-    throw new Error("Unsupported planning suggestion status.");
-  }
-  return value as Doc<"aiPlanningSuggestions">["status"];
-}
-
-function parseAiJobStatus(value: unknown) {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(restAiJobStatuses, value)) {
-    throw new Error("Unsupported AI job status.");
-  }
-  return value as Doc<"aiJobs">["status"];
-}
-
-function parseAiSuggestionStatus(value: unknown) {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(restAiSuggestionStatuses, value)) {
-    throw new Error("Unsupported AI suggestion status.");
-  }
-  return value as Doc<"aiTextSuggestions">["status"];
-}
-
-function parsePlanningApprovals(body: unknown): PlanningSuggestionApprovalInput[] {
-  const input = bodyObject(body);
-  const rows = Array.isArray(input.approvals) ? input.approvals : [];
-  if (!rows.length) {
-    throw new Error("approvals must include at least one suggestion.");
-  }
-  if (rows.length > 100) {
-    throw new Error("Planning suggestion approvals are limited to 100 rows.");
-  }
-  return rows.map((row) => {
-    const approval = bodyObject(row);
-    const suggestionId = optionalString(approval.suggestionId);
-    if (!suggestionId) {
-      throw new Error("approval.suggestionId is required.");
-    }
-    return {
-      suggestionId: suggestionId as Id<"aiPlanningSuggestions">,
-      estimateDraft: parseEstimateDraftPatch(approval.estimateDraft),
-      assignmentDraft: parseAssignmentDraftPatch(approval.assignmentDraft),
-      assignmentOverrideReason: normalizeOptionalText(
-        asString(approval.assignmentOverrideReason)
-      ),
-    };
-  });
-}
-
-function parseEstimateDraftPatch(
-  value: unknown
-): PlanningSuggestionApprovalInput["estimateDraft"] {
-  if (value === undefined) return undefined;
-  const input = bodyObject(value);
-  return removeUndefined({
-    category: normalizeOptionalText(asString(input.category)),
-    estimatedWeightLb: optionalNumber(input.estimatedWeightLb),
-    estimatedWeightLowLb: optionalNumber(input.estimatedWeightLowLb),
-    estimatedWeightHighLb: optionalNumber(input.estimatedWeightHighLb),
-    estimatedVolumeCuFt: optionalNumber(input.estimatedVolumeCuFt),
-    estimatedPackedVolumeCuFt: optionalNumber(input.estimatedPackedVolumeCuFt),
-    weightConfidence: parsePlanningConfidence(
-      input.weightConfidence,
-      "estimateDraft.weightConfidence"
-    ),
-    volumeConfidence: parsePlanningConfidence(
-      input.volumeConfidence,
-      "estimateDraft.volumeConfidence"
-    ),
-  });
-}
-
-function parseAssignmentDraftPatch(
-  value: unknown
-): PlanningSuggestionApprovalInput["assignmentDraft"] {
-  if (value === undefined) return undefined;
-  const input = bodyObject(value);
-  return removeUndefined({
-    assignedResourceId: optionalString(input.assignedResourceId) as
-      | Id<"transportResources">
-      | undefined,
-    assignedZoneId: optionalString(input.assignedZoneId) as
-      | Id<"transportZones">
-      | undefined,
-    assignmentWarnings: parseStringArray(input.assignmentWarnings),
-    assignmentHardBlocks: parseStringArray(input.assignmentHardBlocks),
-    weightPercent: optionalNumber(input.weightPercent),
-    volumePercent: optionalNumber(input.volumePercent),
-    overrideReason: normalizeOptionalText(asString(input.overrideReason)),
-  });
-}
-
-function parsePlanningConfidence(value: unknown, label: string) {
-  if (value === undefined || value === "") return undefined;
-  if (value === "estimated") return "low";
-  if (!includesLiteral(restEstimateConfidences, value)) {
-    throw new Error(`Unsupported ${label}.`);
-  }
-  return value as Doc<"aiPlanningSuggestions">["confidence"];
-}
-
-function parseFragility(value: unknown): Doc<"items">["fragility"] | undefined {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(itemFragilities, value)) {
-    throw new Error("Unsupported fragility.");
-  }
-  return value as Doc<"items">["fragility"];
-}
-
-function parsePlanningDefaultKeys(
-  value: unknown,
-): Doc<"items">["planningDefaultKeys"] | undefined {
-  return parseLiteralArray(
-    value,
-    planningDefaultKeys,
-    "planningDefaultKeys",
-  ) as Doc<"items">["planningDefaultKeys"] | undefined;
-}
-
-function parseDocumentationProfileTypes(value: unknown) {
-  const values = parseLiteralArray(
-    value,
-    documentationProfileTypes,
-    "documentationProfileTypes",
-  );
-  return normalizeDocumentationProfileTypes(values);
-}
-
-function parseExportJobType(value: unknown) {
-  return includesLiteral(restExportJobTypes, value)
-    ? (value as RestExportJobType)
-    : undefined;
-}
-
-function parseLiteralArray<TValue extends string>(
-  value: unknown,
-  allowed: readonly TValue[],
-  label: string
-): TValue[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value)) {
-    throw new Error(`${label} must be an array.`);
-  }
-  const entries: TValue[] = [];
-  for (const entry of value) {
-    if (!includesLiteral(allowed, entry)) {
-      throw new Error(`Unsupported ${label} value.`);
-    }
-    entries.push(entry as TValue);
-  }
-  return Array.from(new Set(entries));
-}
-
-function parseShareLinkStatus(value: unknown) {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(restShareLinkStatuses, value)) {
-    throw new Error("Unsupported share link status.");
-  }
-  return value as (typeof restShareLinkStatuses)[number];
-}
-
-function parseShareLinkScope(value: unknown) {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(restShareLinkScopes, value)) {
-    throw new Error("Unsupported share link scope.");
-  }
-  return value as (typeof restShareLinkScopes)[number];
-}
-
-function parseShareLinkRole(value: unknown): ShareLinkRole | undefined {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(restShareLinkRoles, value)) {
-    throw new Error("Unsupported share link role.");
-  }
-  return value as ShareLinkRole;
-}
-
-function parseShareLinkActions(value: unknown): ShareLinkAction[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value)) {
-    throw new Error("allowedActions must be an array.");
-  }
-  const actions: ShareLinkAction[] = [];
-  for (const action of value) {
-    if (!includesLiteral(shareLinkActions, action)) {
-      throw new Error("Unsupported share link action.");
-    }
-    actions.push(action as ShareLinkAction);
-  }
-  return Array.from(new Set(actions));
-}
-
-function parseTransportResourceType(value: unknown) {
-  return includesLiteral(transportResourceTypes, value)
-    ? (value as Doc<"transportResources">["type"])
-    : undefined;
-}
-
-function parseTransportResourcePresetKey(value: unknown) {
-  return includesLiteral(transportResourcePresetKeys, value)
-    ? (value as (typeof transportResourcePresetKeys)[number])
-    : undefined;
-}
-
-function parseCapacityReviewStatus(value: unknown) {
-  if (value === undefined || value === "") return undefined;
-  if (value === "unreviewed" || value === "estimated" || value === "confirmed") {
-    return value;
-  }
-  throw new Error("Invalid capacityReviewStatus.");
-}
-
-function parseCapacity(value: unknown):
-  | Doc<"transportResources">["capacity"]
-  | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-  const input = value as Record<string, unknown>;
-  const capacity: Doc<"transportResources">["capacity"] = {};
-  const maxWeightLb = optionalNumber(input.maxWeightLb);
-  const maxVolumeCuFt = optionalNumber(input.maxVolumeCuFt);
-  const maxItemCount = optionalNumber(input.maxItemCount);
-  if (maxWeightLb !== undefined) capacity.maxWeightLb = maxWeightLb;
-  if (maxVolumeCuFt !== undefined) capacity.maxVolumeCuFt = maxVolumeCuFt;
-  if (maxItemCount !== undefined) capacity.maxItemCount = maxItemCount;
-  if (input.weightIsUnlimited !== undefined) {
-    capacity.weightIsUnlimited = Boolean(input.weightIsUnlimited);
-  }
-  if (input.volumeIsUnlimited !== undefined) {
-    capacity.volumeIsUnlimited = Boolean(input.volumeIsUnlimited);
-  }
-
-  if (
-    input.dimensions &&
-    typeof input.dimensions === "object" &&
-    !Array.isArray(input.dimensions)
-  ) {
-    const dimensionsInput = input.dimensions as Record<string, unknown>;
-    const dimensions: NonNullable<
-      Doc<"transportResources">["capacity"]["dimensions"]
-    > = {};
-    const lengthIn = optionalNumber(dimensionsInput.lengthIn);
-    const widthIn = optionalNumber(dimensionsInput.widthIn);
-    const heightIn = optionalNumber(dimensionsInput.heightIn);
-    if (lengthIn !== undefined) dimensions.lengthIn = lengthIn;
-    if (widthIn !== undefined) dimensions.widthIn = widthIn;
-    if (heightIn !== undefined) dimensions.heightIn = heightIn;
-    if (Object.keys(dimensions).length) {
-      capacity.dimensions = dimensions;
-    }
-  }
-
-  // Same rule as the web editors / boxes / items: when cargo dimensions are
-  // given but no max volume, the available cubic feet is derived from L×W×H so
-  // agent-created transports get a usable volume ceiling too.
-  return deriveTransportCapacity(capacity);
-}
-
-function parseStringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string")
-    : undefined;
-}
-
-function parseIdArray(value: unknown) {
-  if (!Array.isArray(value)) {
-    throw new Error("Expected an array of IDs.");
-  }
-  const ids = value.filter((entry): entry is string => typeof entry === "string");
-  if (ids.length !== value.length) {
-    throw new Error("ID arrays may only contain strings.");
-  }
-  return ids;
-}
-
-function removeUndefined<TValue extends Record<string, unknown>>(value: TValue) {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined)
-  ) as {
-    [TKey in keyof TValue as undefined extends TValue[TKey] ? TKey : TKey]:
-      | Exclude<TValue[TKey], undefined>
-      | undefined;
-  };
 }
 
 function capacityPercent({
@@ -10047,37 +8043,4 @@ function minOptional(first?: number, second?: number) {
   if (typeof first !== "number") return second;
   if (typeof second !== "number") return first;
   return Math.min(first, second);
-}
-
-function includesLiteral(values: readonly string[], value: unknown) {
-  return typeof value === "string" && values.includes(value);
-}
-
-export function errorStatus(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  if (message.includes("invalid api key") || message.includes("bearer")) return 401;
-  if (
-    message.includes("not allowed") ||
-    message.includes("website-only") ||
-    message.includes("only the person can restore") ||
-    message.includes("still being checked") ||
-    message.includes("scope") ||
-    message.includes("not authorized") ||
-    message.includes("cannot view") ||
-    message.includes("only act on") ||
-    message.includes("restricted to a different move") ||
-    message.includes("active household access") ||
-    message.includes("turned off by an owner")
-  ) {
-    return 403;
-  }
-  if (message.includes("not found")) return 404;
-  if (
-    message.includes("idempotency") ||
-    message.includes("already exists") ||
-    message.includes("changed since")
-  ) {
-    return 409;
-  }
-  return 400;
 }
