@@ -1,0 +1,552 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`authenticates before dispatch and keeps scope, move access and cursor semantics > authentication and access refusals 1`] = `
+{
+  "invalidKey": {
+    "body": {
+      "error": {
+        "code": "request_failed",
+        "message": "Invalid API key format. The key is the wrong shape — copy the full key from Settings → AI Connections, or rotate it.",
+      },
+    },
+    "status": 401,
+  },
+  "knownAnonymous": {
+    "body": {
+      "error": {
+        "code": "unauthorized",
+        "message": "Use a Bearer API key.",
+      },
+    },
+    "status": 401,
+  },
+  "missingScope": {
+    "body": {
+      "error": {
+        "code": "request_failed",
+        "message": "API key is missing required scope: inventory/read. Only the person can restore it at https://movingmanifest.com/settings/ai.",
+      },
+    },
+    "status": 403,
+  },
+  "outsideMove": {
+    "body": {
+      "error": {
+        "code": "request_failed",
+        "message": "Missing power: access to that move. Only the person can restore it at https://movingmanifest.com/settings/ai.",
+      },
+    },
+    "status": 403,
+  },
+  "unknownAnonymous": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "API route not found.",
+      },
+    },
+    "status": 404,
+  },
+}
+`;
+
+exports[`authenticates before dispatch and keeps scope, move access and cursor semantics > paginated move rows 1`] = `
+{
+  "first": {
+    "body": {
+      "data": [
+        {
+          "createdAt": 1700000000000,
+          "moveId": "000000000000000000000010003moves",
+          "status": "planning",
+          "title": "Private move",
+          "type": "local",
+          "unitSystem": "imperial",
+          "updatedAt": 1700000000000,
+        },
+      ],
+      "page": {
+        "limit": 1,
+        "nextCursor": "1",
+        "total": 2,
+      },
+    },
+    "headers": {
+      "X-RateLimit-Limit": "300",
+      "X-RateLimit-Remaining": "299",
+      "X-RateLimit-Reset": "1700000100",
+    },
+    "status": 200,
+  },
+  "only": {
+    "body": {
+      "data": [
+        {
+          "createdAt": 1700000000000,
+          "moveId": "000000000000000000000010003moves",
+          "status": "planning",
+          "title": "Private move",
+          "type": "local",
+          "unitSystem": "imperial",
+          "updatedAt": 1700000000000,
+        },
+      ],
+      "page": {
+        "limit": 1,
+        "nextCursor": null,
+        "total": 1,
+      },
+    },
+    "headers": {
+      "X-RateLimit-Limit": "300",
+      "X-RateLimit-Remaining": "299",
+      "X-RateLimit-Reset": "1700000100",
+    },
+    "status": 200,
+  },
+  "second": {
+    "body": {
+      "data": [
+        {
+          "createdAt": 1700000000000,
+          "moveId": "000000000000000000000010004moves",
+          "status": "planning",
+          "title": "Second move",
+          "type": "local",
+          "unitSystem": "imperial",
+          "updatedAt": 1700000000000,
+        },
+      ],
+      "page": {
+        "limit": 1,
+        "nextCursor": null,
+        "total": 2,
+      },
+    },
+    "headers": {
+      "X-RateLimit-Limit": "300",
+      "X-RateLimit-Remaining": "298",
+      "X-RateLimit-Reset": "1700000100",
+    },
+    "status": 200,
+  },
+}
+`;
+
+exports[`pins the internal mutation addresses and argument schemas at the REST door 1`] = `
+[
+  {
+    "args": {
+      "type": "object",
+      "value": {
+        "authorization": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": true,
+        },
+        "body": {
+          "fieldType": {
+            "type": "any",
+          },
+          "optional": true,
+        },
+        "method": {
+          "fieldType": {
+            "type": "union",
+            "value": [
+              {
+                "type": "literal",
+                "value": "GET",
+              },
+              {
+                "type": "literal",
+                "value": "POST",
+              },
+              {
+                "type": "literal",
+                "value": "PATCH",
+              },
+              {
+                "type": "literal",
+                "value": "PUT",
+              },
+              {
+                "type": "literal",
+                "value": "DELETE",
+              },
+            ],
+          },
+          "optional": false,
+        },
+        "moveId": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": true,
+        },
+        "path": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": false,
+        },
+        "query": {
+          "fieldType": {
+            "keys": {
+              "type": "string",
+            },
+            "type": "record",
+            "values": {
+              "fieldType": {
+                "type": "string",
+              },
+              "optional": false,
+            },
+          },
+          "optional": false,
+        },
+      },
+    },
+    "name": "restApi:authenticateActionRequest",
+  },
+  {
+    "args": {
+      "type": "object",
+      "value": {
+        "apiKeyId": {
+          "fieldType": {
+            "tableName": "apiKeys",
+            "type": "id",
+          },
+          "optional": false,
+        },
+        "body": {
+          "fieldType": {
+            "type": "any",
+          },
+          "optional": true,
+        },
+        "idempotencyKey": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": true,
+        },
+        "method": {
+          "fieldType": {
+            "type": "union",
+            "value": [
+              {
+                "type": "literal",
+                "value": "GET",
+              },
+              {
+                "type": "literal",
+                "value": "POST",
+              },
+              {
+                "type": "literal",
+                "value": "PATCH",
+              },
+              {
+                "type": "literal",
+                "value": "PUT",
+              },
+              {
+                "type": "literal",
+                "value": "DELETE",
+              },
+            ],
+          },
+          "optional": false,
+        },
+        "path": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": false,
+        },
+      },
+    },
+    "name": "restApi:checkIdempotency",
+  },
+  {
+    "args": {
+      "type": "object",
+      "value": {
+        "action": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": false,
+        },
+        "apiKeyId": {
+          "fieldType": {
+            "tableName": "apiKeys",
+            "type": "id",
+          },
+          "optional": false,
+        },
+        "householdId": {
+          "fieldType": {
+            "tableName": "households",
+            "type": "id",
+          },
+          "optional": false,
+        },
+        "moveId": {
+          "fieldType": {
+            "tableName": "moves",
+            "type": "id",
+          },
+          "optional": true,
+        },
+      },
+    },
+    "name": "restApi:checkRateLimit",
+  },
+  {
+    "args": {
+      "type": "object",
+      "value": {
+        "auth": {
+          "fieldType": {
+            "type": "any",
+          },
+          "optional": false,
+        },
+        "request": {
+          "fieldType": {
+            "type": "any",
+          },
+          "optional": false,
+        },
+      },
+    },
+    "name": "restApi:commitRequest",
+  },
+  {
+    "args": {
+      "type": "object",
+      "value": {
+        "authorization": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": true,
+        },
+        "body": {
+          "fieldType": {
+            "type": "any",
+          },
+          "optional": true,
+        },
+        "idempotencyKey": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": true,
+        },
+        "method": {
+          "fieldType": {
+            "type": "union",
+            "value": [
+              {
+                "type": "literal",
+                "value": "GET",
+              },
+              {
+                "type": "literal",
+                "value": "POST",
+              },
+              {
+                "type": "literal",
+                "value": "PATCH",
+              },
+              {
+                "type": "literal",
+                "value": "PUT",
+              },
+              {
+                "type": "literal",
+                "value": "DELETE",
+              },
+            ],
+          },
+          "optional": false,
+        },
+        "path": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": false,
+        },
+        "query": {
+          "fieldType": {
+            "keys": {
+              "type": "string",
+            },
+            "type": "record",
+            "values": {
+              "fieldType": {
+                "type": "string",
+              },
+              "optional": false,
+            },
+          },
+          "optional": false,
+        },
+      },
+    },
+    "name": "restApi:handle",
+  },
+  {
+    "args": {
+      "type": "object",
+      "value": {
+        "apiKeyId": {
+          "fieldType": {
+            "tableName": "apiKeys",
+            "type": "id",
+          },
+          "optional": false,
+        },
+        "expiresAt": {
+          "fieldType": {
+            "type": "number",
+          },
+          "optional": true,
+        },
+        "householdId": {
+          "fieldType": {
+            "tableName": "households",
+            "type": "id",
+          },
+          "optional": false,
+        },
+        "idempotencyKey": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": true,
+        },
+        "moveId": {
+          "fieldType": {
+            "tableName": "moves",
+            "type": "id",
+          },
+          "optional": true,
+        },
+        "requestHash": {
+          "fieldType": {
+            "type": "string",
+          },
+          "optional": true,
+        },
+        "response": {
+          "fieldType": {
+            "type": "any",
+          },
+          "optional": false,
+        },
+        "status": {
+          "fieldType": {
+            "type": "number",
+          },
+          "optional": false,
+        },
+      },
+    },
+    "name": "restApi:storeIdempotency",
+  },
+]
+`;
+
+exports[`pins the route families, scopes, responses and refusal shapes with a fixture key 1`] = `
+[
+  "GET /me | moves/read | 200 | data | object",
+  "POST /me/access | no scopes | 400 | error | {"code":"request_failed","message":"Your AI can only reduce its own connection. To increase or restore access, the person must open https://movingmanifest.com/settings/ai."}",
+  "GET /households/{householdId}/members | members/manage | 200 | data | array (1)",
+  "POST /households/{householdId}/members | members/manage | 403 | error | {"code":"request_failed","message":"Household invitations are website-only. The person must use https://movingmanifest.com/settings/ai."}",
+  "GET /moves | moves/read | 200 | data, page | array (1)",
+  "POST /moves | moves/write | 400 | error | {"code":"invalid_move","message":"title is required."}",
+  "POST /moves/setup | moves/read, moves/write, inventory/write | 400 | error | {"code":"invalid_move_setup","message":"title is required when setup is creating a move."}",
+  "GET /moves/{moveId} | moves/read | 200 | data | object",
+  "GET /moves/{moveId}/summary | moves/read, inventory/read, exports/read | 200 | data | object",
+  "GET /moves/{moveId}/questions | moves/read, inventory/read | 200 | data | object",
+  "GET /moves/{moveId}/move-day | moves/read, inventory/read | 200 | data | object",
+  "GET /moves/{moveId}/capacity-report | moves/read, inventory/read | 200 | data | object",
+  "GET /moves/{moveId}/agent-context | moves/read, inventory/read, plans/read | 200 | data | object",
+  "GET /moves/{moveId}/spaces | moves/read | 200 | data, page | array (0)",
+  "POST /moves/{moveId}/spaces | moves/write | 400 | error | {"code":"request_failed","message":"name is required."}",
+  "GET /moves/{moveId}/sale-listings | inventory/read | 200 | data, page | array (0)",
+  "POST /moves/{moveId}/sale-listings | inventory/write | 400 | error | {"code":"request_failed","message":"itemId is required."}",
+  "GET /moves/{moveId}/queue | queue/read | 200 | data, defaultOwnerUserId, page, runnableOwnerIds | array (0)",
+  "GET /moves/{moveId}/queue/missing | queue/read | 404 | error | {"code":"request_failed","message":"Queue item not found."}",
+  "POST /moves/{moveId}/queue/missing/claim | queue/write | 409 | error | {"code":"request_failed","message":"Idempotency-Key is required for Queue commands."}",
+  "POST /moves/{moveId}/queue/missing/release | queue/write | 409 | error | {"code":"request_failed","message":"Idempotency-Key is required for Queue commands."}",
+  "POST /moves/{moveId}/queue/missing/needs-you | queue/write | 409 | error | {"code":"request_failed","message":"Idempotency-Key is required for Queue commands."}",
+  "POST /moves/{moveId}/queue/missing/complete | queue/write | 409 | error | {"code":"request_failed","message":"Idempotency-Key is required for Queue commands."}",
+  "POST /moves/{moveId}/queue/missing/failure | queue/write | 409 | error | {"code":"request_failed","message":"Idempotency-Key is required for Queue commands."}",
+  "GET /moves/{moveId}/resources | moves/read | 200 | data, page | array (0)",
+  "GET /moves/{moveId}/zones | moves/read | 200 | data, page | array (0)",
+  "GET /moves/{moveId}/people | moves/read | 200 | data, page | array (0)",
+  "GET /moves/{moveId}/items | inventory/read | 200 | data, page | array (0)",
+  "POST /moves/{moveId}/items | inventory/write | 201 | data | object",
+  "POST /moves/{moveId}/items/batch-upsert | inventory/write | 400 | error | {"code":"invalid_batch","message":"items must include at least one row."}",
+  "GET /moves/{moveId}/movable-units | inventory/read | 404 | error | {"code":"not_found","message":"Movable units route not found."}",
+  "POST /moves/{moveId}/movable-units/batch-upsert | inventory/write | 400 | error | {"code":"invalid_batch","message":"units must include at least one row."}",
+  "GET /moves/{moveId}/planned-items | inventory/read | 200 | data, page | array (0)",
+  "POST /moves/{moveId}/planned-items/missing/convert | inventory/write | 404 | error | {"code":"request_failed","message":"Planned item not found."}",
+  "GET /moves/{moveId}/boxes | inventory/read | 200 | data, page | array (0)",
+  "GET /moves/{moveId}/assignments | inventory/read | 200 | data, page | array (0)",
+  "POST /moves/{moveId}/assignments/suggest | moves/read, inventory/read | 200 | data | object",
+  "POST /moves/{moveId}/assignments/missing/restore | inventory/write | 404 | error | {"code":"request_failed","message":"Archived assignment not found."}",
+  "GET /moves/{moveId}/planning-suggestions | inventory/read | 200 | data, page | array (0)",
+  "POST /moves/{moveId}/planning-suggestions/approve | inventory/write | 400 | error | {"code":"request_failed","message":"Only the person can accept, dismiss or edit-accept AI proposals on the website."}",
+  "GET /moves/{moveId}/ai-jobs | inventory/read | 200 | data, page | array (0)",
+  "GET /moves/{moveId}/ai-text-suggestions | inventory/read | 200 | data, page | array (0)",
+  "GET /moves/{moveId}/ai-photo-suggestions | inventory/read | 200 | data, page | array (0)",
+  "GET /moves/{moveId}/documentation-profiles | exports/read | 200 | data, page | array (0)",
+  "GET /moves/{moveId}/exports | exports/read | 200 | data, page | array (0)",
+  "POST /moves/{moveId}/exports | exports/create | 201 | data | object",
+  "GET /moves/{moveId}/share-links | exports/read | 200 | data, page | array (0)",
+  "POST /moves/{moveId}/share-links | exports/create | 201 | data | object",
+  "GET /moves/{moveId}/share-links/missing/comments | exports/read | 404 | error | {"code":"request_failed","message":"Share link not found."}",
+  "POST /moves/{moveId}/share-links/missing/revoke | no scopes | 404 | error | {"code":"request_failed","message":"Share link not found."}",
+  "GET /moves/{moveId}/photos | inventory/read | 200 | data, page | array (0)",
+  "GET /plans | plans/read | 200 | data, page | array (0)",
+  "GET /plans/missing | plans/read | 404 | error | {"code":"request_failed","message":"Plan not found."}",
+  "POST /plans/missing/ops | plans/write | 404 | error | {"code":"request_failed","message":"Plan not found."}",
+  "GET /plans/missing/proposals | plans/read | 404 | error | {"code":"request_failed","message":"Plan not found."}",
+  "GET /items/missing | inventory/read | 404 | error | {"code":"request_failed","message":"Item not found."}",
+  "GET /boxes/missing | inventory/read | 404 | error | {"code":"request_failed","message":"Box not found."}",
+  "GET /boxes/missing/items | inventory/read | 404 | error | {"code":"request_failed","message":"Box not found."}",
+  "GET /photos/missing | no scopes | 404 | error | {"code":"not_found","message":"API route not found."}",
+  "GET /exports/missing | exports/read | 404 | error | {"code":"request_failed","message":"Export job not found."}",
+  "POST /images/upload | photos/write | 400 | error | {"code":"invalid_image_upload","message":"Provide exactly one of sourceUrl, dataUrl, or fileBase64."}",
+  "POST /photos/upload | photos/write | 400 | error | {"code":"invalid_image_upload","message":"Provide exactly one of sourceUrl, dataUrl, or fileBase64."}",
+  "POST /uploads/init | photos/write | 400 | error | {"code":"upload_init_failed","message":"mimeType is required."}",
+  "POST /photos/finalize | photos/write | 400 | error | {"code":"upload_finalize_failed","message":"Backblaze B2 is not configured."}",
+  "GET /moves/{moveId}/unknown-route | moves/read | 404 | error | {"code":"not_found","message":"Not found."}",
+  "GET /unknown-route | no scopes | 404 | error | {"code":"not_found","message":"API route not found."}",
+]
+`;
+
+exports[`replays an idempotent write and refuses a different body under the same key 1`] = `
+{
+  "body": {
+    "error": {
+      "code": "idempotency_conflict",
+      "message": "Idempotency key was already used with a different request.",
+    },
+  },
+  "headers": {
+    "X-RateLimit-Limit": "300",
+    "X-RateLimit-Remaining": "297",
+    "X-RateLimit-Reset": "1700000100",
+  },
+  "status": 409,
+}
+`;
