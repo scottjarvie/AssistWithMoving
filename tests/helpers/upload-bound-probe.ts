@@ -46,6 +46,7 @@ export async function probeUploadBounds(f: {
  } }, { baseUrl: "https://example.invalid", apiKey: "" }, { uploadLimits: policy });
  const sharp = (await import("sharp")).default;
  const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).png().toBuffer();
+ await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: "synthetic-member", clientId: "example-client" });
  const legacy = await f.t.action(internal.mcpToolsImages.addImages, { ...f.scope, operationId: "legacy-probe", caller: { subject: "synthetic-member", claims: { client_id: "example-client" } }, images: [{ base64: png.toString("base64"), mimeType: "image/png" }] });
  const canonicalSource = readFileSync("convex/httpRoutes/mcp.ts", "utf8");
  const constantSource = /const MAX_MCP_REQUEST_BYTES = ([\d_]+)\s*\*\s*([\d_]+)/.exec(canonicalSource) ?? (existsSync("convex/lib/aiUploadCaps.ts") ? /const canonicalRequestBytes = ([\d_]+)\s*\*\s*([\d_]+)/.exec(readFileSync("convex/lib/aiUploadCaps.ts", "utf8")) : null);

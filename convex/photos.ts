@@ -1,4 +1,4 @@
-import { requireAiUploadSession, checkAiUploadFile, uploadAuthorizationValidator, uploadBinding, type UploadAuthorization } from "./lib/aiUploadSession";
+import { requireAiUploadSession, requireOrdinaryAiUploadCommit, checkAiUploadFile, uploadAuthorizationValidator, uploadBinding, type UploadAuthorization } from "./lib/aiUploadSession";
 import { effectiveFileCap } from "./lib/aiUploadCaps";
 import { validateAudioContainer, invalidAudioFileError, audioVideoTrackError, voiceNoteTooLongError } from "./lib/media/audio";
 import { transportLimits, voiceNoteMaxSeconds } from "../shared/media-limits.mjs";
@@ -1867,7 +1867,6 @@ async function completeSession(ctx: MutationCtx, args: Infer<typeof completeVali
     }
 
     const session = await ctx.db.get(args.uploadSessionId);
-    if (session?.completedPhotoId && session.householdId === args.householdId && session.moveId === args.moveId) return session.completedPhotoId;
     if (
       !session ||
       session.householdId !== args.householdId ||
@@ -1877,6 +1876,8 @@ async function completeSession(ctx: MutationCtx, args: Infer<typeof completeVali
     ) {
       throw new Error("Upload session is not active.");
     }
+    if (args.apiActor && !args.apiActor.uploadAuthorization) await requireOrdinaryAiUploadCommit(ctx, session, args.apiActor);
+    if (session.completedPhotoId) return session.completedPhotoId;
     const mediaKind =
       session.mediaKind ??
       mediaKindForMimeType(session.expectedMimeType) ??

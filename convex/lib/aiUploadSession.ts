@@ -2,12 +2,67 @@ import { ConvexError, v, type Infer } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx, MutationCtx } from "../_generated/server";
 import type { McpPrincipal } from "./mcpGrantAccess";
+import { accessState, connectionAccess, keyScopes, oauthIdentity, oauthScopes, readAccess, readConnection } from "./carriedAccess";
+import { agentAccessDisabled, resolveMoveAccess } from "./moveAccess";
+import { oauthClientIdFromClaims } from "./mcpClientIdentity";
+import { requireMoveForSubject } from "./mcpIdentity";
 
 const principalValidator = v.object({ issuer: v.string(), subject: v.string(), clientId: v.string(), clientName: v.optional(v.string()) });
 export const uploadAuthorizationValidator = v.object({ principal: principalValidator, token: v.string(), sha256: v.string(), width: v.optional(v.number()), height: v.optional(v.number()), uploadSessionId: v.optional(v.id("photoUploadSessions")) });
 export type UploadAuthorization = Infer<typeof uploadAuthorizationValidator>;
 export function uploadUnavailable(): never { throw new ConvexError({ code: "INVALID_UPLOAD", message: "Upload not found or no longer available to this connection." }); }
 export function sameUploadPrincipal(a: McpPrincipal, b: McpPrincipal) { return a.subject === b.subject && a.issuer === b.issuer && a.clientId === b.clientId; }
+
+/** Recheck the admitted credential inside the transaction that creates the photo. */
+export async function requireOrdinaryAiUploadCommit(
+  ctx: MutationCtx,
+  session: Doc<"photoUploadSessions">,
+  actor: { apiKeyId: string; createdByUserId: Id<"users">; oauthCaller?: { subject: string; claims?: Record<string, unknown> } },
+) {
+  const { createdByUserId, moveId, householdId } = session;
+  if (actor.createdByUserId !== createdByUserId) return uploadUnavailable();
+  const user = await ctx.db.get(createdByUserId);
+  if (user?.status !== "active") return uploadUnavailable();
+
+  let identity: string;
+  if (actor.apiKeyId === "mcp-oauth") {
+    if (actor.oauthCaller?.subject !== user.clerkUserId) return uploadUnavailable();
+    const clientId = oauthClientIdFromClaims(actor.oauthCaller.claims);
+    if (!clientId) return uploadUnavailable();
+    identity = oauthIdentity(clientId);
+  } else {
+    const keyId = ctx.db.normalizeId("apiKeys", actor.apiKeyId);
+    const key = keyId && await ctx.db.get(keyId);
+    if (!key || key.createdByUserId !== createdByUserId || key.householdId !== householdId || key.credentialRetiredAt !== undefined) {
+      return uploadUnavailable();
+    }
+    identity = `key:${key._id}`;
+  }
+
+  const [root, connection] = await Promise.all([
+    readAccess(ctx, createdByUserId),
+    readConnection(ctx, createdByUserId, identity),
+  ]);
+  if (!root || !connection) return uploadUnavailable();
+  const access = connectionAccess(root, connection);
+  if (accessState(access, connection) !== "active" || (access.moveIds && !access.moveIds.includes(moveId))) return uploadUnavailable();
+
+  if (connection.kind === "oauth") {
+    if (!actor.oauthCaller || !oauthScopes(access).includes("moving.work.write")) return uploadUnavailable();
+    try {
+      await requireMoveForSubject(ctx, actor.oauthCaller.subject, householdId, moveId, "inventory:edit");
+    } catch {
+      return uploadUnavailable();
+    }
+  } else {
+    if (!keyScopes(access).includes("photos/write")) return uploadUnavailable();
+    try {
+      if (agentAccessDisabled(await resolveMoveAccess(ctx, createdByUserId, householdId, moveId))) return uploadUnavailable();
+    } catch {
+      return uploadUnavailable();
+    }
+  }
+}
 
 /** Only connection entry points call this; ordinary lifecycle callers never do. */
 export async function requireAiUploadSession(ctx: QueryCtx | MutationCtx, args: {
