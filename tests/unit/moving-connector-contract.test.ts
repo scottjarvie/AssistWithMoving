@@ -32,7 +32,7 @@ const workflowRules = [
 
 it("has the exact shared 1.0.1 contract", () => {
   expect(MCP_CONNECTOR_CONTRACT_VERSION).toBe("1.0.1");
-  const bytes = readFileSync("convex/lib/mcpConnector/contract.ts");
+  const bytes = readFileSync("convex/lib/mcpConnector/contract.ts", "utf8").replace(/\r\n/g, "\n");
   expect(createHash("sha256").update(bytes).digest("hex")).toBe("17aab26f605a5cf52bdbc7a8d8449f6ee0117cf7ac3ca12aec40d877031c3467");
 });
 

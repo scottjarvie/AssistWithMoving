@@ -3,3 +3,6 @@
 .claude/hooks/cloud-session-setup.cmd text eol=lf
 .claude/hooks/cloud-session-setup.sh text eol=lf
 .claude/hooks/cloud-session-setup.test.sh text eol=lf
+
+# Keep the vendored connector contract byte-identical on every checkout.
+convex/lib/mcpConnector/contract.ts text eol=lf
