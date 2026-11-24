@@ -1,3 +1,5 @@
+// assist-mcp-connector-contract v1.0.1 sha256:17aab26f605a5cf52bdbc7a8d8449f6ee0117cf7ac3ca12aec40d877031c3467
+// Synced from assistwithlife shared/mcp-connector/contract.ts. Do not edit here; change it upstream and re-sync.
 export const MCP_CONNECTOR_CONTRACT_VERSION = "1.0.1";
 // On 2026-11-24 Claude Code kept 4,096 JavaScript string characters.
 export const MCP_INSTRUCTIONS_MAX_CHARS = 4_000;
