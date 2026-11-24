@@ -1,0 +1,171 @@
+{
+  "audit": "ai-readiness",
+  "repo": "scottjarvie/AssistWithMoving",
+  "date": "2026-11-24",
+  "baseCommit": "91d9be95484c475743b4f1a063ccb9b70d2553cd",
+  "labelCounts": {
+    "safe to fix": 10,
+    "safe to fix, except": 2,
+    "needs a production check": 2,
+    "needs Scott": 1
+  },
+  "findings": [
+    {
+      "id": "AIR-01",
+      "title": "About 5,000 lines of screens no page renders, kept alive by passing tests",
+      "files": [
+        "src/components/move-pages/inventory-page.tsx",
+        "src/components/move-pages/photos-page.tsx",
+        "src/components/move-pages/sell-page.tsx",
+        "src/components/move-pages/spaces-page.tsx",
+        "src/components/disposition-pipeline-panel.tsx",
+        "src/components/estimate-summary.tsx",
+        "src/components/evidence-density-panel.tsx",
+        "src/components/inventory-duplicate-review.tsx",
+        "src/components/photo-review-workspace.tsx",
+        "src/components/planned-items-panel.tsx",
+        "src/components/room-walk-intake.tsx",
+        "src/lib/photo-review-filters.ts",
+        "src/lib/move-links.ts",
+        "tests/unit/spaces-sell-workspace-pages.test.tsx",
+        "tests/unit/inventory-workspace-page.test.tsx",
+        "tests/unit/move-workspace-page-tabs.test.tsx"
+      ],
+      "label": "safe to fix, except whether the folded-away surfaces should return on screen (needs Scott)",
+      "size": "medium"
+    },
+    {
+      "id": "AIR-02",
+      "title": "AGENTS.md names a weaker pre-merge check than the repo has; nothing else blocks on unit tests",
+      "files": ["AGENTS.md", "README.md", "package.json", ".github/workflows/required-ci.yml"],
+      "label": "safe to fix",
+      "size": "small"
+    },
+    {
+      "id": "AIR-03",
+      "title": "AGENTS.md is 5,508 bytes; a third of it is connection-policy specification",
+      "files": ["AGENTS.md", "docs/api-and-mcp.md", "tests/unit/mcp-doc-tool-catalog.test.ts"],
+      "label": "safe to fix",
+      "size": "small"
+    },
+    {
+      "id": "AIR-04",
+      "title": "convex/restApi.ts is 10,135 lines",
+      "files": ["convex/restApi.ts", "convex/rest/documentationProfiles.ts"],
+      "label": "safe to fix",
+      "size": "large"
+    },
+    {
+      "id": "AIR-05",
+      "title": "Two UI files of 7,217 and 4,657 lines",
+      "files": [
+        "src/components/layout-studio/plan-workspace-page.tsx",
+        "src/components/load-planner-board.tsx"
+      ],
+      "label": "safe to fix",
+      "size": "large"
+    },
+    {
+      "id": "AIR-06",
+      "title": "One-time operator migrations still live in the backend with no caller",
+      "files": [
+        "convex/consolidateMove.ts",
+        "convex/userReconcile.ts",
+        "convex/boxes.ts",
+        "convex/ingestionQueue.ts",
+        "convex/items.ts"
+      ],
+      "label": "needs a production check: each one-time run has finished in production and will not be needed again",
+      "size": "medium"
+    },
+    {
+      "id": "AIR-07",
+      "title": "The tracker describes August; 58 commits have landed since it was last touched",
+      "files": [
+        "docs/tracker/cards/MOV-0032.md",
+        "docs/tracker/cards/MOV-0033.md",
+        "docs/tracker/cards/MOV-0035.md",
+        "docs/tracker/cards/MOV-0038.md",
+        "docs/tracker/cards/MOV-0040.md",
+        "docs/tracker/cards/MOV-0047.md",
+        "docs/tracker/GUIDE.md"
+      ],
+      "label": "safe to fix, except closing MOV-0035, which waits on Scott (needs Scott)",
+      "size": "small"
+    },
+    {
+      "id": "AIR-08",
+      "title": "A test that guards the Live and Sandbox launchers is never run",
+      "files": ["scripts/local-development.test.mjs", "package.json", "vitest.config.ts"],
+      "label": "safe to fix",
+      "size": "small"
+    },
+    {
+      "id": "AIR-09",
+      "title": "Dated documents that read as live instructions",
+      "files": [
+        "docs/releases/2026-10-28-support-intake-local.md",
+        "docs/audits/AUDIT-ROUND2-2026-07-02.md",
+        "docs/audits/AUDIT-ROUND3-2026-07-02.md",
+        "docs/audits/AUDIT-2026-07-26-PERF-FIX-SPEC.md",
+        "docs/planning/moving-bring-your-ai-provider-actions.md",
+        "docs/setup/local-runtime-repair-2026-10-07.json"
+      ],
+      "label": "safe to fix",
+      "size": "small"
+    },
+    {
+      "id": "AIR-10",
+      "title": "README map leaves out where a third of the code lives",
+      "files": ["README.md", "AGENTS.md"],
+      "label": "safe to fix",
+      "size": "small"
+    },
+    {
+      "id": "AIR-11",
+      "title": "The screenshot instructions assume a sibling folder",
+      "files": ["AGENTS.md"],
+      "label": "safe to fix",
+      "size": "small"
+    },
+    {
+      "id": "AIR-12",
+      "title": "Three small source files with no importer",
+      "files": [
+        "src/components/auth-controls.tsx",
+        "src/components/convex-auth-status.tsx",
+        "src/lib/box-options.ts"
+      ],
+      "label": "safe to fix",
+      "size": "small"
+    },
+    {
+      "id": "AIR-13",
+      "title": "Leftover test configuration from the June revamp",
+      "files": ["playwright.revamp.config.ts"],
+      "label": "safe to fix",
+      "size": "small"
+    },
+    {
+      "id": "AIR-14",
+      "title": "Fifteen public brand files that nothing in the code loads, duplicated in docs/design",
+      "files": [
+        "public/brand/assist-family-2026-09-05/",
+        "docs/design/assist-family-brand-2026-09-05/selected-assets/"
+      ],
+      "label": "needs a production check: nothing outside the repo loads movingmanifest.com/brand/assist-family-2026-09-05/",
+      "size": "small"
+    },
+    {
+      "id": "AIR-15",
+      "title": "Old-name stdio entry point and 28 leftover remote branches",
+      "files": [
+        "mcp-server/movingmanifest-mcp.mjs",
+        "scripts/prepare-record-only-sandbox.mjs",
+        "scripts/local-development.json"
+      ],
+      "label": "needs Scott: is the old stdio entry still launched anywhere, is the native Sandbox retired, which rescue/backup branches may go",
+      "size": "small"
+    }
+  ]
+}
