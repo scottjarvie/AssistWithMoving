@@ -4,6 +4,11 @@ This repo-owned tracker is the durable owner-and-AI view of work for Assist
 With Moving. It travels with every authorized clone. Markdown is canonical;
 `board.html` and `guide.html` are generated zero-setup readers.
 
+**Last reconciled: 2026-11-24.** The active Cards (`MOV-0032`, `MOV-0033`,
+`MOV-0038`, `MOV-0040`, `MOV-0047`) were checked against the code; `MOV-0035`
+is left for Scott. If this date is more than a month old, treat Card states as
+possibly stale and check the code.
+
 ## The three concepts
 
 - **Cards** preserve one outcome, why it matters, current truth, the next safe
