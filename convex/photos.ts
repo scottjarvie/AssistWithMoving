@@ -21,7 +21,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import {
   type ActionCtx,
@@ -1126,6 +1126,19 @@ export const getDisplayUrl = action({
   },
 });
 
+async function requireVisibleDeliveryPhoto(
+  ctx: QueryCtx,
+  args: { householdId: Id<"households">; moveId: Id<"moves">; photoId: Id<"itemPhotos"> },
+  visibility: { sensitivePhotos: boolean },
+) {
+  const photo = await ctx.db.get(args.photoId);
+  if (!photo || photo.householdId !== args.householdId || photo.moveId !== args.moveId ||
+      photo.archivedAt || !canViewPhotoAssets(photo, visibility)) {
+    throw new ConvexError("Photo not found.");
+  }
+  return { photo, visibility };
+}
+
 // Bridge-authed variants of the delivery query + display-url action for the
 // OAuth MCP gateway: ctx.auth is null inside a gateway tool, so these authorize
 // from the injected caller subject (requireMoveForSubject) instead of the web
@@ -1145,19 +1158,7 @@ export const getPhotoForDeliveryForSubject = internalQuery({
       args.moveId,
       "inventory:read",
     );
-    const photo = await ctx.db.get(args.photoId);
-    if (
-      !photo ||
-      photo.householdId !== args.householdId ||
-      photo.moveId !== args.moveId ||
-      photo.archivedAt
-    ) {
-      throw new ConvexError("Photo not found.");
-    }
-    if (!canViewPhotoAssets(photo, policy.visibility)) {
-      throw new ConvexError("Photo not found.");
-    }
-    return { photo, visibility: policy.visibility };
+    return requireVisibleDeliveryPhoto(ctx, args, policy.visibility);
   },
 });
 
@@ -1196,10 +1197,8 @@ export const getDisplayUrlForSubject = internalAction({
   },
 });
 
-// REST API (api-key actor) variant. The REST action layer already authorized
-// the move via authenticateAction, so this only re-validates that the photo
-// belongs to the move (getPhotoForDelivery) before signing. Internal-only —
-// never client-callable. Same URL output as getDisplayUrl / *ForSubject. Lets
+// REST API (api-key actor) variant. The REST action passes the effective move
+// visibility from authenticateAction. Internal-only. Lets
 // the stdio/HTTP MCP server fetch real image bytes server-side and hand the
 // model a native image (it never needs to reach Backblaze itself). See
 // MOVE-317.
@@ -1209,6 +1208,7 @@ export const getDisplayUrlForApiActor = internalAction({
     moveId: v.id("moves"),
     photoId: v.id("itemPhotos"),
     variant: photoDisplayVariantValidator,
+    sensitivePhotos: v.boolean(),
   },
   handler: async (
     ctx,
@@ -1230,6 +1230,7 @@ export const getDisplayUrlForApiActor = internalAction({
         householdId: args.householdId,
         moveId: args.moveId,
         photoId: args.photoId,
+        sensitivePhotos: args.sensitivePhotos,
       },
     );
     return buildDisplayUrlResult(photo, args.variant);
@@ -1263,6 +1264,9 @@ export const getOriginalDownloadUrl = action({
     if (!canDownloadOriginalPhoto(photo, visibility)) {
       throw new Error("Original download is not available for this role.");
     }
+    const ttlSeconds = canViewPhotoAssets(photo, { sensitivePhotos: false })
+      ? displayUrlTtlSeconds
+      : 60;
 
     const config = requireB2Config();
     const filename = `assistwithmoving-original-${args.photoId}.${fileExtensionForMediaMimeType(
@@ -1275,7 +1279,7 @@ export const getOriginalDownloadUrl = action({
         Key: photo.originalStorageKey,
         ResponseContentDisposition: `attachment; filename="${filename}"`,
       }),
-      { expiresIn: displayUrlTtlSeconds },
+      { expiresIn: ttlSeconds },
     );
 
     await ctx.runMutation(internal.photos.recordOriginalAccess, {
@@ -1286,7 +1290,7 @@ export const getOriginalDownloadUrl = action({
 
     return {
       url,
-      expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+      expiresAt: Date.now() + ttlSeconds * 1000,
       filename,
       mimeType: photo.mimeType,
       sizeBytes: photo.sizeBytes,
@@ -1716,47 +1720,20 @@ export const getPhotoForDelivery = internalQuery({
       args.moveId,
       "inventory:read",
     );
-    const photo = await ctx.db.get(args.photoId);
-    if (
-      !photo ||
-      photo.householdId !== args.householdId ||
-      photo.moveId !== args.moveId ||
-      photo.archivedAt
-    ) {
-      throw new ConvexError("Photo not found.");
-    }
-
-    return {
-      photo,
-      visibility: policy.visibility,
-    };
+    return requireVisibleDeliveryPhoto(ctx, args, policy.visibility);
   },
 });
 
 // API-key (REST) variant of getPhotoForDelivery. The REST action layer already
-// authorized the move via authenticateAction (API-key scope + household/move),
-// and there is NO ctx.auth in that path — so this must NOT call
-// requireMovePermission (which resolves a Clerk session and throws
-// AuthenticationRequiredError for API-key callers). It only re-validates that
-// the photo belongs to the authorized move. See MOVE-317.
+// authorized the move via authenticateAction and passes its effective policy.
 export const getPhotoForDeliveryForApiActor = internalQuery({
   args: {
     householdId: v.id("households"),
     moveId: v.id("moves"),
     photoId: v.id("itemPhotos"),
+    sensitivePhotos: v.boolean(),
   },
-  handler: async (ctx, args) => {
-    const photo = await ctx.db.get(args.photoId);
-    if (
-      !photo ||
-      photo.householdId !== args.householdId ||
-      photo.moveId !== args.moveId ||
-      photo.archivedAt
-    ) {
-      throw new ConvexError("Photo not found.");
-    }
-    return { photo };
-  },
+  handler: (ctx, args) => requireVisibleDeliveryPhoto(ctx, args, { sensitivePhotos: args.sensitivePhotos }),
 });
 
 export const recordOriginalAccess = aiMutation({
