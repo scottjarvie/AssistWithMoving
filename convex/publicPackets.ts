@@ -80,7 +80,9 @@ export const getForShareLink = internalQuery({
   },
 });
 
-export async function previewPublicPacket(ctx: QueryCtx, args: Parameters<typeof publicShareLinkMetadata>[0] & { householdId: Id<"households">; moveId: Id<"moves">; documentationProfileId?: Id<"documentationProfiles"> }) {
+type DocumentationPacketCache = Map<Id<"moves">, ReturnType<typeof readDocumentationPacketRows>>;
+
+export async function previewPublicPacket(ctx: QueryCtx, args: Parameters<typeof publicShareLinkMetadata>[0] & { householdId: Id<"households">; moveId: Id<"moves">; documentationProfileId?: Id<"documentationProfiles"> }, documentationRows?: DocumentationPacketCache) {
     const shareLink = publicShareLinkMetadata(args);
     const publicPlan = args.allowedActions.includes("viewPlan")
       ? await buildPublicPlanView(ctx, args)
@@ -153,10 +155,40 @@ export async function previewPublicPacket(ctx: QueryCtx, args: Parameters<typeof
         moveId: args.moveId,
         profile,
         packetKind,
-      }),
+      }, documentationRows),
     };
 }
 
+
+function readDocumentationPacketRows(ctx: QueryCtx, moveId: Id<"moves">) {
+  return Promise.all([
+    ctx.db.get(moveId),
+    ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+      .collect(),
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+      .collect(),
+    ctx.db
+      .query("boxItems")
+      .withIndex("by_move", (q) => q.eq("moveId", moveId))
+      .collect(),
+    ctx.db
+      .query("itemPhotos")
+      .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+      .collect(),
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect(),
+  ]);
+}
 
 async function buildPublicDocumentationPacket(
   ctx: QueryCtx,
@@ -165,35 +197,15 @@ async function buildPublicDocumentationPacket(
     moveId: Id<"moves">;
     profile: Doc<"documentationProfiles">;
     packetKind: PublicPacketKind;
-  }
+  },
+  cache?: DocumentationPacketCache,
 ) {
-  const [move, items, boxes, boxItems, photos, resources, zones] = await Promise.all([
-    ctx.db.get(args.moveId),
-    ctx.db
-      .query("items")
-      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-      .collect(),
-    ctx.db
-      .query("boxes")
-      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-      .collect(),
-    ctx.db
-      .query("boxItems")
-      .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
-      .collect(),
-    ctx.db
-      .query("itemPhotos")
-      .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
-      .collect(),
-    ctx.db
-      .query("transportResources")
-      .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-      .collect(),
-    ctx.db
-      .query("transportZones")
-      .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-      .collect(),
-  ]);
+  let rows = cache?.get(args.moveId);
+  if (!rows) {
+    rows = readDocumentationPacketRows(ctx, args.moveId);
+    cache?.set(args.moveId, rows);
+  }
+  const [move, items, boxes, boxItems, photos, resources, zones] = await rows;
 
   if (!move || move.householdId !== args.householdId) {
     throw new Error("Move not found.");
