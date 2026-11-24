@@ -1,0 +1,625 @@
+<!-- Project Pulse — MovingManifest — 2026-07-27 (first pulse) -->
+<title>MovingManifest — Project Pulse</title>
+<style>
+  :root {
+    /* Accent matched to MovingManifest's green brand (oklch hue ~156). */
+    --accent: #2e8f63;
+    --good: #1e7a4f;
+    --warn: #9a6a00;
+    --risk: #c0392b;
+
+    --bg: #faf9f7;
+    --surface: #ffffff;
+    --surface-2: #f1efeb;
+    --ink: #23212b;
+    --muted: #6f6a78;
+    --border: #e4e1da;
+    --shadow: 0 1px 3px rgba(20, 18, 28, 0.07), 0 8px 24px rgba(20, 18, 28, 0.05);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17151d;
+      --surface: #201d28;
+      --surface-2: #2a2733;
+      --ink: #eceaf2;
+      --muted: #a49fb0;
+      --border: #37333f;
+      --accent: #4cc98a;
+      --good: #4cc98a;
+      --warn: #e6b45a;
+      --risk: #ff7b6b;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #faf9f7; --surface: #ffffff; --surface-2: #f1efeb; --ink: #23212b;
+    --muted: #6f6a78; --border: #e4e1da; --accent: #2e8f63; --good: #1e7a4f; --warn: #9a6a00; --risk: #c0392b;
+    --shadow: 0 1px 3px rgba(20,18,28,.07), 0 8px 24px rgba(20,18,28,.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #17151d; --surface: #201d28; --surface-2: #2a2733; --ink: #eceaf2;
+    --muted: #a49fb0; --border: #37333f; --accent: #4cc98a; --good: #4cc98a; --warn: #e6b45a; --risk: #ff7b6b;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  header h1 { font-size: 1.9rem; margin: 0 0 2px; letter-spacing: -0.02em; }
+  .kicker {
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+  }
+  .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 6px; }
+  .headline {
+    font-size: 1.12rem; background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--accent); border-radius: var(--radius);
+    padding: 14px 18px; box-shadow: var(--shadow); margin: 0 0 22px;
+  }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 26px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow);
+  }
+  .stat .num { font-size: 1.7rem; font-weight: 750; letter-spacing: -0.02em; line-height: 1.15; }
+  .stat .lbl { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+
+  nav.tabs {
+    display: flex; gap: 6px; flex-wrap: wrap; position: sticky; top: 0; z-index: 5;
+    background: var(--bg); padding: 8px 0 12px; border-bottom: 1px solid var(--border);
+    margin-bottom: 26px;
+  }
+  nav.tabs button {
+    font: inherit; font-weight: 600; font-size: 0.92rem; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+    padding: 8px 16px; border-radius: 999px; transition: all 0.15s ease;
+  }
+  nav.tabs button:hover { color: var(--ink); }
+  nav.tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  section.tab { display: none; }
+  section.tab.active { display: block; animation: fadein 0.25s ease; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+  h2 { font-size: 1.25rem; margin: 30px 0 12px; letter-spacing: -0.01em; }
+  h2:first-child { margin-top: 0; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow);
+    margin-bottom: 14px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 1.02rem; }
+  .card p { margin: 6px 0; }
+  .card p:last-child { margin-bottom: 0; }
+  .card a { color: var(--accent); }
+
+  .chip {
+    display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+    padding: 2px 10px; border-radius: 999px; vertical-align: 2px; margin-left: 8px;
+    text-transform: uppercase;
+  }
+  .chip.visible { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .chip.internal { background: var(--surface-2); color: var(--muted); }
+  .chip.good { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good); }
+  .chip.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+  .chip.risk { background: color-mix(in srgb, var(--risk) 14%, transparent); color: var(--risk); }
+  .card.sev-good { border-left: 4px solid var(--good); }
+  .card.sev-warn { border-left: 4px solid var(--warn); }
+  .card.sev-risk { border-left: 4px solid var(--risk); }
+
+  .verdict {
+    display: flex; gap: 14px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow);
+    margin-bottom: 20px;
+  }
+  .verdict .icon { font-size: 1.9rem; }
+  .verdict strong { display: block; font-size: 1.05rem; }
+  .verdict span { color: var(--muted); font-size: 0.92rem; }
+
+  .timeline { list-style: none; margin: 0 0 8px; padding: 0 0 0 18px; border-left: 2px solid var(--border); }
+  .timeline li { position: relative; padding: 0 0 16px 16px; }
+  .timeline li::before {
+    content: ""; position: absolute; left: -24px; top: 7px; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--accent); border: 2px solid var(--bg);
+  }
+  .timeline .date { font-size: 0.78rem; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .season { display: flex; flex-direction: column; gap: 0; }
+  .season .milestone {
+    display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: baseline;
+    padding: 9px 4px; border-bottom: 1px dashed var(--border); font-size: 0.94rem;
+  }
+  .season .milestone:last-child { border-bottom: none; }
+  .season .when { font-size: 0.78rem; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .season .milestone.now { background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 8px; }
+  .season .milestone.now .when { color: var(--accent); }
+  .season a { color: var(--accent); text-decoration: none; }
+  .season a:hover { text-decoration: underline; }
+
+  table.branches { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  table.branches th {
+    text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); padding: 6px 10px; border-bottom: 2px solid var(--border);
+  }
+  table.branches td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.branches code { font-size: 0.83rem; word-break: break-all; }
+
+  .lesson { border-left: 4px solid var(--accent); }
+  .lesson .because { color: var(--muted); font-size: 0.9rem; font-style: italic; }
+  .refresher { color: var(--muted); font-size: 0.95rem; margin: 4px 0; }
+  .refresher b { color: var(--ink); }
+  dl.glossary { margin: 0; }
+  dl.glossary dt { font-weight: 700; margin-top: 12px; }
+  dl.glossary dt:target { color: var(--accent); }
+  dl.glossary dd { margin: 2px 0 0 0; color: var(--muted); }
+  a.term { color: inherit; text-decoration: none; border-bottom: 2px dotted var(--accent); }
+  a.term:hover { color: var(--accent); }
+
+  .decision .rec {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border-radius: 8px; padding: 8px 12px; margin-top: 8px; font-size: 0.95rem;
+  }
+  .decision .rec::before { content: "Recommendation: "; font-weight: 700; color: var(--accent); }
+  pre {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; overflow-x: auto; font-size: 0.87rem; line-height: 1.5;
+  }
+  code { font-family: Consolas, "Cascadia Code", monospace; }
+
+  .empty { text-align: center; color: var(--muted); padding: 30px 0; }
+  footer { margin-top: 44px; color: var(--muted); font-size: 0.82rem; text-align: center; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">Project Pulse</div>
+    <h1>MovingManifest</h1>
+    <div class="meta">July 27, 2026 · covering June 29 – July 21 (plus this weekend's deep audit) · first pulse</div>
+    <p class="headline">Four weeks, 57 pull requests: the doors your AI assistants use were audited and locked,
+    the app learned to handle big move lists, and the live site is verified current — and a written
+    performance fix plan now needs your sign-off.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="num">57</div><div class="lbl">pull requests merged</div></div>
+      <div class="stat"><div class="num">+24,500</div><div class="lbl">lines added (code, tests &amp; docs — no bulk data)</div></div>
+      <div class="stat"><div class="num">900+</div><div class="lbl">automated tests, green</div></div>
+      <div class="stat"><div class="num">0</div><div class="lbl">open pull requests</div></div>
+      <div class="stat"><div class="num">✓</div><div class="lbl">live site current (verified)</div></div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="active" data-tab="pulse">Pulse</button>
+    <button data-tab="audit">Audit</button>
+    <button data-tab="branches">Branches</button>
+    <button data-tab="learn">Learn</button>
+    <button data-tab="decisions">Decisions &amp; How-To</button>
+  </nav>
+
+  <section class="tab active" id="pulse">
+    <h2>What happened</h2>
+    <p>All 57 <a class="term" href="#gloss-pull-request">pull requests</a> this period were authored by
+    you working with AI coding agents, and every one landed with tests written before the fix and an
+    honest description of what was and wasn't verified. Five stories:</p>
+
+    <div class="card">
+      <h3>The AI doors got audited and locked <span class="chip internal">Behind the scenes</span></h3>
+      <p>MovingManifest lets AI assistants read and update a move through two doors: sign-in
+      (<a class="term" href="#gloss-oauth">OAuth</a>) at
+      <a href="https://movingmanifest.com/mcp" target="_blank">movingmanifest.com/mcp</a> and an
+      <a class="term" href="#gloss-api-key">API-key</a> door for automation. This month both were hardened:
+      the production sign-in configuration can no longer be silently misconfigured
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/146" target="_blank">PR #146</a>, flagged
+      highest priority), keys pasted into URLs — where they leak into logs — are now rejected with a
+      helpful migration message (<a href="https://github.com/scottjarvie/movingmanifest/pull/147" target="_blank">#147</a>),
+      expired or revoked keys now behave as dead everywhere
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/157" target="_blank">#157</a>), photo
+      uploads from the internet can no longer be tricked into fetching your private network addresses
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/156" target="_blank">#156</a>), and all
+      high-severity dependency alerts were cleared
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/149" target="_blank">#149</a>).</p>
+    </div>
+
+    <div class="card">
+      <h3>The app learned to handle big move lists <span class="chip visible">You can see this</span></h3>
+      <p>With 35+ moves in a workspace, the old menus became unusable. The move directory and the
+      move switcher are now searchable with keyboard support and live result counts
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/158" target="_blank">#158</a>,
+      <a href="https://github.com/scottjarvie/movingmanifest/pull/159" target="_blank">#159</a>), the
+      workspace header fits phone screens
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/160" target="_blank">#160</a>), the load
+      planner pages through long unit lists instead of rendering them all
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/135" target="_blank">#135</a>), and two
+      pages stopped secretly building an invisible second copy of their content
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/154" target="_blank">#154</a>,
+      <a href="https://github.com/scottjarvie/movingmanifest/pull/155" target="_blank">#155</a>).</p>
+    </div>
+
+    <div class="card">
+      <h3>The app audited itself — three rounds, then a UX cleanup epic <span class="chip visible">You can see this</span></h3>
+      <p>Early July was a self-audit blitz: three review rounds fixed the highest-priority findings,
+      including deletions that left orphaned data behind
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/124" target="_blank">#124</a>) and
+      confusing sharing rules between move participants
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/123" target="_blank">#123</a>).
+      The follow-up epic shipped twelve PRs in one day (July 3): the Plan and Overview pages became
+      reachable (<a href="https://github.com/scottjarvie/movingmanifest/pull/132" target="_blank">#132</a>),
+      loading and empty states were standardized
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/134" target="_blank">#134</a>), error
+      messages became human-readable
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/133" target="_blank">#133</a>,
+      <a href="https://github.com/scottjarvie/movingmanifest/pull/140" target="_blank">#140</a>), queue
+      actions got an undo button
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/138" target="_blank">#138</a>), and
+      mobile/accessibility affordances were polished
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/137" target="_blank">#137</a>).</p>
+    </div>
+
+    <div class="card">
+      <h3>Saving and navigating became trustworthy <span class="chip visible">You can see this</span></h3>
+      <p>Late June closed out a reliability sprint: save confirmations and double-submit guards
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/113" target="_blank">#113</a>,
+      <a href="https://github.com/scottjarvie/movingmanifest/pull/114" target="_blank">#114</a>), lists that
+      remember your scroll position
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/117" target="_blank">#117</a>), opaque
+      "Server Error" messages replaced with real explanations
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/106" target="_blank">#106</a>), and a
+      simpler item-measurements editor
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/112" target="_blank">#112</a>).</p>
+    </div>
+
+    <div class="card">
+      <h3>The project grew up as a codebase <span class="chip internal">Behind the scenes</span></h3>
+      <p>This buys safety, not features: a real README and tidy repository
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/144" target="_blank">#144</a>),
+      an orientation file so AI agents stop guessing how the project works
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/145" target="_blank">#145</a>),
+      and — most importantly — an automated <a class="term" href="#gloss-ci">CI</a> quality gate that
+      checks every pull request before it can merge
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/152" target="_blank">#152</a>).
+      Setup docs for AI assistants were also corrected to match reality
+      (<a href="https://github.com/scottjarvie/movingmanifest/pull/148" target="_blank">#148</a>).</p>
+    </div>
+
+    <h2>Timeline</h2>
+    <ul class="timeline">
+      <li><div class="date">Jun 29–30</div>Reliability sprint: saves confirm, errors explain themselves, lists keep your place (14 PRs).</li>
+      <li><div class="date">Jul 1–2</div>Self-audit rounds 1–3: highest-priority fixes across backend, frontend, and access rules.</li>
+      <li><div class="date">Jul 3</div>Twelve PRs in one day close out the UX audit epic.</li>
+      <li><div class="date">Jul 7</div>Repo tidy-up + AI agent orientation file.</li>
+      <li><div class="date">Jul 11–12</div>Production sign-in configuration locked (top-priority security fix); leaky key-in-URL pattern rejected.</li>
+      <li><div class="date">Jul 17–18</div>Security batch: photo-fetch hardening, key lifecycle enforcement, dependency alerts cleared, CI gate defined.</li>
+      <li><div class="date">Jul 20–21</div>Scale batch: searchable move lists and switcher, single-tree page rendering.</li>
+      <li><div class="date">Jul 26–27</div>Deep three-pass audit of recent work, page speed, and backend efficiency → written fix plan (this pulse).</li>
+    </ul>
+
+    <h2>The bigger picture</h2>
+    <div class="card season">
+      <div class="milestone"><span class="when">Jun 8–9</span><span>Project born: foundation, launch-readiness tooling, billing posture — 167 commits in two days.</span></div>
+      <div class="milestone"><span class="when">Jun 11–12</span><span>Layout Studio (floor plans) built in a 121-commit burst.</span></div>
+      <div class="milestone"><span class="when">Jun 17</span><span>Floor-plan workbench prototype consciously parked on an archive branch.</span></div>
+      <div class="milestone"><span class="when">Jun 20–27</span><span>AI connector era: OAuth gateway, agent tools, inventory & boxes UX.</span></div>
+      <div class="milestone now"><span class="when">Jun 29–Jul 21</span><span>Hardening sprint: audits, security lockdown, scale features — you are here.</span></div>
+    </div>
+  </section>
+
+  <section class="tab" id="audit">
+    <div class="verdict">
+      <div class="icon">⚠️</div>
+      <div><strong>The work itself is high quality and honestly reported; the expensive problems are structural — and now have a written fix plan.</strong>
+      <span>Audit depth: deep · the newest 13 PRs read line-by-line, every page's weight and speed measured on a production build, backend query patterns reviewed, CI and the live site independently verified (July 26–27).</span></div>
+    </div>
+
+    <h2>Findings</h2>
+    <div class="card sev-warn">
+      <h3>The sign-in vendor loads on every page — even public docs <span class="chip warn">Needs attention</span></h3>
+      <p>Every public page (homepage, FAQ, the MCP guide) downloads ~765 KB of
+      <a class="term" href="#gloss-third-party-js">third-party JavaScript</a> from
+      <a class="term" href="#gloss-clerk">Clerk</a>, the sign-in service — including, absurdly, a billing
+      widget on the docs page — plus two blocking calls to Clerk's servers and an analytics beacon.
+      The docs page <a href="https://movingmanifest.com/mcp/guide" target="_blank">movingmanifest.com/mcp/guide</a>
+      needs none of it. This is the single biggest speed win available: move sign-in loading to only the
+      pages that sign people in. (Fix plan: work package 1.)</p>
+    </div>
+    <div class="card sev-warn">
+      <h3>The load-plan page re-reads the whole move on every edit <span class="chip warn">Needs attention</span></h3>
+      <p>The page subscribes to four live data feeds that between them read your items list three times
+      over, your boxes three times, and box contents once per box. Because feeds re-run when anything
+      changes, one item edit re-reads the move's entire dataset four times. Consolidating to one feed is
+      work packages 2–3 of the fix plan.</p>
+    </div>
+    <div class="card sev-warn">
+      <h3>Inventory ships every detail of every item to draw 10 rows <span class="chip warn">Needs attention</span></h3>
+      <p>The inventory list downloads all ~35 fields of every item in the move — private notes,
+      provenance records, research text — then shows 10 compact rows. Slimming the list payload
+      (details stay available on tap) is work package 4.</p>
+    </div>
+    <div class="card sev-warn">
+      <h3>47 of 199 database indexes are dead weight <span class="chip warn">Needs attention</span></h3>
+      <p>A <a class="term" href="#gloss-index">database index</a> speeds up one kind of lookup but costs a
+      little on every save. 47 of the 199 defined are never used by any code path — the worst table pays
+      for 14 on every item save while using 6. Removing them is a pure win (work package 5).</p>
+    </div>
+    <div class="card sev-warn">
+      <h3>One page still builds an invisible duplicate of itself <span class="chip warn">Needs attention</span></h3>
+      <p>The July 20–21 batch fixed hidden duplicate page content in two places but missed the third:
+      the movable-units page — the heaviest page in the app — still builds both its phone layout and its
+      desktop layout and hides one. Finishing the job at the shared component fixes it everywhere
+      (work package 7).</p>
+    </div>
+    <div class="card sev-warn">
+      <h3>The CI gate doesn't actually block on failing tests <span class="chip warn">Needs attention</span></h3>
+      <p>The quality gate from <a href="https://github.com/scottjarvie/movingmanifest/pull/152" target="_blank">#152</a>
+      blocks merges on code style, type errors, contract drift, and the build — but the 900+ unit tests
+      run as a separate <em>informational</em> job that cannot block a merge. They passed anyway on the
+      latest check (I verified both jobs), but a failing test currently wouldn't stop anyone. There's a
+      one-click fix in the Decisions tab.</p>
+    </div>
+
+    <h2>What's solid</h2>
+    <div class="card sev-good">
+      <h3>The photo-fetch security defense holds up under close reading <span class="chip good">Verified</span></h3>
+      <p>I read <a href="https://github.com/scottjarvie/movingmanifest/pull/156" target="_blank">#156</a>'s
+      defense line-by-line looking for holes and found none: it validates every address a hostname
+      resolves to, re-checks every redirect, pins the connection to the verified address, and enforces
+      the size limit from both the headers and the actual bytes. This is careful work.</p>
+    </div>
+    <div class="card sev-good">
+      <h3>CI is green and the live site is current <span class="chip good">Verified</span></h3>
+      <p>The latest <a class="term" href="#gloss-ci">CI</a> run on the main branch passed both jobs
+      (required checks and the full test suite). Separately, I confirmed the live site is serving
+      current code by finding text that only exists after July 17's merge on
+      <a href="https://movingmanifest.com/llms.txt" target="_blank">movingmanifest.com</a> — merged work
+      is really deployed, front end and backend together.</p>
+    </div>
+    <div class="card sev-good">
+      <h3>The PR discipline is genuinely excellent <span class="chip good">Verified</span></h3>
+      <p>Every recent PR wrote its tests before the fix, stated exactly what was verified and what
+      wasn't, and reported honest numbers. This is the habit that makes everything else auditable —
+      worth protecting as the project grows.</p>
+    </div>
+
+    <p>The full fix plan — 8 sequenced work packages with acceptance criteria — is in your repo at
+    <code>docs/audits/AUDIT-2026-07-26-PERF-FIX-SPEC.md</code>. Nothing found rises to
+    "production is at risk today"; everything above is about cost and speed as the app grows.</p>
+  </section>
+
+  <section class="tab" id="branches">
+    <div class="verdict">
+      <div class="icon">🧹</div>
+      <div><strong>Cluttered but low-risk — production is healthy; your own checkout is parked on a stale, superseded side branch.</strong>
+      <span>3 remote / 3 local <a class="term" href="#gloss-branch">branches</a> · most up to date: <code>origin/main</code> (Jul 20, CI green, deployed) · 2 <a class="term" href="#gloss-worktree">worktrees</a></span></div>
+    </div>
+
+    <h2>Active</h2>
+    <div class="card">
+      <p><code>origin/main</code> is the freshest work (July 20, commit <code>e8b1112</code>), CI-green and
+      verified live on movingmanifest.com. There are no open pull requests. The catch: your working copy
+      is checked out on <code>docs/mcp-local-install-move-201</code>, which is 16 commits behind — new work
+      started there would build on stale code. The How-To tab has the two commands to come home.</p>
+    </div>
+
+    <h2>Merged — safe to delete <span class="chip good">1 branch + 1 worktree</span></h2>
+    <div class="card">
+      <p><code>feat/move-398-dep-security</code> looks unmerged to git, but that's the
+      <a class="term" href="#gloss-squash">squash-merge</a> illusion — it is
+      <a href="https://github.com/scottjarvie/movingmanifest/pull/149" target="_blank">PR #149</a>, merged
+      July 18 (I verified its change is patch-identical to what landed). Its worktree at
+      <code>J:/IDE/movingmanifest-worktrees/move-398</code> goes with it. Remote branches, credit where
+      due, are auto-deleted on merge — the remote is tidy.</p>
+      <pre><code>git worktree remove J:/IDE/movingmanifest-worktrees/move-398
+git branch -D feat/move-398-dep-security</code></pre>
+    </div>
+
+    <h2>Unmerged — needs a decision <span class="chip warn">1 branch</span></h2>
+    <div class="card sev-warn">
+      <table class="branches">
+        <tr><th>Branch</th><th>Last activity</th><th>Unique work</th><th>Suggestion</th></tr>
+        <tr>
+          <td><code>docs/mcp-local-install-move-201</code><br>(local + remote — currently checked out)</td>
+          <td>Jul 12</td>
+          <td>1 commit: rewrites the AI-assistant setup docs to a "clone the repo locally" approach</td>
+          <td>Discard — superseded</td>
+        </tr>
+      </table>
+      <p>I checked the actual content: applying this commit today would <em>revert</em> the newer
+      "connect remotely, no clone needed" guidance that
+      <a href="https://github.com/scottjarvie/movingmanifest/pull/148" target="_blank">#148</a> merged five
+      days later and that is now live on the site. Decision card in the Decisions tab.</p>
+    </div>
+
+    <h2>Kept on purpose</h2>
+    <div class="card">
+      <p><code>origin/archive/floorplans-workbench-prototype</code> — 14 commits of floor-plan solver
+      work, deliberately parked under the <code>archive/</code> namespace on June 17. Unique work,
+      consciously shelved; keep it.</p>
+    </div>
+
+    <h2>Worktrees</h2>
+    <div class="card">
+      <p>Two: the main one at <code>J:/IDE/MovingManifest</code> (parked on the stale docs branch, see
+      above) and the <code>move-398</code> one whose branch already merged (delete block above). After
+      those two cleanups: one clean worktree on current <code>main</code>.</p>
+    </div>
+  </section>
+
+  <section class="tab" id="learn">
+    <div class="card">
+      <h3>First pulse — what is MovingManifest?</h3>
+      <p>A move-inventory system: every item photographed and cataloged, packed into boxes, planned onto
+      trucks, and exported as documentation packets (insurance claims, movers, employers, military PCS
+      moves). It's a Next.js website on Vercel with a
+      <a class="term" href="#gloss-convex">Convex</a> backend and
+      <a class="term" href="#gloss-clerk">Clerk</a> sign-in — and, distinctively, AI assistants are
+      first-class users: they connect over <a class="term" href="#gloss-mcp">MCP</a> and can catalog,
+      pack, and plan on your behalf. The project is seven weeks old with 501 commits.</p>
+    </div>
+
+    <h2>New lessons this period</h2>
+    <div class="card lesson">
+      <h3>AI assistants have exactly two doors — and they must never be mixed</h3>
+      <p><a href="https://movingmanifest.com/mcp" target="_blank">movingmanifest.com/mcp</a> is the front
+      door: an assistant signs in with your account (<a class="term" href="#gloss-oauth">OAuth</a>) —
+      recommended, no key handling. <code>/api/mcp</code> is the side door for headless automation with a
+      scoped <code>mmk_</code> API key. A client built for one door fails confusingly at the other.</p>
+      <p class="because">We learned this because July's security work locked both doors separately
+      (#146, #147, #157) — the split is now enforced, not just documented.</p>
+    </div>
+    <div class="card lesson">
+      <h3>Merging to main IS deploying — site and backend together</h3>
+      <p>One pipeline: push to main → Vercel builds the site <em>and</em> deploys the Convex backend in
+      the same step. There is no separate "now deploy the backend" chore, and no drift between the two.
+      The flip side: anything merged is live within minutes, so main must always be shippable.</p>
+      <p class="because">We learned this because the audit verified live-site text that could only exist
+      after July 17's merge — proving merge and deploy are one motion here.</p>
+    </div>
+    <div class="card lesson">
+      <h3>Git can't see that a squash-merged branch is finished</h3>
+      <p>This repo <a class="term" href="#gloss-squash">squash-merges</a> pull requests, so a merged
+      branch's commits never appear in main's history and git reports it "unmerged" forever. Always check
+      the branch against merged PRs before worrying — or deleting the wrong thing.</p>
+      <p class="because">We learned this because <code>feat/move-398-dep-security</code> looked like
+      unfinished work but is PR #149, merged July 18.</p>
+    </div>
+    <div class="card lesson">
+      <h3>The server is fast — the costs live in the browser and the data layer</h3>
+      <p>Every page's server response measured at 10–25 ms; nothing to fix there. The real costs are
+      what ships to the browser (big JavaScript bundles, the sign-in vendor everywhere) and how much the
+      live data feeds re-read when something changes. That's where all eight fix-plan work packages aim.</p>
+      <p class="because">We learned this because the July 26 audit measured every route on a production
+      build before reading a line of backend code.</p>
+    </div>
+
+    <h2>Refreshers</h2>
+    <p class="refresher">↺ First pulse — no earlier lessons to refresh yet.</p>
+
+    <h2>Glossary</h2>
+    <dl class="glossary">
+      <dt id="gloss-pull-request">Pull request (PR)</dt>
+      <dd>A packaged, reviewable batch of changes. "Merging" a PR accepts it into the main code line.
+      Numbers like #156 link to the discussion and exact changes on GitHub.</dd>
+      <dt id="gloss-squash">Squash merge</dt>
+      <dd>A merge style that compresses a branch's whole history into one commit on main. Tidy history,
+      but git loses the ability to tell that the original branch was merged.</dd>
+      <dt id="gloss-branch">Branch</dt>
+      <dd>A parallel line of work in the code repository. Work happens on a branch, then merges into
+      <code>main</code>, the authoritative line.</dd>
+      <dt id="gloss-worktree">Worktree</dt>
+      <dd>An extra checked-out folder of the same repository, letting two branches be worked on
+      side-by-side on one machine.</dd>
+      <dt id="gloss-ci">CI (continuous integration)</dt>
+      <dd>Robots that automatically check every pull request — code style, type errors, tests, the
+      build — before it can merge. Your gate is GitHub Actions, defined in July (#152).</dd>
+      <dt id="gloss-mcp">MCP</dt>
+      <dd>Model Context Protocol — the standard plug that lets AI assistants (Claude, ChatGPT, Codex)
+      connect to an app and use its features on a person's behalf.</dd>
+      <dt id="gloss-oauth">OAuth</dt>
+      <dd>"Sign in with your account" for apps and assistants: the assistant gets permission through
+      your normal login, and no password or key ever gets copy-pasted around.</dd>
+      <dt id="gloss-api-key">API key</dt>
+      <dd>A long secret string (yours start with <code>mmk_</code>) that lets a program act without a
+      login screen. Powerful, so they're scoped, expire, and can be revoked.</dd>
+      <dt id="gloss-convex">Convex</dt>
+      <dd>The backend service holding MovingManifest's live database and server logic. Its signature
+      trick: pages <em>subscribe</em> to data, so the screen updates itself the moment data changes.</dd>
+      <dt id="gloss-clerk">Clerk</dt>
+      <dd>The third-party service that handles sign-in, accounts, and sessions so the project doesn't
+      store passwords itself.</dd>
+      <dt id="gloss-index">Database index</dt>
+      <dd>A lookup table that makes one kind of query fast, paid for by a little extra work on every
+      save. Great when used; pure cost when defined and never queried.</dd>
+      <dt id="gloss-third-party-js">Third-party JavaScript</dt>
+      <dd>Code your pages download from someone else's servers (here: Clerk's). It costs load time on
+      every visit and is outside your control, so it should load only where genuinely needed.</dd>
+    </dl>
+  </section>
+
+  <section class="tab" id="decisions">
+    <h2>Needs your decision</h2>
+    <div class="card decision sev-warn">
+      <h3>Approve the performance fix plan?</h3>
+      <p>The audit produced a sequenced 8-package plan
+      (<code>docs/audits/AUDIT-2026-07-26-PERF-FIX-SPEC.md</code> in your repo): move sign-in loading off
+      public pages, consolidate the load-plan data feeds, slim the inventory payload, delete 47 dead
+      indexes, finish the duplicate-page-content fix, speed up bulk imports, and lay search groundwork.
+      Options: approve all eight · approve just the independent quick wins (packages 1, 5, 7) · defer.
+      If you do nothing: nothing breaks, but every public visitor keeps paying the 765 KB sign-in tax and
+      backend costs compound as inventories grow.</p>
+      <div class="rec">Approve the plan. Start with package 1 (biggest measured win, low risk) alongside
+      5 and 7, which are independent. The plan files as one tracked ticket per package.</div>
+    </div>
+    <div class="card decision sev-warn">
+      <h3>Discard the superseded docs branch?</h3>
+      <p><code>docs/mcp-local-install-move-201</code> holds one July 12 commit rewriting the AI setup docs
+      toward "clone the repo locally." Five days later,
+      <a href="https://github.com/scottjarvie/movingmanifest/pull/148" target="_blank">#148</a> merged the
+      opposite (better) approach — connect remotely, no clone — which is now live. Applying the branch
+      today would revert that. Options: discard it · keep it parked in case npm publishing revives the
+      local-install path. If you do nothing: your main checkout stays parked on it, and future work risks
+      building on 16-commit-old code.</p>
+      <div class="rec">Discard local and remote copies (commands below). If the local-install path ever
+      returns, it should be rewritten against current docs anyway.</div>
+    </div>
+
+    <h2>Things only you can do</h2>
+    <div class="card">
+      <h3>Bring your checkout home and clean up</h3>
+      <p>Moves you off the stale branch onto current main, removes the merged-branch clutter, applies the
+      docs-branch discard (skip the last two lines if you chose "keep"), and repairs the one missing
+      package that currently breaks local builds. Success: <code>git status</code> says
+      "On branch main… up to date", and <code>npm run build</code> completes.</p>
+      <pre><code>cd J:/IDE/MovingManifest
+git checkout main
+git pull
+npm ci
+git worktree remove J:/IDE/movingmanifest-worktrees/move-398
+git branch -D feat/move-398-dep-security
+git branch -D docs/mcp-local-install-move-201
+git push origin --delete docs/mcp-local-install-move-201</code></pre>
+    </div>
+    <div class="card">
+      <h3>Make the 900+ tests actually blocking in CI</h3>
+      <p>Today a failing unit test cannot stop a merge (the job is informational). On GitHub:
+      <b>Settings → Branches → branch protection for <code>main</code> → Require status checks</b> → add
+      <b>"Unit tests (informational)"</b> to the required list (and consider renaming the job in
+      <code>.github/workflows/required-ci.yml</code>). Success: a PR with a failing test shows a red
+      required check and can't merge.</p>
+    </div>
+    <div class="card">
+      <h3>Reconnect Linear so tickets can be filed for you</h3>
+      <p>The Linear connection needs re-authorization, which only you can grant — until then I can draft
+      MOVE tickets as text but not file them. In claude.ai → Settings → Connectors → Linear →
+      Reconnect. Success: the assistant can create the 8 fix-plan tickets directly.</p>
+    </div>
+
+    <h2>Closed since last pulse</h2>
+    <p class="refresher">✔ First pulse — nothing raised previously.</p>
+  </section>
+
+  <footer>Generated July 27, 2026 · Project Pulse · period a4be0ab..e8b1112</footer>
+</div>
+
+<script>
+  function activateTab(name) {
+    document.querySelectorAll("nav.tabs button").forEach((b) =>
+      b.classList.toggle("active", b.dataset.tab === name));
+    document.querySelectorAll("section.tab").forEach((s) =>
+      s.classList.toggle("active", s.id === name));
+  }
+  document.querySelectorAll("nav.tabs button").forEach((btn) => {
+    btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+  });
+  document.querySelectorAll("a.term").forEach((a) => {
+    a.addEventListener("click", () => {
+      const target = document.querySelector(a.getAttribute("href"));
+      if (target) activateTab(target.closest("section.tab").id);
+    });
+  });
+</script>

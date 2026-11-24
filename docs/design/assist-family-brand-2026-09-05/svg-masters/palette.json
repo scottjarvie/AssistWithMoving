@@ -1,0 +1,12 @@
+{
+  "primary": "#806E50",
+  "accent": "#C9B796",
+  "colors": [
+    "#806E50",
+    "#C9B796"
+  ],
+  "ground": "#F7F3EA",
+  "status": "Preferred kraft study",
+  "source": "assistwithlife/lib/spaces.ts:410; AssistWithMoving/src/app/globals.css:56",
+  "note": "Kraft remains the current preference. Moving is now separated from the proposed mint Family History."
+}
