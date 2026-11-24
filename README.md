@@ -84,6 +84,19 @@ To find a feature, start from its route under `src/app/(product)/app/`, follow
 the `api.<module>.<function>` calls into `convex/<module>.ts`, then into the
 `convex/lib/` helper it uses; its tests are usually `tests/unit/<feature>*.test.ts`.
 
+| Feature | Screens and data | Backend and agent entry points |
+|---|---|---|
+| Movable Units | `/app/movable-units` and `/app/moves/[id]/load-plan`; `boxes`, `boxItems`, `items` | `boxes.ts`, `items.ts`, screen rules in `src/lib/movable-units.ts`; REST `/moves/{id}/movable-units`, OAuth `save_inventory` |
+| Capture | `/app/moves/[id]/capture`; `ingestionQueueEntries` | `ingestionQueue.ts`, Queue adapters in `queue.ts`; legacy `capture_to_queue` |
+| Queue / Needs your input | `/app/queue` and `/app/queue/suggestions`; `queueItems`, `queueActivities` | `queue.ts`, `lib/queueService.ts`, canonical `mcpQueueWork.ts`, legacy `mcpToolsCanonicalQueue.ts` and `mcpToolsQueue.ts`; REST `/moves/{id}/queue/{id}/needs-you`, OAuth `ask_queue_question` |
+| Spaces & Transport | `/app/spaces-transport`; `moveSpaces`, `transportResources`, `transportZones`, `transportTrips`, `tripSpaces` | `spaces-transport-page.tsx`; REST move routes `/spaces`, `/transport-resources`, `/transport-zones` |
+| Layout plan | `/app/moves/[id]/plan`; `floorPlans`, `planLevels`, `planEntities`, `planPlacements`, `planOps`, `planProposals` | `floorPlans.ts`, `planOps.ts`, `src/components/layout-studio/`, `src/lib/plan-*`; REST `/plans` |
+| Packets and sharing | `/app/moves/[id]/packets` and `/share/[token]`; `documentationProfiles`, `shareLinks`, `shareLinkComments`, `exportJobs` | `publicPackets.ts`, `documentation-packet-builder.tsx`, `public-share-viewer.tsx`; REST move routes `/documentation-profiles`, `/share-links`, `/exports` |
+
+Convex calls using `(internal as any)` in `httpRoutes/mcp.ts`, `http.ts` and
+`shareLinks.ts`, and the hand-typed `internalFunctions` in `restApi.ts`, can
+bypass generated address checks. Trace these call sites when changing a registration.
+
 **The MCP surfaces** (easy to confuse — check the right catalog before assuming
 a capability is missing). Three code surfaces serve four public doors: `/mcp`,
 `/mcp/connect`, `/api/mcp`, and the local stdio server.
@@ -98,7 +111,8 @@ a capability is missing). Three code surfaces serve four public doors: `/mcp`,
    gated by product grant scopes in `convex/lib/aiGrants.ts`, so
    a connection is only shown what the person approved. Never retype this count;
    `tests/unit/mcp-doc-tool-catalog.test.ts` derives it from source.
-2. **Legacy persisted OAuth** — `convex/mcp.ts` + `convex/mcpTools*.ts`, served
+2. **Legacy persisted OAuth** — `convex/mcp.ts` + `convex/mcpTools*.ts`
+   (including `mcpToolsCanonicalQueue.ts`), served
    at `movingmanifest.com/mcp/connect`. It preserves the original catalog plus
    `describe_connection` and `reduce_connection` for already-connected clients.
 3. **API-key HTTP/stdio** — `src/app/api/mcp/route.ts` and `mcp-server/`, using
