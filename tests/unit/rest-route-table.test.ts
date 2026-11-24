@@ -16,6 +16,9 @@ afterEach(() => {
 it("pins the internal mutation addresses and argument schemas at the REST door", () => {
   const exports = Object.entries(registrations).flatMap(([name, value]) => {
     if (!("isInternal" in value) || !("isMutation" in value)) return [];
+    if (!("exportArgs" in value) || typeof value.exportArgs !== "function") {
+      throw new Error(`Missing serialized argument schema for restApi:${name}`);
+    }
     return [{ name: `restApi:${name}`, args: JSON.parse(value.exportArgs()) }];
   });
   expect(exports.sort((a, b) => a.name.localeCompare(b.name))).toMatchSnapshot();

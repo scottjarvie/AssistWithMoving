@@ -1,6 +1,6 @@
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
-import { authenticateApiKey } from "../apiKeyAuth";
+import type { authenticateApiKey } from "../apiKeyAuth";
 import {
   moveIdFromRestBodyOrQuery,
   type RestRequestInput,

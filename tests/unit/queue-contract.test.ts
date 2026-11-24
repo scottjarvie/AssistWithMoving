@@ -217,7 +217,7 @@ describe("canonical Queue behavior contract", () => {
     for (const sourcePath of [
       "convex/mcpToolsCanonicalQueue.ts",
       "convex/mcpToolsQueue.ts",
-      "convex/restApi.ts",
+      "convex/rest/queue.ts",
     ]) {
       const source = readFileSync(sourcePath, "utf8");
       expect(source).toContain("isManager: queueManagerRecoveryAllowed({");
@@ -228,13 +228,13 @@ describe("canonical Queue behavior contract", () => {
     for (const sourcePath of [
       "convex/queue.ts",
       "convex/mcpToolsCanonicalQueue.ts",
-      "convex/restApi.ts",
+      "convex/rest/queue.ts",
     ]) {
       const source = readFileSync(sourcePath, "utf8");
       expect(source).toContain("queueItemMatchesEffectiveState(");
       expect(source).not.toContain('.eq("state", args.state');
     }
-    const restSource = readFileSync("convex/restApi.ts", "utf8");
+    const restSource = readFileSync("convex/rest/queue.ts", "utf8");
     expect(restSource).not.toContain("args.query.before");
     expect(restSource).toContain(".paginate({ cursor, numItems: limit })");
   });

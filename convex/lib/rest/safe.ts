@@ -1,6 +1,6 @@
 import type { Doc } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
-import { authenticateApiKey } from "../apiKeyAuth";
+import type { authenticateApiKey } from "../apiKeyAuth";
 import { itemDimensionsConfidenceForRead } from "../../../src/lib/inventory-measurements";
 import { safeShareLinkMetadata } from "../shareLinks";
 

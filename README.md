@@ -87,16 +87,16 @@ the `api.<module>.<function>` calls into `convex/<module>.ts`, then into the
 
 | Feature | Screens and data | Backend and agent entry points |
 |---|---|---|
-| Movable Units | `/app/movable-units` and `/app/moves/[id]/load-plan`; `boxes`, `boxItems`, `items` | `boxes.ts`, `items.ts`, screen rules in `src/lib/movable-units.ts`; REST `/moves/{id}/movable-units`, OAuth `save_inventory` |
-| Capture | `/app/moves/[id]/capture`; `ingestionQueueEntries` | `ingestionQueue.ts`, Queue adapters in `queue.ts`; legacy `capture_to_queue` |
+| Movable Units | `/app/movable-units` and `/app/moves/[moveId]/load-plan`; `boxes`, `boxItems`, `items` | `boxes.ts`, `items.ts`, screen rules in `src/lib/movable-units.ts`, backend rules in `convex/lib/rest/movableUnits.ts`; REST `/moves/{moveId}/movable-units/batch-upsert`, OAuth `save_inventory` |
+| Capture | `/app/moves/[moveId]/capture`; `ingestionQueueEntries` | `ingestionQueue.ts`, Queue adapters in `queue.ts`; legacy `capture_to_queue` |
 | Queue / Needs your input | `/app/queue` and `/app/queue/suggestions`; `queueItems`, `queueActivities` | `queue.ts`, `lib/queueService.ts`, canonical `mcpQueueWork.ts`, legacy `mcpToolsCanonicalQueue.ts` and `mcpToolsQueue.ts`; REST `/moves/{id}/queue/{id}/needs-you`, OAuth `ask_queue_question` |
-| Spaces & Transport | `/app/spaces-transport`; `moveSpaces`, `transportResources`, `transportZones`, `transportTrips`, `tripSpaces` | `spaces-transport-page.tsx`; REST move routes `/spaces`, `/transport-resources`, `/transport-zones` |
-| Layout plan | `/app/moves/[id]/plan`; `floorPlans`, `planLevels`, `planEntities`, `planPlacements`, `planOps`, `planProposals` | `floorPlans.ts`, `planOps.ts`, `src/components/layout-studio/`, `src/lib/plan-*`; REST `/plans` |
-| Packets and sharing | `/app/moves/[id]/packets` and `/share/[token]`; `documentationProfiles`, `shareLinks`, `shareLinkComments`, `exportJobs` | `publicPackets.ts`, `documentation-packet-builder.tsx`, `public-share-viewer.tsx`; REST move routes `/documentation-profiles`, `/share-links`, `/exports` |
+| Spaces & Transport | `/app/spaces-transport`; `moveSpaces`, `transportResources`, `transportZones`, `transportTrips`, `tripSpaces` | `spaces-transport-page.tsx`; REST move routes `/spaces`, `/resources`, `/zones` |
+| Layout plan | `/app/moves/[moveId]/plan`; `floorPlans`, `planLevels`, `planEntities`, `planPlacements`, `planOps`, `planProposals` | `floorPlans.ts`, `planOps.ts`, `src/components/layout-studio/`, `src/lib/plan-*`; REST `/plans` |
+| Packets and sharing | `/app/moves/[moveId]/packets` and `/share/[token]`; `documentationProfiles`, `shareLinks`, `shareLinkComments`, `exportJobs` | `publicPackets.ts`, `documentation-packet-builder.tsx`, `public-share-viewer.tsx`; REST move routes `/documentation-profiles`, `/share-links`, `/exports` |
 
 Convex calls using `(internal as any)` in `httpRoutes/mcp.ts`, `http.ts` and
-`shareLinks.ts`, and the hand-typed `internalFunctions` in `restApi.ts`, can
-bypass generated address checks. Trace these call sites when changing a registration.
+`shareLinks.ts`, and the hand-typed `internalFunctions` in `convex/lib/rest/functionReferences.ts`,
+can bypass generated address checks. Trace these call sites when changing a registration.
 
 **The MCP surfaces** (easy to confuse — check the right catalog before assuming
 a capability is missing). Three code surfaces serve four public doors: `/mcp`,
