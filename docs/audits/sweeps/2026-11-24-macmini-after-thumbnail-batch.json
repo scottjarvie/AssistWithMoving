@@ -1,0 +1,49 @@
+{
+  "site": "https://movingmanifest.com",
+  "date": "2026-11-24",
+  "machine": "macmini",
+  "baseline_head": "7a782a8179534380211d4500751d18e6d4595063",
+  "deployment_attribution": "Production deployment and Convex registration reported verified by Structure coordinator; deployment commit not independently established in browser.",
+  "browser": "T3 preview, saved default profile, one owned tab; visible=false",
+  "method": "Read-only settled DOM summaries; 1280 desktop and iPhone 12 Pro preset with innerWidth 390. No media URLs or private record contents retained.",
+  "complete": false,
+  "rows": [
+    {
+      "route": "/app/items",
+      "session": "signed in",
+      "main_rendered": true,
+      "sampled_workspace_error": false,
+      "desktop": { "width": 1280, "images": 8, "loaded": 8, "sized": 8, "complete_failed": 0 },
+      "next_page": { "advanced": true, "images": 3, "loaded": 3, "previous_enabled": true },
+      "phone": { "width": 390, "document_width": 390, "images": 3, "loaded": 3, "sized": 3, "view": "second page" },
+      "baseline_comparison": "Prior after-fixes pass observed main and an existing rendered image, without comparable counts."
+    },
+    {
+      "route": "/app/movable-units",
+      "session": "signed in",
+      "main_rendered": true,
+      "sampled_workspace_error": false,
+      "desktop": { "width": 1280, "images": 24, "loaded": 24, "sized": 12, "complete_failed": 0 },
+      "phone": { "width": 390, "document_width": 390, "images": 24, "loaded": 24, "sized": 12, "complete_failed": 0 },
+      "next_page": { "advanced": true, "images": 46, "loaded": 46, "sized": 23, "previous_enabled": true },
+      "revisit": { "table_rows": 25, "no_image_or_placeholder_labeled_elements": 26, "complete_failed_images": 0 },
+      "notes": "Labels can be duplicated per record; unsized elements may be alternate responsive markup. Neither is proof of a failed cover."
+    },
+    {
+      "route": "/app/mover-packet",
+      "session": "signed in",
+      "main_rendered": true,
+      "sampled_workspace_error": false,
+      "export_related_ui_present": true,
+      "csv_downloaded": false,
+      "missing_reason": "No public or synthetic fixture without private fields was established; live CSV bytes unverified."
+    }
+  ],
+  "limits": "Bounded single-account sample; no visual screenshots, expiry tests, access boundary probes, backend request counts, production batching ratio, or synthetic CSV parity proof. Document widths do not establish absence of overlap or clipping.",
+  "baseline_sha256": {
+    "original_md": "22db57a1eb25f99bc079e5c5a70d4109a61f31f60415537ca49fe4fbc39144a2",
+    "original_json": "267849c0031cbd8b78a83fd18e097ab763efeb4d1e75c7165a90eb75466faacb",
+    "after_fixes_md": "16013713ec4da332e88accf8655348e8175dec5e9324951c7616113ecc981663",
+    "after_fixes_json": "708915da3954ba7b2841e96a542e567245b48f7980955919ff35b68756a2692f"
+  }
+}
