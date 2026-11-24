@@ -11,10 +11,11 @@
 //    "show empty" toggle, and sorts the fullest to the top;
 //  - flat, dense framing instead of nested cards.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { usePhotoDisplayUrl } from "@/lib/use-photo-display-url";
 import {
   AlertTriangle,
   Boxes,
@@ -1204,26 +1205,7 @@ function EntryThumbnail({
   entry: OrganizerEntry;
   photoId?: Id<"itemPhotos">;
 }) {
-  const getDisplayUrl = useAction(api.photos.getDisplayUrl);
-  const [url, setUrl] = useState<string | null>(null);
-
-  // Fetch the short-lived display URL for this entry's cover photo. The JSX
-  // gates on `photoId && url`, so a not-yet-resolved or absent photo renders the
-  // fallback icon — no synchronous reset needed.
-  useEffect(() => {
-    if (!photoId) return;
-    let cancelled = false;
-    void getDisplayUrl({ householdId, moveId, photoId, variant: "card" })
-      .then((display) => {
-        if (!cancelled) setUrl(display.url);
-      })
-      .catch(() => {
-        if (!cancelled) setUrl(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [getDisplayUrl, householdId, moveId, photoId]);
+  const url = usePhotoDisplayUrl(householdId, moveId, photoId);
 
   return (
     <div className="size-11 shrink-0 overflow-hidden rounded-md border border-border bg-muted">

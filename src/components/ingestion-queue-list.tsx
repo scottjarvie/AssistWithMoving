@@ -1,8 +1,9 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useRef, useState } from "react";
 import Link from "next/link";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { usePhotoDisplayUrls } from "@/lib/use-photo-display-url";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -81,48 +82,8 @@ function QueueMediaThumbnails({
   // jobs already show up as resolved thumbnails via mediaPhotoIds).
   jobs?: UploadJob[];
 }) {
-  const getDisplayUrl = useAction(api.photos.getDisplayUrl);
-  const [urls, setUrls] = useState<Record<string, string>>({});
-  const thumbKey = mediaPhotoIds.slice(0, 4).join("|");
-  // Stable identity keyed on the id list so the resolver effect runs once per
-  // distinct set of media rather than on every parent re-render.
-  const visibleIds = useMemo(
-    () => (thumbKey ? (thumbKey.split("|") as Id<"itemPhotos">[]) : []),
-    [thumbKey],
-  );
-
-  useEffect(() => {
-    if (!householdId || !moveId || visibleIds.length === 0) {
-      return;
-    }
-    let cancelled = false;
-    void Promise.all(
-      visibleIds.map(async (photoId) => {
-        try {
-          const display = await getDisplayUrl({
-            householdId,
-            moveId,
-            photoId,
-            variant: "card",
-          });
-          return [photoId, display.url] as const;
-        } catch {
-          return [photoId, null] as const;
-        }
-      }),
-    ).then((entries) => {
-      if (cancelled) return;
-      setUrls(
-        entries.reduce<Record<string, string>>((acc, [photoId, url]) => {
-          if (url) acc[photoId] = url;
-          return acc;
-        }, {}),
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [getDisplayUrl, householdId, moveId, visibleIds]);
+  const visibleIds = mediaPhotoIds.slice(0, 4);
+  const urls = usePhotoDisplayUrls(householdId, moveId, visibleIds);
 
   // Pending (queued/uploading/finalizing) and failed jobs get their own tiles so
   // the user sees photos still arriving; done jobs are already attached and show
