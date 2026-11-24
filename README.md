@@ -131,6 +131,7 @@ Sandbox is the cloud development deployment `dev:grateful-jaguar-369` (`jarvie:m
 ## Checks and tests
 
 ```sh
+npm run check         # the pre-merge gate: everything below except e2e and build, plus contract checks
 npm run lint          # eslint
 npm run typecheck     # tsc --noEmit
 npm run test          # vitest unit tests
@@ -142,7 +143,7 @@ npm run verify:launch # all of the above + build, in sequence
 
 ## Deploying
 
-Merging to `main` on GitHub **is** the production deploy (Vercel builds and ships automatically, and prod Convex functions deploy with it). There is no separate release step — so `main` must always be green: lint, typecheck, unit tests, and build before merging.
+Merging to `main` on GitHub **is** the production deploy (Vercel builds and ships automatically, and prod Convex functions deploy with it). There is no separate release step — so `main` must always be green: run `npm run check` before merging. CI's unit-test job is informational, so the local check is the one that catches a failing test.
 
 The AI merges and deploys routine work after previewing it locally ([Core Philosophy §16.6](https://github.com/scottjarvie/assistwithlife/blob/main/planning/assist-with-sites-core-philosophy.md#166-delivering-changes-localhost-first-then-merge)). Vercel builds only `main` and branches named `preview/*`; push to a `preview/` branch when a preview link is wanted. Draft pull requests skip the CI jobs until marked ready.
 
