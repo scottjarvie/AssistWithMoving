@@ -1,5 +1,5 @@
 // @vitest-environment node
-import type { FunctionReference } from "convex/server";
+import type { FunctionReference, FunctionReturnType } from "convex/server";
 import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { api, internal } from "../../convex/_generated/api";
@@ -12,6 +12,8 @@ import {
   type QueueAccessActor,
 } from "../../convex/lib/queueService";
 import { queueItemMatchesEffectiveState } from "../../convex/lib/queue";
+import type { QueueState } from "../../convex/lib/queue";
+import type { Doc } from "../../convex/_generated/dataModel";
 import { createMovingServer } from "../../convex/httpRoutes/mcp";
 import { hashApiKey, apiKeyPrefix } from "../../convex/lib/apiKeys";
 import {
@@ -2270,5 +2272,174 @@ it("queue.counts excludes the partner's modern and legacy captures", async () =>
     needsYou: 0,
     needsInputOpen: 0,
     suggestions: 0,
+  });
+  const needsInput = {
+    householdId: f.householdId,
+    moveId: f.moveId,
+    state: "needsYou" as const,
+    paginationOpts: { cursor: null, numItems: 2 },
+  };
+  const mine = { ...needsInput, ownerUserId: f.userId };
+  expect(await f.person.query(api.queue.listCaptureAdapter, mine)).toMatchObject({
+    page: [], isDone: true,
+  });
+  expect(await f.person.query(api.queue.listLegacyCaptureAdapter, mine)).toMatchObject({
+    page: [], isDone: true,
+  });
+  const everyone = await f.person.query(api.queue.listCaptureAdapter, needsInput);
+  expect(everyone.page.map((row) => row.requiredAction)).toEqual([
+    "Private legacy partner question",
+    "Private partner question",
+  ]);
+});
+
+describe("Queue capture view pagination", () => {
+  type CapturePage = FunctionReturnType<typeof api.queue.listCaptureAdapter>;
+
+  function adapters(f: Awaited<ReturnType<typeof fixture>>) {
+    const args = { householdId: f.householdId, moveId: f.moveId };
+    const owner = { ...args, ownerUserId: f.userId };
+    return {
+      current: (state?: QueueState, cursor: string | null = null, numItems = 50, endCursor?: string) =>
+        f.person.query(api.queue.listCaptureAdapter, {
+          ...owner, state, paginationOpts: { cursor, numItems, endCursor },
+        }),
+      legacy: (state?: QueueState, cursor: string | null = null, numItems = 50, endCursor?: string) =>
+        f.person.query(api.queue.listLegacyCaptureAdapter, {
+          ...owner, state, paginationOpts: { cursor, numItems, endCursor },
+        }),
+      everyone: (state?: QueueState, cursor: string | null = null, numItems = 50) =>
+        f.person.query(api.queue.listCaptureAdapter, {
+          ...args, state, paginationOpts: { cursor, numItems },
+        }),
+    };
+  }
+
+  it("settles an Answered-only history in one response per stream", async () => {
+    const f = await fixture();
+    await f.t.run(async (ctx) => {
+      for (let i = 0; i < 251; i++) {
+        for (const ownerUserId of [f.userId, undefined]) {
+          await ctx.db.insert("ingestionQueueEntries", {
+            householdId: f.householdId,
+            moveId: f.moveId,
+            createdByUserId: f.userId,
+            ownerUserId,
+            status: "processed",
+            needsInput: false,
+            mediaPhotoIds: [],
+            sortOrder: i,
+            createdAt: i,
+            updatedAt: i,
+          });
+        }
+      }
+    });
+    for (const [scope, read] of Object.entries(adapters(f))) {
+      // Everything uses the former chronological read with no post-page state
+      // filter. With this fixture it exposes every document that would have
+      // been visited before rejecting it from Waiting on AI or Needs your input.
+      let cursor: string | null = null;
+      let pages = 0;
+      let documents = 0;
+      for (;;) {
+        const result: CapturePage = await read(undefined, cursor);
+        pages++;
+        documents += result.page.length;
+        if (result.isDone) break;
+        cursor = result.continueCursor;
+      }
+      expect({ pages, documents }).toEqual(
+        scope === "everyone" ? { pages: 11, documents: 502 } : { pages: 6, documents: 251 },
+      );
+      for (const state of ["waitingForAi", "needsYou", "working"] as const) {
+        expect(await read(state)).toEqual({ page: [], isDone: true, continueCursor: "" });
+      }
+      const answered = await read("done");
+      expect(answered.page).toHaveLength(50);
+      expect(answered.isDone).toBe(false);
+    }
+  });
+
+  it("retains chronological page boundaries and exact state projection across mixed capture streams", async () => {
+    const f = await fixture();
+    const now = Date.now();
+    const rows = [
+      { instructions: "discarded", status: "discarded", needsInput: true },
+      { instructions: "answered", status: "processed", needsInput: false },
+      { instructions: "old review", status: "processed" },
+      { instructions: "leased", status: "claimed", claimExpiresAt: now + 60_000, needsInput: true },
+      { instructions: "expired", status: "claimed", claimExpiresAt: now - 1 },
+      { instructions: "no lease", status: "claimed" },
+      { instructions: "old question", status: "needsInput" },
+      { instructions: "cleared question", status: "needsInput", needsInput: false },
+      { instructions: "resolved", status: "resolved" },
+      { instructions: "queued", status: "queued" },
+    ] satisfies Pick<Doc<"ingestionQueueEntries">, "status" | "instructions" | "claimExpiresAt" | "needsInput">[];
+    await f.t.run(async (ctx) => {
+      for (const [i, row] of rows.entries()) {
+        for (const source of ["current", "legacy"] as const) {
+          const current = source === "current";
+          await ctx.db.insert("ingestionQueueEntries", {
+            ...row,
+            instructions: `${source} ${row.instructions}`,
+            householdId: f.householdId,
+            moveId: f.moveId,
+            createdByUserId: f.userId,
+            ownerUserId: current ? f.userId : undefined,
+            mediaPhotoIds: [],
+            sortOrder: i,
+            createdAt: 100 - i,
+            updatedAt: 2 * i + Number(current),
+          });
+        }
+      }
+    });
+    const expected = {
+      waitingForAi: [[], ["expired"], ["old question"], ["cleared question"], ["queued"]],
+      working: [[], ["leased"], ["no lease"], [], []],
+      done: [["answered", "old review"], [], [], ["resolved"], []],
+      needsYou: [["old review"], ["leased"], ["old question"], [], []],
+    } satisfies Record<QueueState, string[][]>;
+    const { current, legacy, everyone } = adapters(f);
+    for (const [state, pages] of Object.entries(expected)) {
+      let currentCursor: string | null = null;
+      let legacyCursor: string | null = null;
+      for (const [i, page] of pages.entries()) {
+        const selected = state as QueueState;
+        const [modern, old]: [CapturePage, CapturePage] = await Promise.all([
+          current(selected, currentCursor, 2),
+          legacy(selected, legacyCursor, 2),
+        ]);
+        expect(modern.page.map((row) => row.directive)).toEqual(page.map((label) => `current ${label}`));
+        expect(old.page.map((row) => row.directive)).toEqual(page.map((label) => `legacy ${label}`));
+        expect(modern.isDone).toBe(i === pages.length - 1);
+        expect(old.isDone).toBe(modern.isDone);
+        if (i === 0) {
+          expect((await current(selected, null, 1, modern.continueCursor)).page).toEqual(modern.page);
+          expect((await legacy(selected, null, 1, old.continueCursor)).page).toEqual(old.page);
+        }
+        currentCursor = modern.continueCursor;
+        legacyCursor = old.continueCursor;
+      }
+      const all = await everyone(state as QueueState);
+      expect(all.page.map((row) => row.directive)).toEqual(
+        pages.flat().flatMap((label) => [`legacy ${label}`, `current ${label}`]),
+      );
+    }
+    const merged = [
+      ...(await current("waitingForAi")).page,
+      ...(await legacy("waitingForAi")).page,
+    ].sort((a, b) => b.updatedAt - a.updatedAt);
+    expect(merged.map((row) => [row.directive, row.state, row.needsInput, row.claim])).toEqual([
+      ["current queued", "waitingForAi", false, null],
+      ["legacy queued", "waitingForAi", false, null],
+      ["current cleared question", "waitingForAi", false, null],
+      ["legacy cleared question", "waitingForAi", false, null],
+      ["current old question", "waitingForAi", true, null],
+      ["legacy old question", "waitingForAi", true, null],
+      ["current expired", "waitingForAi", false, null],
+      ["legacy expired", "waitingForAi", false, null],
+    ]);
   });
 });
