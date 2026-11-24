@@ -134,21 +134,43 @@ it("drops cached capabilities on redaction and never carries them into another s
   expect(view.container.querySelector("img")).toBeNull();
 });
 
-it("retires a URL before expiry and renews only the active page", async () => {
+it("keeps the mounted cover after expiry and re-signs it only on page revisit", async () => {
   vi.useFakeTimers();
+  const visibility = vi.spyOn(document, "visibilityState", "get");
   try {
-    seed(1);
+    seed(11);
+    fixture.photos = fixture.photos.slice(0, 1);
+    const photoId = fixture.photos[0]._id;
     fixture.batch.mockResolvedValueOnce([{
-      photoId: fixture.photos[0]._id, url: "https://example.test/expiring", expiresAt: Date.now() + 11_000,
-    }]).mockResolvedValue([]);
+      photoId, url: "https://example.test/expiring", expiresAt: Date.now() + 30_000,
+    }]).mockImplementation(async () => [{
+      photoId, url: "https://example.test/fresh", expiresAt: Date.now() + 30_000,
+    }]);
     const view = render(<InventoryTable {...{ householdId, moveId }} />);
     await act(async () => vi.advanceTimersByTimeAsync(0));
-    expect(view.container.querySelector("img")).toBeInTheDocument();
-    await act(async () => vi.advanceTimersByTimeAsync(1_000));
-    expect(view.container.querySelector("img")).toBeNull();
+    const image = view.container.querySelector("img");
+    expect(image).toHaveAttribute("src", "https://example.test/expiring");
+    for (const state of ["visible", "hidden"] as const) {
+      visibility.mockReturnValue(state);
+      fireEvent(document, new Event("visibilitychange"));
+      await act(async () => vi.advanceTimersByTimeAsync(60_000));
+      expect(view.container.querySelector("img")).toBe(image);
+      expect(image).toHaveAttribute("src", "https://example.test/expiring");
+      expect(fixture.batch).toHaveBeenCalledTimes(1);
+    }
+    visibility.mockReturnValue("visible");
+    fireEvent(document, new Event("visibilitychange"));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(fixture.batch).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Prev" }));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(fixture.batch).toHaveBeenCalledTimes(2);
+    expect(fixture.batch).toHaveBeenLastCalledWith({ householdId, moveId, photoIds: [photoId] });
+    expect(view.container.querySelector("img")).toHaveAttribute("src", "https://example.test/fresh");
     view.unmount();
   } finally {
+    visibility.mockRestore();
     vi.useRealTimers();
   }
 });

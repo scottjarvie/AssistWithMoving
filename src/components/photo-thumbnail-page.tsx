@@ -68,70 +68,58 @@ function ScopedThumbnailPage({ householdId, moveId, pageKey, children }: {
       ([id, ref, updatedAt]) => [id, JSON.stringify([ref, updatedAt])],
     ));
     const entries = cache.current;
-    const attempted = new Set<PhotoId>();
     let cancelled = false;
-    let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
-    function syncPage() {
+    // Expiry limits cache reuse when the page or its covers change. Keep an
+    // already displayed image in place and let the next page load reauthorize it.
+    async function resolvePage() {
       if (cancelled) return;
-      clearTimeout(expiryTimer);
       const now = Date.now();
-      let nextExpiry = Infinity;
       for (const [id, entry] of entries) {
         const revision = covers.get(id);
-        if (revision && revision !== entry.revision) {
+        if (entry.usableUntil <= now || (revision !== undefined && revision !== entry.revision)) {
           entries.delete(id);
-        } else if (entry.usableUntil <= now) {
-          entries.delete(id);
-          attempted.delete(id);
-        } else {
-          nextExpiry = Math.min(nextExpiry, entry.usableUntil);
         }
       }
-      if (Number.isFinite(nextExpiry)) expiryTimer = setTimeout(resolvePage, nextExpiry - now);
 
       const urls: Record<string, string> = {};
       const missing: PhotoId[] = [];
-      for (const [id, revision] of covers) {
+      for (const id of covers.keys()) {
         const entry = entries.get(id);
-        if (entry?.revision === revision) {
+        if (entry) {
           urls[id] = entry.url;
-        } else if (!attempted.has(id)) {
-          attempted.add(id);
+        } else {
           missing.push(id);
         }
       }
       setPage({ key: pageKey, urls });
-      return missing;
-    }
+      if (!missing.length || !householdId || !moveId) return;
 
-    function resolvePage() {
-      const missing = syncPage();
-      if (!missing?.length || !householdId || !moveId) return;
-      void getThumbnailUrls({ householdId, moveId, photoIds: missing }).then((results) => {
+      try {
+        const results = await getThumbnailUrls({ householdId, moveId, photoIds: missing });
         if (cancelled) return;
+        const resolvedUrls = { ...urls };
         for (const { photoId, url, expiresAt } of results) {
           const revision = covers.get(photoId);
           const usableUntil = expiresAt - expiryMarginMs;
           if (!revision || usableUntil <= Date.now()) continue;
-          entries.delete(photoId);
           entries.set(photoId, { revision, url, usableUntil });
+          resolvedUrls[photoId] = url;
         }
         while (entries.size > cacheLimit) {
           const oldest = entries.keys().next();
           if (oldest.done) break;
           entries.delete(oldest.value);
         }
-        resolvePage();
-      }).catch(() => {
+        setPage({ key: pageKey, urls: resolvedUrls });
+      } catch {
         // The cells retain their existing placeholders if signing fails.
-      });
+      }
     }
 
     queueMicrotask(resolvePage);
     return () => {
       cancelled = true;
-      clearTimeout(expiryTimer);
     };
   }, [getThumbnailUrls, householdId, moveId, pageKey]);
 
