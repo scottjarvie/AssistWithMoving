@@ -89,6 +89,8 @@ import type * as lib_inventoryDuplicates from "../lib/inventoryDuplicates.js";
 import type * as lib_inventorySearch from "../lib/inventorySearch.js";
 import type * as lib_legacyUploadResponse from "../lib/legacyUploadResponse.js";
 import type * as lib_mcpClientIdentity from "../lib/mcpClientIdentity.js";
+import type * as lib_mcpConnector_contract from "../lib/mcpConnector/contract.js";
+import type * as lib_mcpConnector_instructions from "../lib/mcpConnector/instructions.js";
 import type * as lib_mcpEvidenceMedia from "../lib/mcpEvidenceMedia.js";
 import type * as lib_mcpGrantAccess from "../lib/mcpGrantAccess.js";
 import type * as lib_mcpIdentity from "../lib/mcpIdentity.js";
@@ -277,6 +279,8 @@ declare const fullApi: ApiFromModules<{
   "lib/inventorySearch": typeof lib_inventorySearch;
   "lib/legacyUploadResponse": typeof lib_legacyUploadResponse;
   "lib/mcpClientIdentity": typeof lib_mcpClientIdentity;
+  "lib/mcpConnector/contract": typeof lib_mcpConnector_contract;
+  "lib/mcpConnector/instructions": typeof lib_mcpConnector_instructions;
   "lib/mcpEvidenceMedia": typeof lib_mcpEvidenceMedia;
   "lib/mcpGrantAccess": typeof lib_mcpGrantAccess;
   "lib/mcpIdentity": typeof lib_mcpIdentity;

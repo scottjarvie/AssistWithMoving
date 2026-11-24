@@ -1783,6 +1783,10 @@ doors — do not confuse their catalogs or credentials**: the canonical OAuth
 `/mcp`, the legacy persisted `/mcp/connect`, the API-key-only `/api/mcp`, and the
 maintainer-only local stdio server. All four are described below.
 
+`tools/list` publishes names with the `moving_` prefix. Existing unprefixed
+names still work in `tools/call`, including the unlisted API-key photo upload
+aliases. The examples below use those compatible names.
+
 Maintainers running live synthetic proof must use
 [`docs/operations/mcp-production-acceptance.md`](operations/mcp-production-acceptance.md)
 and retain only the labeled non-privileged test identity after cleanup.

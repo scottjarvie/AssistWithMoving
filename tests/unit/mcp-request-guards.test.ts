@@ -148,7 +148,7 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     const response = await handleMcpRequestForTests(ctx, listTools());
     expect(response.status).toBe(200);
     expect((await response.json()).result.tools.map((tool: any) => tool.name).sort())
-      .toEqual([...STATELESS_MOVING_TOOL_NAMES].sort());
+      .toEqual(STATELESS_MOVING_TOOL_NAMES.map(name => `moving_${name}`).sort());
     expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("aiGrants:touchLegacyConnection");
     expect(ctx.runMutation.mock.calls[0][1]).toMatchObject({ subject: SUBJECT, clientId: CLIENT_ID });
   });
@@ -166,7 +166,7 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     const response = await handleMcpRequestForTests(ctx, listTools());
     expect(response.status).toBe(200);
     expect((await response.json()).result.tools.map((tool: any) => tool.name))
-      .toEqual(["describe_connection", "reduce_connection"]);
+      .toEqual(["moving_describe_connection", "moving_reduce_connection"]);
     const described = await handleMcpRequestForTests(ctx, protocolRequest(JSON.stringify({
       jsonrpc: "2.0", id: 2, method: "tools/call",
       params: { name: "describe_connection", arguments: {} },
@@ -179,10 +179,10 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("names a removed power and person-only recovery for cached tool calls", async () => {
+  it.each(["save_inventory", "moving_save_inventory"])("names a removed power and person-only recovery for %s", async (name) => {
     const ctx = { runMutation: vi.fn(async () => ({ grants: [] })), runQuery: vi.fn(async () => ({ scopes: [], connectionState: { status: "paused", changedAt: 1000 } })), runAction: vi.fn() } as any;
     const { handleMcpRequestForTests } = await loadRoute();
-    const response = await handleMcpRequestForTests(ctx, protocolRequest(JSON.stringify({ jsonrpc: "2.0", id: 20, method: "tools/call", params: { name: "save_inventory", arguments: {} } })));
+    const response = await handleMcpRequestForTests(ctx, protocolRequest(JSON.stringify({ jsonrpc: "2.0", id: 20, method: "tools/call", params: { name, arguments: {} } })));
     const reply = await response.json();
     expect(reply.error.message).toContain("moving.work.write");
     expect(reply.error.message).toContain("Only the person can restore");
@@ -227,7 +227,7 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     expect(ctx.runAction).toHaveBeenCalledWith(expect.anything(), { clientId: metadataClientId });
     expect(getFunctionName(ctx.runAction.mock.calls[0][0])).toBe("mcpClientMetadata:fetchDocument");
     expect((await response.json()).result.tools.map((tool: any) => tool.name))
-      .toContain("get_move_brief");
+      .toContain("moving_get_move_brief");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -512,30 +512,30 @@ describe("durable authority through both real OAuth doors", () => {
   for (const first of ["canonical", "persisted"]) {
     it(`shares narrow/pause/revoke state after first contact on ${first}`, async () => {
       const f = await setup();
-      if (first === "canonical") expect(await f.canonical()).toContain("save_inventory"); else expect((await f.persisted()).allowed).toBe(true);
+      if (first === "canonical") expect(await f.canonical()).toContain("moving_save_inventory"); else expect((await f.persisted()).allowed).toBe(true);
       await f.reduce({ opId: "read", scopes: ["moving.context.read"] }, client);
-      expect(await f.canonical()).toContain("get_move_brief"); expect(await f.canonical()).not.toContain("save_inventory");
+      expect(await f.canonical()).toContain("moving_get_move_brief"); expect(await f.canonical()).not.toContain("moving_save_inventory");
       await f.reduce({ opId: "pause", action: "pause" }, client);
-      expect(await f.canonical()).toEqual(["describe_connection", "reduce_connection"]); expect((await f.persisted()).allowed).toBe(false);
+      expect(await f.canonical()).toEqual(["moving_describe_connection", "moving_reduce_connection"]); expect((await f.persisted()).allowed).toBe(false);
       await f.reduce({ opId: "revoke", action: "revoke" }, client);
       await f.change({ opId: "person-restore", action: "restore" }, client);
-      expect(await f.canonical()).toEqual(["describe_connection", "reduce_connection"]);
+      expect(await f.canonical()).toEqual(["moving_describe_connection", "moving_reduce_connection"]);
       await f.change({ opId: "resume", action: "resume" }, client);
-      expect(await f.canonical()).toContain("get_move_brief"); expect((await f.persisted()).allowed).toBe(true);
+      expect(await f.canonical()).toContain("moving_get_move_brief"); expect((await f.persisted()).allowed).toBe(true);
     });
     it(`does not let a different URL-shaped or validated identity escape a revoke from ${first}`, async () => {
       const f = await setup(); if (first === "canonical") await f.canonical(); else await f.persisted();
       await f.reduce({ opId: "revoke", action: "revoke" }, client);
       const different = "https://different.example/client.json";
       f.ctx.runAction.mockResolvedValue(JSON.stringify({ client_id: different, redirect_uris: ["https://different.example/callback"] }));
-      expect(await f.canonical(different)).toEqual(["describe_connection", "reduce_connection"]);
+      expect(await f.canonical(different)).toEqual(["moving_describe_connection", "moving_reduce_connection"]);
       expect((await f.persisted(different)).allowed).toBe(false);
     });
   }
   it("rereads durable restrictions committed while metadata is fetched", async () => {
     const f = await setup(); await f.connect("predecessor");
     f.ctx.runAction.mockImplementation(async () => { await f.reduce({ opId: "during-fetch", action: "revoke" }, "predecessor"); return valid; });
-    expect(await f.canonical()).toEqual(["describe_connection", "reduce_connection"]);
+    expect(await f.canonical()).toEqual(["moving_describe_connection", "moving_reduce_connection"]);
     expect((await f.root())!.revoked).toBe(true);
   });
   it.each([{ client_id: "sibling-b", azp: "sibling-a" }, { client_id: "legacy:https://client.example/", azp: "legacy:https://client.example/" }])("rejects ambiguous/history-alias claims %j on both doors without effects", async invalid => {

@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { listedMovingToolName } from "../shared/moving-mcp-tool-names.mjs";
 
 const requiredToolContracts = [
   {
@@ -75,7 +76,7 @@ export function mcpReadonlyDiscoveryProofResults({ tools, capabilitiesPayload })
   );
 
   for (const contract of requiredToolContracts) {
-    const tool = toolsByName.get(contract.name);
+    const tool = toolsByName.get(listedMovingToolName(contract.name));
     if (!tool) {
       record(
         results,
