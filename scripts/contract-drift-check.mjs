@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import * as moveVocabulary from "../shared/move-vocabulary.mjs";
 
 const openApiPath = "public/openapi.json";
 const mcpApiPath = "mcp-server/assistwithmoving-api.mjs";
@@ -60,7 +61,7 @@ const mcpRequiredRouteKeys = new Set([
 ]);
 
 const openApiEnumManifest = {
-  confidence: ["none", "low", "medium", "high", "manual", "actual"],
+  confidence: moveVocabulary.estimateConfidences,
   itemDisposition: [
     "keep",
     "sell",
@@ -70,24 +71,14 @@ const openApiEnumManifest = {
     "storage",
     "undecided",
   ],
-  itemFragility: ["low", "medium", "high"],
+  itemFragility: moveVocabulary.itemFragilities,
   photoDerivativeVariant: ["thumb", "card", "detail", "full"],
 };
 
 const mcpEnumManifest = {
   confidence: ["none", "low", "medium", "high", "manual", "actual", "estimated"],
-  itemDisposition: [
-    "undecided",
-    "take",
-    "sell",
-    "donate",
-    "dump",
-    "free",
-    "storage",
-    "mover",
-    "personalTransport",
-  ],
-  itemFragility: ["low", "medium", "high"],
+  itemDisposition: moveVocabulary.itemDispositions,
+  itemFragility: moveVocabulary.itemFragilities,
 };
 
 export function contractDriftResults({
@@ -240,9 +231,14 @@ function mcpEnumValues(source, enumName) {
   const schemaName = schemaNames[enumName];
   if (!schemaName) return null;
   const match = source.match(
-    new RegExp(`const\\s+${schemaName}\\s*=\\s*z\\.enum\\(\\s*\\[([\\s\\S]*?)\\]\\s*\\)`)
+    new RegExp(`const\\s+${schemaName}\\s*=\\s*z\\.enum\\(\\s*(?:\\[([\\s\\S]*?)\\]|(\\w+))\\s*\\)`)
   );
   if (!match) return null;
+  if (match[2]) {
+    const imports = source.match(/import\s*\{([^{}]+)\}\s*from\s*"\.\.\/shared\/move-vocabulary\.mjs"/)?.[1];
+    if (!imports?.split(",").some((name) => name.trim() === match[2])) return null;
+    return Array.isArray(moveVocabulary[match[2]]) ? moveVocabulary[match[2]] : null;
+  }
   return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
 }
 

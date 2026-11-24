@@ -176,73 +176,21 @@ import {
   routeDocumentationProfiles,
   safeDocumentationProfile,
 } from "./rest/documentationProfiles";
+import {
+  boxContainerTypes,
+  exportJobTypes as restExportJobTypes,
+  shareLinkRoles as restShareLinkRoles,
+  plannedItemStatuses as restPlannedItemStatuses,
+  movePersonRoles as restMovePersonRoles,
+  estimateConfidences as restEstimateConfidences,
+  aiPlanningSuggestionStatuses as restPlanningSuggestionStatuses,
+  aiJobStatuses as restAiJobStatuses,
+  aiTextSuggestionStatuses as restAiSuggestionStatuses,
+  shareLinkStatuses as restShareLinkStatuses,
+  shareLinkScopes as restShareLinkScopes,
+} from "../shared/move-vocabulary.mjs";
 
-const boxContainerTypes = [
-  "carton",
-  "plasticTote",
-  "bin",
-  "wardrobe",
-  "dishPack",
-  "crate",
-  "other",
-] as const;
-const restExportJobTypes = [
-  "inventory",
-  "boxes",
-  "assignments",
-  "documentationProfile",
-] as const;
 type RestExportJobType = (typeof restExportJobTypes)[number];
-const restShareLinkStatuses = ["active", "revoked"] as const;
-const restShareLinkScopes = ["move", "profile"] as const;
-const restShareLinkRoles = [
-  "owner",
-  "admin",
-  "editor",
-  "packer",
-  "viewer",
-  "guest",
-] as const;
-const restEstimateConfidences = [
-  "none",
-  "low",
-  "medium",
-  "high",
-  "manual",
-  "actual",
-] as const;
-const restPlannedItemStatuses = [
-  "idea",
-  "decided",
-  "purchased",
-  "dropped",
-] as const;
-const restPlanningSuggestionStatuses = [
-  "pending",
-  "approved",
-  "edited",
-  "rejected",
-] as const;
-const restAiJobStatuses = [
-  "queued",
-  "running",
-  "succeeded",
-  "failed",
-  "canceled",
-] as const;
-const restAiSuggestionStatuses = [
-  "pending",
-  "approved",
-  "edited",
-  "rejected",
-] as const;
-const restMovePersonRoles = [
-  "owner",
-  "householdMember",
-  "helper",
-  "mover",
-  "contact",
-] as const;
 const maxBatchUpsertItems = 100;
 
 const internalFunctions = anyApi as unknown as {
