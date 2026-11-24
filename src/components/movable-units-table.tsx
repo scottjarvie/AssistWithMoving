@@ -12,7 +12,9 @@ import {
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { usePhotoDisplayUrl } from "@/lib/use-photo-display-url";
+import { PhotoThumbnailPage } from "@/components/photo-thumbnail-page";
 import {
   type ColumnDef,
   type RowSelectionState,
@@ -835,6 +837,16 @@ export function MovableUnitsTable({
         onSortingChange={setSorting}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
+        wrapPage={(rows, children) => (
+          <PhotoThumbnailPage
+            householdId={householdId}
+            moveId={moveId}
+            photoIds={rows.map((unit) => photosByUnit.get(unit.id)?.[0])}
+            photos={movePhotos}
+          >
+            {children}
+          </PhotoThumbnailPage>
+        )}
         renderMobileCard={({ row, selected, onSelectedChange, onOpen }) => (
           <MovableUnitCard
             unit={row}
@@ -1154,26 +1166,8 @@ function UnitThumbnail({
   photoIds?: readonly Id<"itemPhotos">[];
 }) {
   const coverPhotoId = photoIds[0];
-  const getDisplayUrl = useAction(api.photos.getDisplayUrl);
-  const [url, setUrl] = useState<string | null>(null);
+  const url = usePhotoDisplayUrl(householdId, moveId, coverPhotoId);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-
-  useEffect(() => {
-    if (!householdId || !moveId || !coverPhotoId) {
-      return;
-    }
-    let cancelled = false;
-    void getDisplayUrl({ householdId, moveId, photoId: coverPhotoId, variant: "card" })
-      .then((display) => {
-        if (!cancelled) setUrl(display.url);
-      })
-      .catch(() => {
-        if (!cancelled) setUrl(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [getDisplayUrl, householdId, moveId, coverPhotoId]);
 
   return (
     <>

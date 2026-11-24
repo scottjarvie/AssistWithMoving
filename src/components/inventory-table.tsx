@@ -5,7 +5,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -16,7 +15,9 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { usePhotoDisplayUrl } from "@/lib/use-photo-display-url";
+import { PhotoThumbnailPage } from "@/components/photo-thumbnail-page";
 import {
   ChevronRight,
   ClipboardList,
@@ -389,23 +390,7 @@ function ItemThumbnail({
   moveId: Id<"moves"> | null;
   photoId?: Id<"itemPhotos">;
 }) {
-  const getDisplayUrl = useAction(api.photos.getDisplayUrl);
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!photoId || !householdId || !moveId) return;
-    let cancelled = false;
-    void getDisplayUrl({ householdId, moveId, photoId, variant: "card" })
-      .then((display) => {
-        if (!cancelled) setUrl(display.url);
-      })
-      .catch(() => {
-        if (!cancelled) setUrl(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [getDisplayUrl, householdId, moveId, photoId]);
+  const url = usePhotoDisplayUrl(householdId, moveId, photoId);
 
   return (
     <div className="size-11 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
@@ -1435,6 +1420,16 @@ export function InventoryTable({
                 rowSelection={rowSelection}
                 onRowSelectionChange={setRowSelection}
                 cardOnly
+                wrapPage={(rows, children) => (
+                  <PhotoThumbnailPage
+                    householdId={householdId}
+                    moveId={moveId}
+                    photoIds={rows.map((item) => photoByItem.get(String(item._id)))}
+                    photos={photosData}
+                  >
+                    {children}
+                  </PhotoThumbnailPage>
+                )}
                 renderMobileCard={({ row, selected, onSelectedChange }) => (
                   <InventoryItemCard
                     item={row}

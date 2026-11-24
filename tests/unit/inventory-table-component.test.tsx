@@ -87,6 +87,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ sessionId: "session-test" }) }));
+
 vi.mock("../../convex/_generated/api", () => ({
   api: apiMock,
 }));
@@ -105,6 +107,7 @@ vi.mock("convex/react", () => ({
           : undefined,
   useMutation: mockItems.useMutation,
   useAction: () => vi.fn(async () => ({ url: null })),
+  useConvexAuth: () => ({ isAuthenticated: true }),
 }));
 
 import { InventoryTable } from "@/components/inventory-table";

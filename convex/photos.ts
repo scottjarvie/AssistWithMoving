@@ -1126,14 +1126,55 @@ export const getDisplayUrl = action({
   },
 });
 
+const thumbnailBatchLimit = 25; // The largest inventory browse page.
+
+function checkThumbnailBatchSize(photoIds: readonly Id<"itemPhotos">[]) {
+  if (photoIds.length > thumbnailBatchLimit) {
+    throw new ConvexError("Too many thumbnails requested.");
+  }
+}
+
+export const getThumbnailUrls = action({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoIds: v.array(v.id("itemPhotos")),
+  },
+  handler: async (ctx, args): Promise<Array<{
+    photoId: Id<"itemPhotos">;
+    url: string;
+    expiresAt: number;
+  }>> => {
+    checkThumbnailBatchSize(args.photoIds);
+    if (!args.photoIds.length) return [];
+    const photos = await ctx.runQuery(internal.photos.getPhotosForThumbnailDelivery, args);
+    const results = await Promise.allSettled(photos.map(async (photo) => {
+      const { url, expiresAt } = await buildDisplayUrlResult(photo, "thumb");
+      return { photoId: photo._id, url, expiresAt };
+    }));
+    return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  },
+});
+
+function isVisibleDeliveryPhoto(
+  photo: Doc<"itemPhotos"> | null,
+  args: { householdId: Id<"households">; moveId: Id<"moves"> },
+  visibility: { sensitivePhotos: boolean },
+): photo is Doc<"itemPhotos"> {
+  return photo !== null &&
+    photo.householdId === args.householdId &&
+    photo.moveId === args.moveId &&
+    !photo.archivedAt &&
+    canViewPhotoAssets(photo, visibility);
+}
+
 async function requireVisibleDeliveryPhoto(
   ctx: QueryCtx,
   args: { householdId: Id<"households">; moveId: Id<"moves">; photoId: Id<"itemPhotos"> },
   visibility: { sensitivePhotos: boolean },
 ) {
   const photo = await ctx.db.get(args.photoId);
-  if (!photo || photo.householdId !== args.householdId || photo.moveId !== args.moveId ||
-      photo.archivedAt || !canViewPhotoAssets(photo, visibility)) {
+  if (!isVisibleDeliveryPhoto(photo, args, visibility)) {
     throw new ConvexError("Photo not found.");
   }
   return { photo, visibility };
@@ -1721,6 +1762,20 @@ export const getPhotoForDelivery = internalQuery({
       "inventory:read",
     );
     return requireVisibleDeliveryPhoto(ctx, args, policy.visibility);
+  },
+});
+
+export const getPhotosForThumbnailDelivery = internalQuery({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoIds: v.array(v.id("itemPhotos")),
+  },
+  handler: async (ctx, args) => {
+    checkThumbnailBatchSize(args.photoIds);
+    const { visibility } = await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:read");
+    const photos = await Promise.all([...new Set(args.photoIds)].map((id) => ctx.db.get(id)));
+    return photos.filter((photo) => isVisibleDeliveryPhoto(photo, args, visibility));
   },
 });
 
