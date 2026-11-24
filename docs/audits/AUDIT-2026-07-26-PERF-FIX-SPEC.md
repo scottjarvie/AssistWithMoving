@@ -1,5 +1,9 @@
 # Fix spec: 2026-07-26 performance & PR audit findings
 
+> **Historical spec (checked 2026-11-24).** "Approved" below describes July
+> 2026; this is a dated record, not a current work list. Current speed and
+> Convex spend findings are in `docs/audits/code/2026-11-24.md`.
+
 **Status: APPROVED (v2, 2026-07-27).** Owner approved the full plan and asked
 for this revision pass. WP0 and WP10 are already executed (marked DONE below);
 WP9 (domain cutover) was added after the owner connected assistwithmoving.com.

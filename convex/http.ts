@@ -3,7 +3,8 @@ import { legacyUploadResponse } from "./lib/legacyUploadResponse";
 import { formatBytes } from "./lib/usageLimits/core";
 import { transportLimits } from "../shared/media-limits.mjs";
 import { internal as generatedInternal } from "./_generated/api";
-import connectionPolicy from "../shared/ai-connection-policy.json";
+import { movingToolListResponse, movingToolRequest, normalizeMovingToolCall } from "../shared/moving-mcp-tool-names.mjs";
+import { movingConnectorInstructions, type ConnectorState } from "./lib/mcpConnector/instructions";
 import { anyApi, httpRouter } from "convex/server";
 import type { FunctionReference } from "convex/server";
 
@@ -1285,16 +1286,18 @@ export function createLegacyGrantGate(
 
 const mcpHttpAction = httpAction(async (ctx, request) => {
   const input = request.method === "POST" ? await request.clone().json().catch(() => null) : null;
-  const response = await mcpGatewayClient.handleMcpRequest(ctx, request, {
+  const normalized = normalizeMovingToolCall(input);
+  const response = await mcpGatewayClient.handleMcpRequest(ctx, movingToolRequest(request, input, normalized), {
     authorize: createLegacyGrantGate(ctx), resolveIdentity: resolveMcpIdentity,
     tools: mcpTools, requireAuth: true, cors: true,
     serverInfo: { name: "assistwithmoving", version: "0.2.0" },
   });
-  if (input?.method === "tools/call" && input?.params?.name === "add_images") return legacyUploadResponse(response);
+  if (normalized?.method === "tools/call" && normalized?.params?.name === "add_images") return legacyUploadResponse(response);
+  if (input?.method === "tools/list") return movingToolListResponse(response, input);
   if (input?.method !== "initialize" || !response.ok) return response;
   const bearer = request.headers.get("authorization")?.replace(/^Bearer /i, "");
   const identity = bearer ? await resolveMcpIdentity(bearer) : null;
-  let instructions = connectionPolicy.instructions;
+  let state: ConnectorState | undefined;
   if (identity) {
     const clientId = legacyClientIdFrom(identity.claims);
     // Initialize can succeed before a tool authorization callback. It must
@@ -1309,9 +1312,9 @@ const mcpHttpAction = httpAction(async (ctx, request) => {
       return new Response(JSON.stringify({ error: "invalid_client", message: "OAuth client metadata could not be validated." }), { status: 401, headers: { "content-type": "application/json" } });
     }
     await ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, { subject: identity.subject, clientId: resolved.clientId, clientName: resolved.clientName });
-    const state = await ctx.runQuery(generatedInternal.aiGrants.describeConnection, { subject: identity.subject, clientId });
-    instructions += ` Connection state: ${state.status}; changed ${state.changedAt ?? "date unavailable"}; end date ${state.expiresAt ?? "none"}.`;
+    state = await ctx.runQuery(generatedInternal.aiGrants.describeConnection, { subject: identity.subject, clientId });
   }
+  const instructions = movingConnectorInstructions("legacy", state);
   const decorate = (json: string) => {
     const envelope = JSON.parse(json);
     if (envelope.result) envelope.result.instructions = instructions;

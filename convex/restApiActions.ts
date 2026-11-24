@@ -183,7 +183,8 @@ async function handlePhotoDisplayUrl(
   };
 
   return await withActionRateLimit(ctx, args, auth, async () => {
-    const photo = await ctx.runQuery(internal.photos.getPhotoForDeliveryForApiActor, { householdId: auth.householdId, moveId, photoId });
+    const delivery = { householdId: auth.householdId, moveId, photoId, sensitivePhotos: authResult.auth!.visibility.sensitivePhotos };
+    const photo = await ctx.runQuery(internal.photos.getPhotoForDeliveryForApiActor, delivery);
     if (photo.photo.mediaKind === "audio") {
       const creator = await ctx.runQuery(internal.audioPlayback.keySubject, { apiKeyId: auth.apiKeyId });
       const playback = await ctx.runMutation(internal.audioPlayback.mint, { photoId, subject: creator, apiKeyId: auth.apiKeyId, agent: true });
@@ -196,12 +197,7 @@ async function handlePhotoDisplayUrl(
         : "detail";
     const result = await ctx.runAction(
       internal.photos.getDisplayUrlForApiActor,
-      {
-        householdId: auth.householdId,
-        moveId,
-        photoId,
-        variant,
-      }
+      { ...delivery, variant }
     );
     return restOk({ data: result });
   });

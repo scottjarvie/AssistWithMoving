@@ -23,7 +23,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { internal } from "../../convex/_generated/api";
+import { api, internal } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import {
   INLINE_IMAGE_LIMIT,
   PER_IMAGE_BYTE_BUDGET,
@@ -231,6 +232,22 @@ afterEach(() => {
 });
 
 describe("private media reaches a connected AI as real bytes", () => {
+  it("checks the effective move role before issuing display URLs", async () => {
+    const { t, householdId, moveId, userId, photoIds } = await seed([
+      { key: "restricted", caption: "Restricted", derivativeRefs: ALL_VARIANTS, derivativeStatus: "ready" },
+    ]);
+    const args = { householdId, moveId, photoId: photoIds[0] as Id<"itemPhotos">, variant: "thumb" as const };
+    const owner = t.withIdentity({ subject: SUBJECT });
+    await expect(owner.action(api.photos.getDisplayUrl, args)).resolves.toMatchObject({ servedVariant: "thumb" });
+    await t.run(async (ctx) => {
+      const membership = await ctx.db.query("householdMemberships").withIndex("by_household_user", q => q.eq("householdId", householdId).eq("userId", userId)).unique();
+      await ctx.db.patch(membership!._id, { role: "viewer" });
+    });
+    await expect(owner.action(api.photos.getDisplayUrl, args)).rejects.toThrow("Photo not found");
+    await expect(t.action(internal.photos.getDisplayUrlForApiActor, { ...args, sensitivePhotos: false })).rejects.toThrow("Photo not found");
+    await expect(t.action(internal.photos.getDisplayUrlForApiActor, { ...args, sensitivePhotos: true })).resolves.toMatchObject({ servedVariant: "thumb" });
+  });
+
   it("returns the photo inline, and never a storage location", async () => {
     const fixture = await seed([
       {

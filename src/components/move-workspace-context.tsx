@@ -52,8 +52,12 @@ const MoveWorkspaceContext = createContext<MoveWorkspaceValue | null>(null);
 // navigation was the original freeze bug.
 function moveIdFromPathname(pathname: string): string | null {
   const segments = pathname.split("/").filter(Boolean);
-  if (segments[0] === "app" && segments[1] === "moves" && segments[2]) {
-    return decodeURIComponent(segments[2]);
+  if (segments[0] === "app" && (segments[1] === "moves" || segments[1] === "items") && segments[2]) {
+    try {
+      return decodeURIComponent(segments[2]);
+    } catch {
+      return segments[2];
+    }
   }
   return null;
 }
@@ -68,19 +72,11 @@ export function MoveWorkspaceProvider({
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useUser();
-  const currentUser = useQuery(api.users.current);
   const upsertCurrentUser = useMutation(api.users.upsertCurrent);
   // Durable invite-claim (MOVE-352): pulls the server-attested verified email
   // from Clerk and claims pending invites when the JWT carries no email and the
   // webhook is unconfigured. Graceful no-op without CLERK_SECRET_KEY.
   const syncEmailAndClaim = useAction(api.clerkIdentity.syncEmailAndClaim);
-  const households = useQuery(api.households.listMine, currentUser ? {} : "skip");
-  // Moves the user reaches as a participant (esp. move-only outsiders with no
-  // household membership, who never show up in listMine / listForHousehold).
-  const participantMoves = useQuery(
-    api.moveParticipants.listMyMoves,
-    currentUser ? {} : "skip",
-  );
   const featureFlagEnvironment =
     process.env.NODE_ENV === "development" ||
     process.env.NEXT_PUBLIC_LAYOUT_STUDIO_CURRENT_DB_QA === "true"
@@ -104,6 +100,21 @@ export function MoveWorkspaceProvider({
   const [selectedMoveId, setSelectedMoveId] = useState<Id<"moves"> | null>(
     initialMoveId ? (initialMoveId as Id<"moves">) : null
   );
+
+  // A verified explicit move can render while the switcher loads its list.
+  const linkedMove = useQuery(
+    api.moves.getForLink,
+    routeMoveId ? { moveId: routeMoveId } : "skip",
+  );
+  const resolvingLink = Boolean(routeMoveId) && linkedMove === undefined;
+  const workspace = useQuery(
+    api.moves.workspaceBootstrap,
+    resolvingLink ? "skip" : { preferredHouseholdId: linkedMove?.householdId ?? selectedHouseholdId ?? undefined },
+  );
+  const currentUser = workspace?.user;
+  const households = workspace?.households;
+  const householdId = linkedMove?.householdId ?? workspace?.householdId ?? null;
+  const moves = workspace?.moves;
 
   // Sync the Convex user record with the Clerk identity once per load. This also
   // drives the server-side invite-claim + membership self-heal, so an invited
@@ -143,66 +154,7 @@ export function MoveWorkspaceProvider({
     });
   }, [currentUser, syncEmailAndClaim]);
 
-  // A deep-linked move determines its own household — never assume the
-  // user's first household owns it.
-  const linkedMove = useQuery(
-    api.moves.getForLink,
-    routeMoveId ? { moveId: routeMoveId } : "skip"
-  );
-  const resolvingLink = Boolean(routeMoveId) && linkedMove === undefined;
-
-  const firstHousehold = households?.[0]?.household;
-  const firstParticipantHouseholdId = participantMoves?.[0]?.householdId ?? null;
-  const householdId =
-    selectedHouseholdId ??
-    linkedMove?.householdId ??
-    (resolvingLink
-      ? null
-      : firstHousehold?._id ?? firstParticipantHouseholdId ?? null);
-
-  // listForHousehold requires household membership — calling it for a household
-  // the user only participates in (move-only) would throw. So only call it for
-  // member households; move-only moves come from participantMoves instead.
-  const memberHouseholdIds = useMemo(
-    () => new Set((households ?? []).map((entry) => entry.household._id)),
-    [households]
-  );
-  const isMemberHousehold = householdId
-    ? memberHouseholdIds.has(householdId)
-    : false;
-  const householdMoves = useQuery(
-    api.moves.listForHousehold,
-    householdId && isMemberHousehold ? { householdId } : "skip"
-  );
-
-  const householdMovesLoading =
-    Boolean(householdId) && isMemberHousehold && householdMoves === undefined;
-  const participantMovesLoading =
-    Boolean(currentUser) && participantMoves === undefined;
-
-  // Merge member-household moves with the user's participant moves for the
-  // resolved household (deduped). undefined while the relevant sources load so
-  // the loading affordances still work.
-  const moves = useMemo<MoveEntries | undefined>(() => {
-    if (householdMovesLoading || participantMovesLoading) return undefined;
-    const byId = new Map<Id<"moves">, MoveEntries[number]>();
-    for (const move of householdMoves ?? []) byId.set(move._id, move);
-    for (const move of participantMoves ?? []) {
-      if (move.householdId === householdId) byId.set(move._id, move);
-    }
-    return Array.from(byId.values());
-  }, [
-    householdMoves,
-    participantMoves,
-    householdId,
-    householdMovesLoading,
-    participantMovesLoading,
-  ]);
-
-  const activeMoves = useMemo(
-    () => moves?.filter((move) => move.status !== "archived") ?? [],
-    [moves]
-  );
+  const activeMoves = useMemo(() => moves ?? [], [moves]);
 
   const firstMove = activeMoves[0];
   const isAccessible = (candidate: Id<"moves"> | null) =>
@@ -212,20 +164,19 @@ export function MoveWorkspaceProvider({
   // sidebar nav drive the URL), then an explicit user selection made off-route,
   // then the first accessible move. This keeps the single provider in sync with
   // navigation without ever remounting it.
-  const routeMoveIdTyped = routeMoveId as Id<"moves"> | null;
   const moveId =
-    (isAccessible(routeMoveIdTyped) ? routeMoveIdTyped : null) ??
+    linkedMove?._id ??
     (isAccessible(selectedMoveId) ? selectedMoveId : null) ??
     firstMove?._id ??
     null;
-  const selectedMove = activeMoves.find((move) => move._id === moveId);
+  const selectedMove = linkedMove ?? activeMoves.find((move) => move._id === moveId);
 
   // A move id came from the URL but the signed-in user cannot access it.
   const routeMoveIsBroken =
     !resolvingLink &&
-    Boolean(routeMoveIdTyped) &&
+    Boolean(routeMoveId) &&
     Boolean(moves) &&
-    !isAccessible(routeMoveIdTyped);
+    !linkedMove;
   const moveLinkMessage = routeMoveIsBroken
     ? "That move link is not available in this household."
     : null;
@@ -249,13 +200,10 @@ export function MoveWorkspaceProvider({
       selectMove: setSelectedMoveId,
       selectedMove,
       featureFlags,
-      loadingIdentity: currentUser === undefined,
-      loadingHouseholds: Boolean(currentUser) && households === undefined,
-      loadingMoves:
-        resolvingLink ||
-        participantMovesLoading ||
-        (Boolean(householdId) && moves === undefined),
-      loadingParticipantMoves: participantMovesLoading,
+      loadingIdentity: workspace === undefined,
+      loadingHouseholds: workspace === undefined,
+      loadingMoves: !linkedMove && workspace === undefined,
+      loadingParticipantMoves: workspace === undefined,
       moveLinkMessage,
     }),
     [
@@ -266,10 +214,9 @@ export function MoveWorkspaceProvider({
       moveId,
       selectedMove,
       featureFlags,
-      currentUser,
       moveLinkMessage,
-      resolvingLink,
-      participantMovesLoading,
+      linkedMove,
+      workspace,
     ]
   );
 

@@ -4,6 +4,7 @@ import { AI_STORAGE_NOTE } from "../shared/usage-limits.mjs";
 import { transportLimits } from "../shared/media-limits.mjs";
 import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
 import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
+import { listMovingToolNames, normalizeMovingToolCall } from "../shared/moving-mcp-tool-names.mjs";
 import { pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -959,12 +960,24 @@ export function createAssistWithMovingMcpServer(apiConfig, options = {}) {
   return target;
 }
 
+class MovingStdioTransport extends StdioServerTransport {
+  start() {
+    const onmessage = this.onmessage;
+    this.onmessage = (message, extra) => onmessage?.(normalizeMovingToolCall(message), extra);
+    return super.start();
+  }
+
+  send(message, options) {
+    return super.send(listMovingToolNames(message, true), options);
+  }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const config = createApiConfig();
   let uploadLimits;
   try { const context = await getApiContext(config); uploadLimits = context.data?.uploadLimits; } catch { /* Tools still provide the normal authenticated recovery path. */ }
   const server = createAssistWithMovingMcpServer(config, { uploadLimits });
-  const transport = new StdioServerTransport();
+  const transport = new MovingStdioTransport();
   await server.connect(transport);
 }
 

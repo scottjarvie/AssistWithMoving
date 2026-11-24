@@ -128,8 +128,9 @@ async function main() {
     await client.connect(transport);
     const tools = await client.listTools();
     assert(
-      tools.tools.some((tool) => tool.name === "save_box_intake"),
-      "save_box_intake was not listed by the stdio MCP server."
+      tools.tools.some((tool) => tool.name === "moving_save_box_intake") &&
+        !tools.tools.some((tool) => tool.name === "save_box_intake"),
+      "Expected one listed name for moving_save_box_intake."
     );
 
     const result = await client.callTool({
@@ -172,6 +173,7 @@ async function main() {
     assert.deepEqual(
       mockApi.calls.map((call) => `${call.method} ${call.path}`),
       [
+        "GET /api/v1/me",
         "POST /api/v1/moves/codex-test-move/boxes",
         "POST /api/v1/photos/upload",
         "POST /api/v1/moves/codex-test-move/items/batch-upsert",

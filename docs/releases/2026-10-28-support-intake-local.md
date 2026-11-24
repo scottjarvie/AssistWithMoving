@@ -1,5 +1,8 @@
 # Moving support-intake and development-instruction batch
 
+> **Historical receipt (checked 2026-11-24).** This batch merged as PR #243
+> (`19c4ccf`). The status line below records the state before that merge.
+
 **Local verification passed; not yet merged or deployed.** Branch `codex/moving-support-batch-20261028` starts from actual remote main `b585fbe249262f85a3e2f544391229b0954619a0`. It normally merges the exact original heads of #240 (`3554e2e57b218400d1669f84046fa7d462a0554f`) and #242 (`4fb2fdf974f8cddc672053ca2645036b73c74461`). Both histories and main's #241 REST-upload test-environment correction are preserved. No canonical checkout, active owner branch, backend, grant, authentication, launcher or CI configuration was changed.
 
 ## Source correction

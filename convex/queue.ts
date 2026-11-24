@@ -897,18 +897,17 @@ export const counts = query({
       args.moveId,
       "queue:read",
     );
-    const rows = await ctx.db
-      .query("queueItems")
-      .withIndex("by_move_owner_updated", (q) =>
+    // "discarded" sorts between "claimed" and "needsInput". Read both sides
+    // to keep exact totals for all current and legacy non-discarded captures.
+    const [rows, ...capturesByRange] = await Promise.all([
+      ctx.db.query("queueItems").withIndex("by_move_owner_updated", (q) =>
         q.eq("moveId", args.moveId).eq("ownerUserId", actor.userId),
-      )
-      .collect();
-    const captures = (
-      await Promise.all([
+      ).collect(),
+      ...(["lt", "gt"] as const).flatMap(comparison => [
         ctx.db
           .query("ingestionQueueEntries")
           .withIndex("by_move_owner_status", (q) =>
-            q.eq("moveId", args.moveId).eq("ownerUserId", actor.userId),
+            q.eq("moveId", args.moveId).eq("ownerUserId", actor.userId)[comparison]("status", "discarded"),
           )
           .collect(),
         ctx.db
@@ -917,11 +916,11 @@ export const counts = query({
             q
               .eq("moveId", args.moveId)
               .eq("createdByUserId", actor.userId)
-              .eq("ownerUserId", undefined),
+              .eq("ownerUserId", undefined)[comparison]("status", "discarded"),
           )
           .collect(),
-      ])
-    ).flat();
+      ]),
+    ]);
     const work = rows.filter(queueIsWork);
     const now = Date.now();
     const totals = {
@@ -947,11 +946,7 @@ export const counts = query({
         totals.needsInputOpen++;
       }
     }
-    for (const item of captures.filter(
-      (i) =>
-        (i.ownerUserId ?? i.createdByUserId) === actor.userId &&
-        i.status !== "discarded",
-    )) {
+    for (const item of capturesByRange.flat()) {
       const state = ingestionStatusToQueueState(
         item.status,
         item.claimExpiresAt,
@@ -1091,13 +1086,14 @@ export const badges = query({
     for (const status of ["needsInput", "processed"] as const)
       for await (const entry of ctx.db
         .query("ingestionQueueEntries")
-        .withIndex("by_move_owner_status", (q) =>
+        .withIndex("by_move_owner_input_status", (q) =>
           q
             .eq("moveId", args.moveId)
             .eq("ownerUserId", actor.userId)
+            .eq("needsInput", undefined)
             .eq("status", status),
         ))
-        if (entry.needsInput === undefined) needsYou++;
+        if (captureNeedsInput(entry)) needsYou++;
     for await (const entry of ctx.db
       .query("ingestionQueueEntries")
       .withIndex("by_move_creator_owner_input", (q) =>
@@ -1111,14 +1107,15 @@ export const badges = query({
     for (const status of ["needsInput", "processed"] as const)
       for await (const entry of ctx.db
         .query("ingestionQueueEntries")
-        .withIndex("by_move_creator_owner_status", (q) =>
+        .withIndex("by_move_creator_owner_input_status", (q) =>
           q
             .eq("moveId", args.moveId)
             .eq("createdByUserId", actor.userId)
             .eq("ownerUserId", undefined)
+            .eq("needsInput", undefined)
             .eq("status", status),
         ))
-        if (entry.needsInput === undefined) needsYou++;
+        if (captureNeedsInput(entry)) needsYou++;
     return { suggestions, needsYou };
   },
 });
