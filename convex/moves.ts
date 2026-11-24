@@ -2,9 +2,13 @@ import { bumpOwnerRevision } from "./usageLimits";
 import { retainPhotoForDeletion, eraseSessions } from "./lib/storageDeletion";
 import { v } from "convex/values";
 
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { internalMutation, internalQuery, internalAction, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, internalAction, mutation, query, type QueryCtx } from "./_generated/server";
+import { getCurrentUser } from "./lib/auth";
+import { canPerformHouseholdAction } from "./lib/roles";
+import { listHouseholdsForUser } from "./households";
+import { listParticipantMoves } from "./moveParticipants";
 import { recordAuditEvent } from "./lib/audit";
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
 import { assertHouseholdEntitlement } from "./lib/billing";
@@ -40,16 +44,37 @@ export const listForHousehold = query({
   handler: async (ctx, args) => {
     await requireHouseholdPermission(ctx, args.householdId, "household:read");
 
-    const moves = await ctx.db
-      .query("moves")
-      .withIndex("by_household_status", (q) =>
-        q.eq("householdId", args.householdId),
-      )
-      .collect();
+    return listHouseholdMoves(ctx, args.householdId, args.includeArchived);
+  },
+});
 
-    return args.includeArchived
-      ? moves
-      : moves.filter((move) => move.status !== "archived");
+async function listHouseholdMoves(ctx: QueryCtx, householdId: Id<"households">, includeArchived = false) {
+  const moves = await ctx.db.query("moves")
+    .withIndex("by_household_status", (q) => q.eq("householdId", householdId))
+    .collect();
+  return includeArchived ? moves : moves.filter((move) => move.status !== "archived");
+}
+
+export const workspaceBootstrap = query({
+  args: { preferredHouseholdId: v.optional(v.id("households")) },
+  handler: async (ctx, { preferredHouseholdId }) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return { user: null, households: [], householdId: null, moves: [] };
+
+    const [households, participantMoves] = await Promise.all([
+      listHouseholdsForUser(ctx, user._id),
+      listParticipantMoves(ctx, user._id),
+    ]);
+    const householdId = preferredHouseholdId ?? households[0]?.household._id ?? participantMoves[0]?.householdId ?? null;
+    const membership = households.find(({ household }) => household._id === householdId);
+    const householdMoves = householdId && membership && canPerformHouseholdAction(membership.role, "household:read")
+      ? await listHouseholdMoves(ctx, householdId)
+      : [];
+    const moves = new Map(householdMoves.map(move => [move._id, move]));
+    for (const move of participantMoves) {
+      if (move.householdId === householdId) moves.set(move._id, move);
+    }
+    return { user: { email: user.email }, households, householdId, moves: [...moves.values()] };
   },
 });
 

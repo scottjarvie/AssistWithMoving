@@ -262,24 +262,27 @@ export const listMyMoves = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
-
-    const participations = await ctx.db
-      .query("moveParticipants")
-      .withIndex("by_user_status", (q) =>
-        q.eq("userId", user._id).eq("status", "active"),
-      )
-      .collect();
-
-    const moves = await Promise.all(
-      participations.map(async (p) => {
-        const move = await ctx.db.get(p.moveId);
-        if (!move || move.status === "archived") return null;
-        return move;
-      }),
-    );
-    return moves.filter((move): move is Doc<"moves"> => move !== null);
+    return listParticipantMoves(ctx, user._id);
   },
 });
+
+export async function listParticipantMoves(ctx: QueryCtx, userId: Id<"users">) {
+  const participations = await ctx.db
+    .query("moveParticipants")
+    .withIndex("by_user_status", (q) =>
+      q.eq("userId", userId).eq("status", "active"),
+    )
+    .collect();
+
+  const moves = await Promise.all(
+    participations.map(async (p) => {
+      const move = await ctx.db.get(p.moveId);
+      if (!move || move.status === "archived") return null;
+      return move;
+    }),
+  );
+  return moves.filter((move): move is Doc<"moves"> => move !== null);
+}
 
 /**
  * The queue "scopes" the current user can view on this move: their own queue
