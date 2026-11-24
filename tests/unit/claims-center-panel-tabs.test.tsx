@@ -139,11 +139,11 @@ describe("ClaimsCenterPanel task tabs", () => {
     );
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
-      "/app/items"
+      "/app/items/move_123"
     );
     expect(screen.getByRole("link", { name: "Photos" })).toHaveAttribute(
       "href",
-      "/app/items"
+      "/app/items/move_123"
     );
     expect(screen.queryByText("Status changed")).not.toBeInTheDocument();
   });

@@ -52,8 +52,12 @@ const MoveWorkspaceContext = createContext<MoveWorkspaceValue | null>(null);
 // navigation was the original freeze bug.
 function moveIdFromPathname(pathname: string): string | null {
   const segments = pathname.split("/").filter(Boolean);
-  if (segments[0] === "app" && segments[1] === "moves" && segments[2]) {
-    return decodeURIComponent(segments[2]);
+  if (segments[0] === "app" && (segments[1] === "moves" || segments[1] === "items") && segments[2]) {
+    try {
+      return decodeURIComponent(segments[2]);
+    } catch {
+      return segments[2];
+    }
   }
   return null;
 }
@@ -154,8 +158,8 @@ export function MoveWorkspaceProvider({
   const firstHousehold = households?.[0]?.household;
   const firstParticipantHouseholdId = participantMoves?.[0]?.householdId ?? null;
   const householdId =
-    selectedHouseholdId ??
     linkedMove?.householdId ??
+    selectedHouseholdId ??
     (resolvingLink
       ? null
       : firstHousehold?._id ?? firstParticipantHouseholdId ?? null);

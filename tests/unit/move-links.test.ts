@@ -27,6 +27,11 @@ describe("move links", () => {
     );
   });
 
+  it("keeps a linked Items page on the newly selected move", () => {
+    expect(buildMoveSwitchTarget("/app/items/move_123", "move_456")).toBe("/app/items/move_456");
+    expect(buildMoveSwitchTarget("/app/items", "move_456")).toBeNull();
+  });
+
   it("sends removed-section anchors straight to their new homes", () => {
     // Inventory section -> the global Items table.
     for (const anchor of [
@@ -44,15 +49,19 @@ describe("move links", () => {
       "#estimate-assumptions",
       "#disposition-pipelines",
     ]) {
-      expect(moveWorkspaceAnchorPath("move_123", anchor)).toBe("/app/items");
+      expect(moveWorkspaceAnchorPath("move_123", anchor)).toBe("/app/items/move_123");
     }
-    // Photos and Sell sections also collapse into the Items table.
+    // Photo links keep their move when they go to Items.
     for (const anchor of [
       "#photos",
       "#add-photos",
       "#photo-gaps",
       "#photo-review",
       "#evidence-density",
+    ]) {
+      expect(moveWorkspaceAnchorPath("move_123", anchor)).toBe("/app/items/move_123");
+    }
+    for (const anchor of [
       "#sale-pipeline",
       "#sale-listing",
       "#sale-pricing",
