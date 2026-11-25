@@ -636,6 +636,36 @@ describe("stateless Moving MCP foundation", () => {
         expect.arrayContaining(["item", "decision", "planResult"]),
       );
 
+      const searchPage = async (cursor?: string) => {
+        const response = await handler.fetch(
+          modernRequest(
+            "tools/call",
+            {
+              name: "search_move_records",
+              arguments: { moveId: String(fixture.moveId), query: "office", limit: 1, cursor },
+            },
+            "search_move_records",
+          ),
+        );
+        return (await response.json()).result;
+      };
+      const firstPage = (await searchPage()).structuredContent;
+      expect(firstPage.records).toEqual(search.records.slice(0, 1));
+      expect(firstPage.nextCursor).toBe("offset:1");
+      expect((await searchPage(firstPage.nextCursor)).structuredContent.records).toEqual(
+        search.records.slice(1, 2),
+      );
+      expect(await searchPage("offset:9007199254740992")).toMatchObject({
+        isError: true,
+        structuredContent: {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Search cursor is invalid.",
+            recovery: "Restart search_move_records without a cursor.",
+          },
+        },
+      });
+
       const version = created.records.find(
         (record: { kind: string }) => record.kind === "decision",
       ).version;

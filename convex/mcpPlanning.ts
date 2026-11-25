@@ -618,15 +618,15 @@ function shapeQueueSummary(row: Doc<"queueItems">) {
 
 function parseOffset(cursor: string | undefined) {
   if (!cursor) return 0;
-  const match = cursor.match(/^offset:(\d+)$/);
-  if (!match) {
+  const offset = Number(cursor.match(/^offset:(\d+)$/)?.[1]);
+  if (!Number.isSafeInteger(offset)) {
     mcpError(
       "VALIDATION_ERROR",
       "Search cursor is invalid.",
       "Restart search_move_records without a cursor.",
     );
   }
-  return Number(match[1]);
+  return offset;
 }
 
 export const searchMoveRecords = internalQuery({
