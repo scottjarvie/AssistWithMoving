@@ -230,6 +230,8 @@ export type DataTableProps<TData> = {
   /** Render the mobile card at ALL breakpoints (without mounting the desktop table) —
    * for compact, tap-to-open list views. Requires renderMobileCard. */
   cardOnly?: boolean
+  /** Wrap only the rendered rows, with the same sorted and paginated data. */
+  wrapPage?: (rows: TData[], children: React.ReactNode) => React.ReactNode
   onRowOpen?: (row: TData) => void
   /** Optional accessible label for an openable row; defaults to "Open row details". */
   getRowOpenLabel?: (row: TData) => string
@@ -298,6 +300,7 @@ export function DataTable<TData>({
   loading = false,
   renderMobileCard,
   cardOnly = false,
+  wrapPage,
   onRowOpen,
   getRowOpenLabel,
   toolbar,
@@ -420,6 +423,8 @@ export function DataTable<TData>({
   }
 
   const hasRows = pageRows.length > 0
+  const wrapRows = (children: React.ReactNode) =>
+    wrapPage ? wrapPage(pageRows.map((row) => row.original), children) : children
 
   return (
     <div className="space-y-2">
@@ -438,7 +443,7 @@ export function DataTable<TData>({
         </BatchActionToolbar>
       ) : null}
 
-      {hasRows ? (
+      {hasRows ? wrapRows(
         <>
           {renderMobileCard ? (
             <div

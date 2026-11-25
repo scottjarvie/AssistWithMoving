@@ -285,6 +285,32 @@ it("legacy OAuth returns the family error, then stores originals and all copies 
   expect(accepted.storage?.usedBytes).toBe([...storage.objects.values()].reduce((sum, object) => sum + object.bytes.byteLength, 0));
 });
 
+it.each(["key", "oauth"] as const)("refuses a private %s upload if its connection pauses before the photo commit", async kind => {
+  const f = await fixture();
+  const key = kind === "key" ? await f.key() : undefined;
+  if (!key) await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: "synthetic-owner", clientId: "synthetic-ai" });
+  const reduceDuringStorageCheck = async () => {
+    storage.onHead = null;
+    const connection = await f.t.run(ctx => ctx.db.query("aiAccessConnections").first());
+    const reduction = { opId: "pause-upload", expectedVersion: connection!.policy!.revision, action: "pause" };
+    if (key) await f.t.mutation(internal.apiKeys.reduceCallingKey, { ...reduction, apiKeyId: key.id });
+    else await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { ...reduction, caller: { subject: "synthetic-owner", claims: { client_id: "synthetic-ai" } } });
+  };
+  while (!(await f.t.run(ctx => ctx.db.query("aiAccessOwners").first()))?.bootstrapped) await f.t.mutation(internal.aiGrants.continueBootstrap, { ownerUserId: f.owner });
+  storage.onHead = reduceDuringStorageCheck;
+  const operationId = "pause-before-commit";
+  const base64 = Buffer.from(png).toString("base64");
+  if (key) {
+    const result = await f.t.action(internal.restApiActions.handle, { method: "POST", path: "photos/upload", query: {}, authorization: `Bearer ${key.raw}`, idempotencyKey: operationId, body: { moveId: f.moveId, fileBase64: base64, mimeType: "image/png" } });
+    expect(result.status).toBeGreaterThanOrEqual(400);
+  } else {
+    const result = await f.t.action(internal.mcpToolsImages.addImages, { caller: { subject: "synthetic-owner", claims: { client_id: "synthetic-ai" } }, householdId: f.householdId, moveId: f.moveId, operationId, images: [{ base64, mimeType: "image/png" }] });
+    expect(result.results[0]).toMatchObject({ ok: false, error: expect.stringContaining("no longer available") });
+  }
+  expect((await f.t.run(ctx => ctx.db.query("aiAccessConnections").first()))?.policy?.pausedAt).toBeDefined();
+  expect(await f.t.run(ctx => ctx.db.query("itemPhotos").collect())).toHaveLength(0);
+});
+
 it("a bad OAuth batch item stays per-item while another valid item succeeds", async () => {
   const f = await fixture();
   await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: "synthetic-owner", clientId: "synthetic-ai" });

@@ -138,7 +138,7 @@ describe("PackingDebtDashboard task tabs", () => {
     expect(screen.getByText("Review inventory decisions")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Review inventory decisions/i }),
-    ).toHaveAttribute("href", "/app/items");
+    ).toHaveAttribute("href", "/app/items/move_123");
     expect(screen.queryByText("Inventory")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Go fix readiness inputs"),
@@ -169,7 +169,7 @@ describe("PackingDebtDashboard task tabs", () => {
     expect(screen.getByText("Go fix readiness inputs")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
-      "/app/items",
+      "/app/items/move_123",
     );
     expect(screen.getByRole("link", { name: "AI review" })).toHaveAttribute(
       "href",

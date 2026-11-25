@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 
-import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { requireCurrentUser } from "./lib/auth";
 import { recordAuditEvent } from "./lib/audit";
 import { readActiveApiKeyCount } from "./lib/apiKeys";
@@ -34,30 +35,28 @@ export const listMine = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireCurrentUser(ctx);
-    const memberships = await ctx.db
-      .query("householdMemberships")
-      .withIndex("by_user_status", (q) =>
-        q.eq("userId", user._id).eq("status", "active")
-      )
-      .collect();
-
-    const households = await Promise.all(
-      memberships.map(async (membership) => {
-        const household = await ctx.db.get(membership.householdId);
-        if (!household || household.archivedAt !== undefined) {
-          return null;
-        }
-
-        return {
-          household,
-          role: membership.role,
-        };
-      })
-    );
-
-    return households.filter((entry) => entry !== null);
+    return listHouseholdsForUser(ctx, user._id);
   },
 });
+
+export async function listHouseholdsForUser(ctx: QueryCtx, userId: Id<"users">) {
+  const memberships = await ctx.db
+    .query("householdMemberships")
+    .withIndex("by_user_status", (q) =>
+      q.eq("userId", userId).eq("status", "active")
+    )
+    .collect();
+
+  const households = await Promise.all(
+    memberships.map(async (membership) => {
+      const household = await ctx.db.get(membership.householdId);
+      if (!household || household.archivedAt !== undefined) return null;
+      return { household, role: membership.role };
+    })
+  );
+
+  return households.filter((entry) => entry !== null);
+}
 
 export const summaryStats = query({
   args: {

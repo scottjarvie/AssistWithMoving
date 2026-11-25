@@ -49,22 +49,56 @@ The canonical product identity, responsibility boundaries, domain model, design 
 src/app/            Next.js routes, in three route groups:
   (marketing)/        public pages (features, faq, /mcp guide, /updates …)
   (auth)/             Clerk sign-in / sign-up
-  (product)/app/      the signed-in product (moves, boxes, items, queue …)
+  (product)/app/      the signed-in product (moves, items, movable-units, boxes, queue …)
   api/mcp, mcp/       remote MCP endpoint + OAuth discovery routes
 src/components/     React components (ui/ = shadcn primitives)
-src/lib/            shared client/server helpers (sorting, labels, geometry …)
-convex/             the entire backend — one file per API namespace
-                    (items.ts, boxes.ts, moves.ts …); schema.ts is the DB schema;
-                    httpRoutes/mcp.ts + mcpPlanning.ts are canonical stateless
-                    OAuth; mcp*.ts retain the legacy OAuth catalog
+src/lib/            shared client/server helpers (move links, sorting, labels, geometry …)
+convex/             the backend: one module per feature (items.ts, boxes.ts,
+                    moves.ts, photos.ts, queue.ts …); schema.ts is the DB schema;
+                    http.ts routes HTTP, restApi.ts + restApiActions.ts are the
+                    API-key REST door; httpRoutes/mcp.ts + mcpPlanning.ts are
+                    canonical stateless OAuth; mcp*.ts retain the legacy catalog
+convex/lib/         helpers that hold most of the rules: access and roles
+                    (moveAccess, roles, aiGrants, carriedAccess, apiKeyAuth),
+                    photo visibility and delivery, upload sessions, Queue
+                    service, publishing checks, connector instructions
+                    (mcpConnector/)
+convex/lib/rest/    REST request, access, parsing, patching and response helpers
+convex/rest/        REST route handlers called by restApi.ts
+shared/             limits and policy shared by the site, backend and stdio server:
+                    media and upload limits, AI connection policy, API tool access, the
+                    moving_ tool-name prefix (moving-mcp-tool-names.mjs)
 mcp-server/         standalone stdio MCP server (npm package) that talks to the
                     REST API with an mmk_ API key
-scripts/            operational "doctor" checks, smoke tests, seeding
-tests/              Playwright e2e + Vitest unit tests
-docs/               Project Philosophy, API/MCP guide, audits, original build spec
+scripts/            local Live/Sandbox launchers, doctor checks, smoke tests,
+                    contract checks, tracker build
+tests/              unit/ (Vitest, named after the feature), e2e/ (Playwright,
+                    local only), helpers/ and fixtures/
+docs/               Project Philosophy, API/MCP guide, tracker, audits, planning,
+                    original build spec (historical)
+.claude/hooks/      cloud-session setup hook and its contract test
 infra/              Cloudflare image worker
 patches/            patch-package patches applied on install
 ```
+
+To find a feature, start from its route under `src/app/(product)/app/`, follow
+the `api.<module>.<function>` calls into `convex/<module>.ts`, then into the
+`convex/lib/` helper it uses; its tests are usually `tests/unit/<feature>*.test.ts`.
+
+| Feature | Screens and data | Backend and agent entry points |
+|---|---|---|
+| Movable Units | `/app/movable-units` and `/app/moves/[moveId]/load-plan`; `boxes`, `boxItems`, `items` | `boxes.ts`, `items.ts`, screen rules in `src/lib/movable-units.ts`, backend rules in `convex/lib/rest/movableUnits.ts`; REST `/moves/{moveId}/movable-units/batch-upsert`, OAuth `save_inventory` |
+| Capture | `/app/moves/[moveId]/capture`; `ingestionQueueEntries` | `ingestionQueue.ts`, Queue adapters in `queue.ts`; legacy `capture_to_queue` |
+| Queue / Needs your input | `/app/queue` and `/app/queue/suggestions`; `queueItems`, `queueActivities` | `queue.ts`, `lib/queueService.ts`, canonical `mcpQueueWork.ts`, legacy `mcpToolsCanonicalQueue.ts` and `mcpToolsQueue.ts`; REST `/moves/{id}/queue/{id}/needs-you`, OAuth `ask_queue_question` |
+| Spaces & Transport | `/app/spaces-transport`; `moveSpaces`, `transportResources`, `transportZones`, `transportTrips`, `tripSpaces` | `spaces-transport-page.tsx`; REST move routes `/spaces`, `/resources`, `/zones` |
+| Layout plan | `/app/moves/[moveId]/plan`; `floorPlans`, `planLevels`, `planEntities`, `planPlacements`, `planOps`, `planProposals` | `floorPlans.ts`, `planOps.ts`, `src/components/layout-studio/`, `src/lib/plan-*`; REST `/plans` |
+| Packets and sharing | `/app/moves/[moveId]/packets` and `/share/[token]`; `documentationProfiles`, `shareLinks`, `shareLinkComments`, `exportJobs` | `publicPackets.ts`, `documentation-packet-builder.tsx`, `public-share-viewer.tsx`; REST move routes `/documentation-profiles`, `/share-links`, `/exports` |
+
+Some Convex calls bypass generated address checks: `(internal as any)` in
+`httpRoutes/mcp.ts`; hand-typed `anyApi` blocks in `http.ts`, `shareLinks.ts` and
+`convex/lib/rest/functionReferences.ts`; and `makeFunctionReference("module:name")`
+strings in `restApi.ts`, `lib/apiKeyAuth.ts` and `lib/carriedAccess.ts`. Trace these
+call sites when changing a registration.
 
 **The MCP surfaces** (easy to confuse — check the right catalog before assuming
 a capability is missing). Three code surfaces serve four public doors: `/mcp`,
@@ -80,16 +114,19 @@ a capability is missing). Three code surfaces serve four public doors: `/mcp`,
    gated by product grant scopes in `convex/lib/aiGrants.ts`, so
    a connection is only shown what the person approved. Never retype this count;
    `tests/unit/mcp-doc-tool-catalog.test.ts` derives it from source.
-2. **Legacy persisted OAuth** — `convex/mcp.ts` + `convex/mcpTools*.ts`, served
-   at `movingmanifest.com/mcp/connect`. It preserves the original 29-tool catalog plus own-access reduction (30 tools total)
-   for already-connected clients.
+2. **Legacy persisted OAuth** — `convex/mcp.ts` + `convex/mcpTools*.ts`
+   (including `mcpToolsCanonicalQueue.ts`), served
+   at `movingmanifest.com/mcp/connect`. It preserves the original catalog plus
+   `describe_connection` and `reduce_connection` for already-connected clients.
 3. **API-key HTTP/stdio** — `src/app/api/mcp/route.ts` and `mcp-server/`, using
    an `mmk_` key against REST. This is the granular automation surface. It has
    its own Queue tools under `queue/read` / `queue/write`; the canonical OAuth
    door has equivalents under the `moving.queue.work` grant scope. Both drive
    the same `queueService` primitives.
 
-See [docs/api-and-mcp.md](docs/api-and-mcp.md) for details.
+On every door `tools/list` publishes names with the `moving_` prefix, and the
+old unprefixed names still work when called. See
+[docs/api-and-mcp.md](docs/api-and-mcp.md) for details.
 The evidence-backed path from today's foundation to the adopted family standard
 is in the [Moving Bring Your AI MCP/OAuth alignment plan](docs/planning/moving-bring-your-ai-mcp-oauth-alignment.md).
 
@@ -131,6 +168,7 @@ Sandbox is the cloud development deployment `dev:grateful-jaguar-369` (`jarvie:m
 ## Checks and tests
 
 ```sh
+npm run check         # the pre-merge gate: everything below except e2e and build, plus contract checks
 npm run lint          # eslint
 npm run typecheck     # tsc --noEmit
 npm run test          # vitest unit tests
@@ -142,13 +180,13 @@ npm run verify:launch # all of the above + build, in sequence
 
 ## Deploying
 
-Merging to `main` on GitHub **is** the production deploy (Vercel builds and ships automatically, and prod Convex functions deploy with it). There is no separate release step — so `main` must always be green: lint, typecheck, unit tests, and build before merging.
+Merging to `main` on GitHub **is** the production deploy (Vercel builds and ships automatically, and prod Convex functions deploy with it). There is no separate release step — so `main` must always be green: run `npm run check` before merging. CI's unit-test job is informational, so the local check is the one that catches a failing test.
 
 The AI merges and deploys routine work after previewing it locally ([Core Philosophy §16.6](https://github.com/scottjarvie/assistwithlife/blob/main/planning/assist-with-sites-core-philosophy.md#166-delivering-changes-localhost-first-then-merge)). Vercel builds only `main` and branches named `preview/*`; push to a `preview/` branch when a preview link is wanted. Draft pull requests skip the CI jobs until marked ready.
 
 ## Conventions
 
-- Work happens on short-lived branches PR'd into `main`; branches are deleted after merge. Long-lived experiments get an `archive/*` branch on GitHub.
+- Work happens on short-lived branches PR'd into `main`; branches are deleted after merge, and the repo keeps only `main` plus open PR branches (the older leftover branches on GitHub await Scott's cleanup decision).
 - Cards and owner-approved Work Orders in `docs/tracker/` are the durable
   source for current work. GitHub PRs carry implementation review and evidence.
 - Agent-facing Convex tools must throw `ConvexError` (plain `Error` may be redacted by an MCP transport).

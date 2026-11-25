@@ -1,6 +1,39 @@
 import { v } from "convex/values";
 
 import type { Doc } from "../_generated/dataModel";
+import {
+  documentationProfileTypes,
+  aiPlanningSuggestionStatuses,
+  aiJobStatuses,
+  aiTextSuggestionStatuses,
+  itemDispositions,
+  itemFragilities,
+  itemStatuses,
+  planningDefaultKeys,
+  estimateConfidences,
+  measurementProvenanceSources,
+  moveSpaceKinds,
+  saleListingStatuses,
+  saleListingPlatforms,
+  saleResearchDepths,
+} from "../../shared/move-vocabulary.mjs";
+
+export {
+  documentationProfileTypes,
+  aiPlanningSuggestionStatuses,
+  aiJobStatuses,
+  aiTextSuggestionStatuses,
+  itemDispositions,
+  itemFragilities,
+  itemStatuses,
+  planningDefaultKeys,
+  estimateConfidences,
+  measurementProvenanceSources,
+  moveSpaceKinds,
+  saleListingStatuses,
+  saleListingPlatforms,
+  saleResearchDepths,
+};
 
 export const moveTypes = [
   "pcs",
@@ -44,49 +77,12 @@ export const transportResourcePresetKeys = [
   "unknown",
 ] as const;
 
-export const planningDefaultKeys = [
-  "firstNight",
-  "doNotLetMoversTouch",
-  "highValue",
-  "documents",
-  "medication",
-  "electronics",
-  "sensitive",
-  "fragile",
-  "irreplaceable",
-  "restrictedReview",
-] as const;
-
 export const planningDefaultHandlings = [
   "personalTransport",
   "keepAccessible",
   "evidenceRequired",
   "restrictedReview",
   "moverAllowedWithReview",
-] as const;
-
-export const itemDispositions = [
-  "undecided",
-  "take",
-  "sell",
-  "donate",
-  "dump",
-  "free",
-  "storage",
-  "mover",
-  "personalTransport",
-] as const;
-
-export const itemStatuses = [
-  "draft",
-  "active",
-  "packed",
-  "staged",
-  "loaded",
-  "delivered",
-  "missing",
-  "damaged",
-  "archived",
 ] as const;
 
 export const itemConditions = [
@@ -99,32 +95,6 @@ export const itemConditions = [
   "damaged",
 ] as const;
 
-export const estimateConfidences = [
-  "none",
-  "low",
-  "medium",
-  "high",
-  "manual",
-  "actual",
-] as const;
-
-export const measurementProvenanceSources = [
-  "unknown",
-  "photoEstimate",
-  "conversationEstimate",
-  "aiEstimate",
-  "manualEstimate",
-  "manualMeasurement",
-  "productResearch",
-  "manufacturerSpec",
-  "moverEstimate",
-  "moverConfirmed",
-  "import",
-  "api",
-] as const;
-
-export const itemFragilities = ["low", "medium", "high"] as const;
-
 export const itemCreatedViaValues = [
   "manual",
   "bulkImport",
@@ -134,46 +104,7 @@ export const itemCreatedViaValues = [
   "mcp",
 ] as const;
 
-export const moveSpaceKinds = [
-  "originRoom",
-  "destinationRoom",
-  "yardOutdoor",
-  "storage",
-  "transportResource",
-  "transportZone",
-  "custom",
-] as const;
-
 export const moveSpaceStatuses = ["active", "archived"] as const;
-
-export const saleListingStatuses = [
-  "needsPrep",
-  "researchingPrice",
-  "draftReady",
-  "listed",
-  "interestReceived",
-  "offerPending",
-  "sold",
-  "removed",
-  "kept",
-  "donated",
-] as const;
-
-export const saleListingPlatforms = [
-  "facebookMarketplace",
-  "craigslist",
-  "offerUp",
-  "nextdoor",
-  "ebay",
-  "other",
-] as const;
-
-export const saleResearchDepths = [
-  "none",
-  "quick",
-  "standard",
-  "deep",
-] as const;
 
 export const boxStatuses = [
   "open",
@@ -250,14 +181,6 @@ export const aiJobTypes = [
   "generalReview",
 ] as const;
 
-export const aiJobStatuses = [
-  "queued",
-  "running",
-  "succeeded",
-  "failed",
-  "canceled",
-] as const;
-
 export const aiJobModalities = ["text", "vision", "structured"] as const;
 
 export const aiJobReviewStatuses = [
@@ -268,13 +191,6 @@ export const aiJobReviewStatuses = [
 ] as const;
 
 export const aiTextSuggestionTypes = ["item", "box"] as const;
-
-export const aiTextSuggestionStatuses = [
-  "pending",
-  "approved",
-  "edited",
-  "rejected",
-] as const;
 
 export const aiPhotoSuggestionTypes = [
   "item",
@@ -292,25 +208,6 @@ export const aiPhotoSuggestionStatuses = [
 ] as const;
 
 export const aiPlanningSuggestionTypes = ["estimate", "assignment"] as const;
-
-export const aiPlanningSuggestionStatuses = [
-  "pending",
-  "approved",
-  "edited",
-  "rejected",
-] as const;
-
-export const documentationProfileTypes = [
-  "personalFullRecord",
-  "pcsMove",
-  "movingCompany",
-  "employerRelocation",
-  "insuranceClaim",
-  "donationPickup",
-  "sellOrGiveaway",
-  "storageInventory",
-  "loadCrew",
-] as const;
 
 export const pcsBranches = [
   "army",

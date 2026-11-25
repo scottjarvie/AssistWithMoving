@@ -1,0 +1,418 @@
+import type { ApiKeyScope } from "../apiKeys";
+
+export type RestMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+
+export type RestRequestInput = {
+  method: RestMethod;
+  path: string;
+  query: Record<string, string>;
+  authorization?: string;
+  idempotencyKey?: string;
+  body?: unknown;
+};
+
+export type RestResponse = {
+  status: number;
+  body: unknown;
+  headers?: Record<string, string>;
+};
+
+export type RestRateLimitResult = {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  resetAt: number;
+  retryAfterSeconds: number;
+};
+
+export const restApiRateLimit = {
+  limit: 300,
+  windowMs: 5 * 60 * 1000,
+} as const;
+
+export function bearerToken(authorization: string | undefined) {
+  const match = authorization?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
+export function parseRestPath(path: string) {
+  return path
+    .replace(/^\/+|\/+$/g, "")
+    .split("/")
+    .filter(Boolean);
+}
+
+export function bodyRecord(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return {};
+  }
+  return body as Record<string, unknown>;
+}
+
+export function moveIdFromRestRequest({
+  segments,
+  body,
+  query,
+}: {
+  segments: string[];
+  body?: unknown;
+  query: Record<string, string>;
+}) {
+  if (segments[0] === "moves" && segments[1] === "setup") {
+    return moveIdFromRestBodyOrQuery({ body, query });
+  }
+  if (segments[0] === "moves" && segments[1]) {
+    return segments[1];
+  }
+  if (segments[0] === "moves") {
+    return undefined;
+  }
+
+  return moveIdFromRestBodyOrQuery({ body, query });
+}
+
+export function moveIdFromRestBodyOrQuery({
+  body,
+  query,
+}: {
+  body?: unknown;
+  query: Record<string, string>;
+}) {
+  const bodyMoveId = bodyRecord(body).moveId;
+  if (typeof bodyMoveId === "string" && bodyMoveId) {
+    return bodyMoveId;
+  }
+  return query.moveId || undefined;
+}
+
+export function restError({
+  status,
+  code,
+  message,
+}: {
+  status: number;
+  code: string;
+  message: string;
+}): RestResponse {
+  return {
+    status,
+    body: {
+      error: {
+        code,
+        message,
+      },
+    },
+  };
+}
+
+export function restOk(body: unknown, status = 200): RestResponse {
+  return { status, body };
+}
+
+export function restRateLimitWindowStart(
+  now: number,
+  windowMs = restApiRateLimit.windowMs
+) {
+  return Math.floor(now / windowMs) * windowMs;
+}
+
+export function restRateLimitResult({
+  count,
+  now,
+  limit = restApiRateLimit.limit,
+  windowStart,
+  windowMs = restApiRateLimit.windowMs,
+}: {
+  count: number;
+  now: number;
+  limit?: number;
+  windowStart: number;
+  windowMs?: number;
+}): RestRateLimitResult {
+  const resetAt = windowStart + windowMs;
+  const retryAfterSeconds = Math.max(1, Math.ceil((resetAt - now) / 1000));
+  return {
+    allowed: count <= limit,
+    limit,
+    remaining: Math.max(0, limit - count),
+    resetAt,
+    retryAfterSeconds,
+  };
+}
+
+export function restRateLimitHeaders(result: RestRateLimitResult) {
+  return {
+    "X-RateLimit-Limit": String(result.limit),
+    "X-RateLimit-Remaining": String(result.remaining),
+    "X-RateLimit-Reset": String(Math.ceil(result.resetAt / 1000)),
+    ...(result.allowed
+      ? {}
+      : { "Retry-After": String(result.retryAfterSeconds) }),
+  };
+}
+
+export function withRestRateLimitHeaders(
+  response: RestResponse,
+  result: RestRateLimitResult
+): RestResponse {
+  return {
+    ...response,
+    headers: {
+      ...response.headers,
+      ...restRateLimitHeaders(result),
+    },
+  };
+}
+
+export function restRateLimited(result: RestRateLimitResult): RestResponse {
+  return withRestRateLimitHeaders(
+    restError({
+      status: 429,
+      code: "rate_limited",
+      message: `API rate limit exceeded. Retry after ${result.retryAfterSeconds} seconds.`,
+    }),
+    result
+  );
+}
+
+export function paginationFromQuery(query: Record<string, string>) {
+  const limit = clampNumber(Number(query.limit || "50"), 1, 100);
+  const cursor = query.cursor ? Number(query.cursor) : 0;
+  return {
+    limit,
+    cursor: Number.isFinite(cursor) && cursor > 0 ? Math.floor(cursor) : 0,
+  };
+}
+
+export function paginate<T>(rows: T[], query: Record<string, string>) {
+  const { limit, cursor } = paginationFromQuery(query);
+  const page = rows.slice(cursor, cursor + limit);
+  const nextCursor = cursor + limit < rows.length ? String(cursor + limit) : null;
+  return {
+    data: page,
+    page: {
+      limit,
+      nextCursor,
+      total: rows.length,
+    },
+  };
+}
+
+/** Removing public exposure is available to every active connection. */
+export function isShareLinkUnpublish({ method, segments }: { method: RestMethod; segments: string[] }) {
+  return segments[0] === "moves" && Boolean(segments[1]) && segments[2] === "share-links" && Boolean(segments[3]) && ((method === "DELETE" && segments.length === 4) || (method === "POST" && segments.length === 5 && segments[4] === "revoke"));
+}
+
+export function requiredScopesForRestRoute({
+  method,
+  segments,
+}: {
+  method: RestMethod;
+  segments: string[];
+}): ApiKeyScope[] {
+  if (isShareLinkUnpublish({ method, segments })) return [];
+  if (segments[0] === "me" && method === "GET") {
+    return ["moves/read"];
+  }
+  if (segments[0] === "uploads" && (method === "POST" || (method === "GET" && segments[1] === "policy"))) {
+    return ["photos/write"];
+  }
+  if (
+    (segments[0] === "photos" || segments[0] === "images") &&
+    method !== "GET"
+  ) {
+    return ["photos/write"];
+  }
+  if (segments[0] === "plans") {
+    return method === "GET" ? ["plans/read"] : ["plans/write"];
+  }
+  if (segments[0] === "households" && segments[2] === "members") {
+    return ["members/manage"];
+  }
+  if (segments[0] === "items") {
+    return method === "GET" ? ["inventory/read"] : ["inventory/write"];
+  }
+  if (segments[0] === "boxes") {
+    return method === "GET" ? ["inventory/read"] : ["inventory/write"];
+  }
+  if (segments[0] === "exports" && method === "GET") {
+    return ["exports/read"];
+  }
+  if (segments[0] !== "moves") return [];
+  if (segments[2] === "queue") {
+    return [method === "GET" ? "queue/read" : "queue/write"];
+  }
+  if (segments[1] === "setup" && method === "POST") {
+    return ["moves/read", "moves/write", "inventory/write"];
+  }
+  if (segments.length === 1 && method === "POST") {
+    return ["moves/write"];
+  }
+  if (
+    method === "POST" &&
+    segments[2] === "assignments" &&
+    segments[3] === "suggest"
+  ) {
+    return ["moves/read", "inventory/read"];
+  }
+  if (method === "GET") {
+    if (segments[2] === "summary") {
+      return ["moves/read", "inventory/read", "exports/read"];
+    }
+    if (segments[2] === "questions") {
+      return ["moves/read", "inventory/read"];
+    }
+    if (segments[2] === "move-day") {
+      return ["moves/read", "inventory/read"];
+    }
+    if (segments[2] === "capacity-report") {
+      return ["moves/read", "inventory/read"];
+    }
+    if (segments[2] === "agent-context") {
+      return ["moves/read", "inventory/read", "plans/read"];
+    }
+    if (segments.includes("exports")) {
+      return ["exports/read"];
+    }
+    if (segments.includes("share-links")) {
+      return ["exports/read"];
+    }
+    if (segments.includes("documentation-profiles")) {
+      return ["exports/read"];
+    }
+    if (segments.includes("people")) {
+      return ["moves/read"];
+    }
+    if (segments.includes("spaces")) {
+      return ["moves/read"];
+    }
+    if (segments.includes("sale-listings")) {
+      return ["inventory/read"];
+    }
+    if (
+      segments.includes("items") ||
+      segments.includes("planned-items") ||
+      segments.includes("movable-units") ||
+      segments.includes("boxes")
+    ) {
+      return ["inventory/read"];
+    }
+    if (segments.includes("assignments")) {
+      return ["inventory/read"];
+    }
+    if (segments.includes("planning-suggestions")) {
+      return ["inventory/read"];
+    }
+    if (
+      segments.includes("ai-jobs") ||
+      segments.includes("ai-text-suggestions") ||
+      segments.includes("ai-photo-suggestions")
+    ) {
+      return ["inventory/read"];
+    }
+    if (segments.includes("photos")) {
+      return ["inventory/read"];
+    }
+    return ["moves/read"];
+  }
+  if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
+    if (segments.includes("exports")) {
+      return ["exports/create"];
+    }
+    if (segments.includes("share-links")) {
+      return ["exports/create"];
+    }
+    if (segments.includes("documentation-profiles")) {
+      return ["exports/create"];
+    }
+    if (segments.includes("people")) {
+      return ["moves/write"];
+    }
+    if (segments.includes("spaces")) {
+      return ["moves/write"];
+    }
+    if (segments.includes("sale-listings")) {
+      return ["inventory/write"];
+    }
+    if (
+      segments.includes("items") ||
+      segments.includes("planned-items") ||
+      segments.includes("movable-units") ||
+      segments.includes("boxes")
+    ) {
+      return ["inventory/write"];
+    }
+    if (segments.includes("assignments")) {
+      return ["inventory/write"];
+    }
+    if (segments.includes("planning-suggestions")) {
+      return ["inventory/write"];
+    }
+    if (
+      segments.includes("ai-text-suggestions") ||
+      segments.includes("ai-photo-suggestions")
+    ) {
+      return ["inventory/write"];
+    }
+    return ["moves/write"];
+  }
+  return [];
+}
+
+export function requestHashInput({
+  method,
+  path,
+  body,
+}: Pick<RestRequestInput, "method" | "path" | "body">) {
+  return JSON.stringify({
+    method,
+    path,
+    body: stableJson(body ?? null),
+  });
+}
+
+
+function stableJson(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, stableJson(entry)])
+  );
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(Math.max(Math.floor(value), min), max);
+}
+
+export function errorStatus(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("invalid api key") || message.includes("bearer")) return 401;
+  if (
+    message.includes("not allowed") ||
+    message.includes("website-only") ||
+    message.includes("only the person can restore") ||
+    message.includes("still being checked") ||
+    message.includes("scope") ||
+    message.includes("not authorized") ||
+    message.includes("cannot view") ||
+    message.includes("only act on") ||
+    message.includes("restricted to a different move") ||
+    message.includes("active household access") ||
+    message.includes("turned off by an owner")
+  ) {
+    return 403;
+  }
+  if (message.includes("not found")) return 404;
+  if (
+    message.includes("idempotency") ||
+    message.includes("already exists") ||
+    message.includes("changed since")
+  ) {
+    return 409;
+  }
+  return 400;
+}

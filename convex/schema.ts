@@ -2092,8 +2092,12 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    // Everyone's Queue includes both explicitly owned and older captures.
+    .index("by_move_input_status", ["moveId", "needsInput", "status"])
     .index("by_move_owner_input", ["moveId", "ownerUserId", "needsInput"])
     .index("by_move_creator_owner_input", ["moveId", "createdByUserId", "ownerUserId", "needsInput"])
+    .index("by_move_owner_input_status", ["moveId", "ownerUserId", "needsInput", "status"])
+    .index("by_move_creator_owner_input_status", ["moveId", "createdByUserId", "ownerUserId", "needsInput", "status"])
     .index("by_move_creator_owner_status", ["moveId", "createdByUserId", "ownerUserId", "status"])
     .index("by_move_status_order", ["moveId", "status", "sortOrder"])
     .index("by_move_owner_status", ["moveId", "ownerUserId", "status", "sortOrder"])

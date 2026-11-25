@@ -7,32 +7,32 @@ describe("MCP read-only discovery proof", () => {
     const results = mcpReadonlyDiscoveryProofResults({
       tools: [
         {
-          name: "get_api_capabilities",
+          name: "moving_get_api_capabilities",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: {} },
         },
         {
-          name: "get_api_context",
+          name: "moving_get_api_context",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: {} },
         },
         {
-          name: "list_moves",
+          name: "moving_list_moves",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: {} },
         },
         {
-          name: "get_move_summary",
+          name: "moving_get_move_summary",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: { moveId: {} } },
         },
         {
-          name: "get_agent_context",
+          name: "moving_get_agent_context",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: { moveId: {} } },
         },
         {
-          name: "setup_move",
+          name: "moving_setup_move",
           annotations: { readOnlyHint: false },
           inputSchema: { type: "object", properties: { dryRun: {} } },
         },
@@ -59,32 +59,32 @@ describe("MCP read-only discovery proof", () => {
     const results = mcpReadonlyDiscoveryProofResults({
       tools: [
         {
-          name: "get_api_capabilities",
+          name: "moving_get_api_capabilities",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: {} },
         },
         {
-          name: "get_api_context",
+          name: "moving_get_api_context",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: {} },
         },
         {
-          name: "list_moves",
+          name: "moving_list_moves",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: {} },
         },
         {
-          name: "get_move_summary",
+          name: "moving_get_move_summary",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: { moveId: {} } },
         },
         {
-          name: "get_agent_context",
+          name: "moving_get_agent_context",
           annotations: { readOnlyHint: true },
           inputSchema: { type: "object", properties: { moveId: {} } },
         },
         {
-          name: "setup_move",
+          name: "moving_setup_move",
           annotations: { readOnlyHint: false },
           inputSchema: { type: "object", properties: {} },
         },

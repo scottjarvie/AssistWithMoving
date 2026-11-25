@@ -1,4 +1,5 @@
-import connectionPolicy from "../../../../shared/ai-connection-policy.json";
+import { movingToolListResponse, movingToolRequest, normalizeMovingToolCall } from "../../../../shared/moving-mcp-tool-names.mjs";
+import { movingConnectorInstructions } from "../../../../convex/lib/mcpConnector/instructions";
 // Remote MCP endpoint (Streamable HTTP) — the API-KEY door.
 //
 // Auth: mmk_ API keys ONLY (same keys as the REST API). This endpoint forwards
@@ -34,13 +35,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const SERVER_INSTRUCTIONS = [connectionPolicy.instructions,
-  "Assist With Moving is the system of record for a household move: inventory items, boxes, photos, rooms/spaces, transport resources, load plans, and exports.",
-  "New API keys use the limits chosen by the person, with no forced end date. reduce_connection can narrow only this calling key; only the person in Settings can widen or restore it.",
-  "Start every session with get_api_context to confirm the key's scopes and any move restriction, then list_moves or setup_move.",
-  "Typical workflow: setup_move → create_move_space (rooms) → batch_upsert_items / add_item_from_photo → create_box + add_items_to_box → upload photos → suggest_assignments → get_move_summary.",
-  "Prefer batch tools over repeated single calls. Most write tools accept dryRun for a safe preview and an idempotencyKey for retries.",
-].join(" ");
+const SERVER_INSTRUCTIONS = movingConnectorInstructions("apiKey");
 
 function restApiBaseUrl(): string {
   const convexHttpActionsUrl = process.env.CONVEX_HTTP_ACTIONS_URL;
@@ -122,8 +117,9 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   };
 
   let uploadLimits: Parameters<typeof import("../../../../shared/upload-policy.mjs").uploadPolicyLine>[0] | undefined;
-  if (boundedRequest.method === "POST") {
-    try { const envelope = await boundedRequest.clone().json(); if (envelope.method === "tools/list") { const context = await getApiContext(apiConfig); uploadLimits = context.data?.uploadLimits; } } catch { /* Authentication failures keep the existing recovery tools available. */ }
+  const envelope = boundedRequest.method === "POST" ? await boundedRequest.clone().json().catch(() => null) : null;
+  if (envelope?.method === "tools/list") {
+    try { const context = await getApiContext(apiConfig); uploadLimits = context.data?.uploadLimits; } catch { /* Authentication failures keep the existing recovery tools available. */ }
   }
 
   // The wrapper forwards these unchanged but its declarations predate the
@@ -150,7 +146,9 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     }
   );
 
-  return handler(boundedRequest);
+  const normalized = normalizeMovingToolCall(envelope);
+  const response = await handler(movingToolRequest(boundedRequest, envelope, normalized));
+  return movingToolListResponse(response, envelope, true);
 }
 
 export async function POST(request: Request): Promise<Response> {

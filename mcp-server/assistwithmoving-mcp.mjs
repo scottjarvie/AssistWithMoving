@@ -1,9 +1,36 @@
 #!/usr/bin/env node
+import {
+  aiJobStatuses,
+  aiPlanningSuggestionStatuses,
+  aiTextSuggestionStatuses,
+  boxContainerTypes,
+  documentationFieldKeys,
+  documentationImageRules,
+  documentationProfileStatuses,
+  documentationProfileTypes,
+  exportJobTypes,
+  itemDispositions,
+  itemFragilities,
+  itemStatuses,
+  measurementProvenanceSources,
+  movePersonRoles,
+  moveSpaceKinds,
+  plannedItemStatuses,
+  planningDefaultKeys,
+  saleListingPlatforms,
+  saleListingStatuses,
+  saleResearchDepths,
+  shareLinkActions,
+  shareLinkRoles,
+  shareLinkScopes,
+  shareLinkStatuses,
+} from "../shared/move-vocabulary.mjs";
 import { uploadPolicyLine } from "../shared/upload-policy.mjs";
 import { AI_STORAGE_NOTE } from "../shared/usage-limits.mjs";
 import { transportLimits } from "../shared/media-limits.mjs";
 import apiToolAccess from "../shared/api-tool-access.json" with { type: "json" };
 import connectionPolicy from "../shared/ai-connection-policy.json" with { type: "json" };
+import { listMovingToolNames, normalizeMovingToolCall } from "../shared/moving-mcp-tool-names.mjs";
 import { pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -152,57 +179,17 @@ const capacityInputSchema = z.object({
   volumeIsUnlimited: z.boolean().optional(),
 });
 
-const documentationProfileTypeSchema = z.enum([
-  "personalFullRecord",
-  "pcsMove",
-  "movingCompany",
-  "employerRelocation",
-  "insuranceClaim",
-  "donationPickup",
-  "sellOrGiveaway",
-  "storageInventory",
-  "loadCrew",
-]);
+const documentationProfileTypeSchema = z.enum(documentationProfileTypes);
 
-const documentationFieldSchema = z.enum([
-  "moveSummary",
-  "pcsFields",
-  "rooms",
-  "items",
-  "boxes",
-  "loadAssignments",
-  "photos",
-  "estimatedValues",
-  "purchaseValues",
-  "serialNumbers",
-  "privateNotes",
-  "conditionAndDamage",
-  "auditSummary",
-]);
+const documentationFieldSchema = z.enum(documentationFieldKeys);
 
-const documentationImageRuleSchema = z.enum([
-  "none",
-  "thumbsOnly",
-  "reviewedEvidence",
-  "allAllowed",
-]);
+const documentationImageRuleSchema = z.enum(documentationImageRules);
 
-const documentationStatusSchema = z.enum(["draft", "active", "archived"]);
+const documentationStatusSchema = z.enum(documentationProfileStatuses);
 
-const planningSuggestionStatusSchema = z.enum([
-  "pending",
-  "approved",
-  "edited",
-  "rejected",
-]);
+const planningSuggestionStatusSchema = z.enum(aiPlanningSuggestionStatuses);
 
-const aiJobStatusSchema = z.enum([
-  "queued",
-  "running",
-  "succeeded",
-  "failed",
-  "canceled",
-]);
+const aiJobStatusSchema = z.enum(aiJobStatuses);
 
 const queueStateSchema = z.enum([
   "needsYou",
@@ -217,39 +204,13 @@ const queueResultRefSchema = z.object({
   label: z.string().max(200).optional(),
 });
 
-const aiSuggestionStatusSchema = z.enum([
-  "pending",
-  "approved",
-  "edited",
-  "rejected",
-]);
+const aiSuggestionStatusSchema = z.enum(aiTextSuggestionStatuses);
 
-const itemDispositionSchema = z.enum([
-  "undecided",
-  "take",
-  "sell",
-  "donate",
-  "dump",
-  "free",
-  "storage",
-  "mover",
-  "personalTransport",
-]);
+const itemDispositionSchema = z.enum(itemDispositions);
 
-const itemFragilitySchema = z.enum(["low", "medium", "high"]);
+const itemFragilitySchema = z.enum(itemFragilities);
 
-const planningDefaultKeySchema = z.enum([
-  "firstNight",
-  "doNotLetMoversTouch",
-  "highValue",
-  "documents",
-  "medication",
-  "electronics",
-  "sensitive",
-  "fragile",
-  "irreplaceable",
-  "restrictedReview",
-]);
+const planningDefaultKeySchema = z.enum(planningDefaultKeys);
 
 const estimateConfidenceSchema = z.enum([
   "none",
@@ -261,27 +222,9 @@ const estimateConfidenceSchema = z.enum([
   "estimated",
 ]);
 
-const measurementProvenanceSourceSchema = z.enum([
-  "unknown",
-  "photoEstimate",
-  "conversationEstimate",
-  "aiEstimate",
-  "manualEstimate",
-  "manualMeasurement",
-  "productResearch",
-  "manufacturerSpec",
-  "moverEstimate",
-  "moverConfirmed",
-  "import",
-  "api",
-]);
+const measurementProvenanceSourceSchema = z.enum(measurementProvenanceSources);
 
-const plannedItemStatusSchema = z.enum([
-  "idea",
-  "decided",
-  "purchased",
-  "dropped",
-]);
+const plannedItemStatusSchema = z.enum(plannedItemStatuses);
 
 const dimensionsInSchema = z.object({
   lengthIn: z.number().nonnegative().optional(),
@@ -305,39 +248,13 @@ const itemMeasurementProvenanceSchema = z.object({
   volume: measurementProvenanceEntrySchema.optional(),
 });
 
-const moveSpaceKindSchema = z.enum([
-  "originRoom",
-  "destinationRoom",
-  "yardOutdoor",
-  "storage",
-  "transportResource",
-  "transportZone",
-  "custom",
-]);
+const moveSpaceKindSchema = z.enum(moveSpaceKinds);
 
-const saleListingStatusSchema = z.enum([
-  "needsPrep",
-  "researchingPrice",
-  "draftReady",
-  "listed",
-  "interestReceived",
-  "offerPending",
-  "sold",
-  "removed",
-  "kept",
-  "donated",
-]);
+const saleListingStatusSchema = z.enum(saleListingStatuses);
 
-const saleListingPlatformSchema = z.enum([
-  "facebookMarketplace",
-  "craigslist",
-  "offerUp",
-  "nextdoor",
-  "ebay",
-  "other",
-]);
+const saleListingPlatformSchema = z.enum(saleListingPlatforms);
 
-const saleResearchDepthSchema = z.enum(["none", "quick", "standard", "deep"]);
+const saleResearchDepthSchema = z.enum(saleResearchDepths);
 
 const saleResearchSourceSchema = z.object({
   title: z.string().optional(),
@@ -578,13 +495,7 @@ const aiPhotoApprovalSchema = z.object({
   boxDraft: aiPhotoBoxDraftSchema.optional(),
 });
 
-const movePersonRoleSchema = z.enum([
-  "owner",
-  "householdMember",
-  "helper",
-  "mover",
-  "contact",
-]);
+const movePersonRoleSchema = z.enum(movePersonRoles);
 
 const householdMemberRoleSchema = z.enum([
   "admin",
@@ -594,14 +505,7 @@ const householdMemberRoleSchema = z.enum([
   "guest",
 ]);
 
-const shareLinkActionSchema = z.enum([
-  "view",
-  "viewPlan",
-  "download",
-  "statusUpdate",
-  "comment",
-  "uploadEvidence",
-]);
+const shareLinkActionSchema = z.enum(shareLinkActions);
 
 const planPointSchema = z.object({
   x: z.number(),
@@ -822,48 +726,17 @@ export const planOpSchema = z.union([
 const documentationFiltersSchema = z.object({
   dispositions: z
     .array(
-      z.enum([
-        "undecided",
-        "take",
-        "sell",
-        "donate",
-        "dump",
-        "free",
-        "storage",
-        "mover",
-        "personalTransport",
-      ])
+      z.enum(itemDispositions)
     )
     .optional(),
   statuses: z
     .array(
-      z.enum([
-        "draft",
-        "active",
-        "packed",
-        "staged",
-        "loaded",
-        "delivered",
-        "missing",
-        "damaged",
-        "archived",
-      ])
+      z.enum(itemStatuses)
     )
     .optional(),
   planningDefaultKeys: z
     .array(
-      z.enum([
-        "firstNight",
-        "doNotLetMoversTouch",
-        "highValue",
-        "documents",
-        "medication",
-        "electronics",
-        "sensitive",
-        "fragile",
-        "irreplaceable",
-        "restrictedReview",
-      ])
+      z.enum(planningDefaultKeys)
     )
     .optional(),
   room: z.string().optional(),
@@ -959,12 +832,24 @@ export function createAssistWithMovingMcpServer(apiConfig, options = {}) {
   return target;
 }
 
+class MovingStdioTransport extends StdioServerTransport {
+  start() {
+    const onmessage = this.onmessage;
+    this.onmessage = (message, extra) => onmessage?.(normalizeMovingToolCall(message), extra);
+    return super.start();
+  }
+
+  send(message, options) {
+    return super.send(listMovingToolNames(message, true), options);
+  }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const config = createApiConfig();
   let uploadLimits;
   try { const context = await getApiContext(config); uploadLimits = context.data?.uploadLimits; } catch { /* Tools still provide the normal authenticated recovery path. */ }
   const server = createAssistWithMovingMcpServer(config, { uploadLimits });
-  const transport = new StdioServerTransport();
+  const transport = new MovingStdioTransport();
   await server.connect(transport);
 }
 
@@ -1419,15 +1304,7 @@ export function registerTools(target, apiConfig, options = {}) {
     inputSchema: {
       moveId: z.string(),
       itemId: z.string(),
-      containerType: z.enum([
-        "carton",
-        "plasticTote",
-        "bin",
-        "wardrobe",
-        "dishPack",
-        "crate",
-        "other",
-      ]),
+      containerType: z.enum(boxContainerTypes),
       dryRun: z.boolean().optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -2661,7 +2538,7 @@ export function registerTools(target, apiConfig, options = {}) {
       "Create a CSV export for inventory, boxes, assignments, or a documentation profile.",
     inputSchema: {
       moveId: z.string(),
-      type: z.enum(["inventory", "boxes", "assignments", "documentationProfile"]),
+      type: z.enum(exportJobTypes),
       documentationProfileId: z.string().optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -2696,7 +2573,7 @@ export function registerTools(target, apiConfig, options = {}) {
       "List safe metadata for documentation share links. Raw tokens are never returned from this list.",
     inputSchema: {
       moveId: z.string(),
-      status: z.enum(["active", "revoked"]).optional(),
+      status: z.enum(shareLinkStatuses).optional(),
       limit: z.number().int().min(1).max(100).optional(),
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -2724,21 +2601,14 @@ export function registerTools(target, apiConfig, options = {}) {
     inputSchema: {
       moveId: z.string(),
       documentationProfileId: z.string().optional(),
-      scope: z.enum(["move", "profile"]).optional(),
+      scope: z.enum(shareLinkScopes).optional(),
       label: z.string().optional(),
       role: z
-        .enum(["owner", "admin", "editor", "packer", "viewer", "guest"])
+        .enum(shareLinkRoles)
         .optional(),
       allowedActions: z
         .array(
-          z.enum([
-            "view",
-            "viewPlan",
-            "download",
-            "statusUpdate",
-            "comment",
-            "uploadEvidence",
-          ])
+          z.enum(shareLinkActions)
         )
         .optional(),
       expiresAt: z.number().optional(),

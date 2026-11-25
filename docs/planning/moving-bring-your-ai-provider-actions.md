@@ -1,5 +1,11 @@
 # Assist With Moving — Bring Your AI provider actions
 
+> **Status checked 2026-11-24.** Provider action 1 (Client ID Metadata
+> Documents in Clerk) closed as deferred on 2026-08-17 (see `MOV-0032`). The
+> real-client lifecycle run is still open and waits on `MOV-0035` (needs
+> Scott). The tracker Cards hold the current state; this file is the dated
+> step list.
+
 **Status:** outstanding outside-the-repository steps for `MOV-WO-010`
 **Prepared:** 2026-08-16
 **Owner:** Scott (decisions), Codex (browser-driven provider work)

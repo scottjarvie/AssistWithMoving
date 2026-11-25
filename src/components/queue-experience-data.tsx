@@ -120,7 +120,6 @@ export function QueueExperience({
   const [activeState, setActiveState] = useState<QueueView>("waitingForAi");
 
   const currentUser = useQuery(api.users.current);
-  const counts = useQuery(api.queue.counts, { householdId, moveId });
   const scopes = useQuery(api.moveParticipants.queueScopes, {
     householdId,
     moveId,
@@ -144,6 +143,10 @@ export function QueueExperience({
     effectiveOwnerScope === "all" || effectiveOwnerScope === "loading"
       ? undefined
       : (effectiveOwnerScope as Id<"users">);
+  const counts = useQuery(
+    api.queue.counts,
+    currentUser && selectedOwnerUserId === currentUser._id ? { householdId, moveId } : "skip",
+  );
   const paginationReady = effectiveOwnerScope !== "loading";
   const handoffs = usePaginatedQuery(
     api.queue.listForMove,
@@ -344,7 +347,7 @@ export function QueueExperience({
         if (legacyCaptures.status === "CanLoadMore")
           legacyCaptures.loadMore(50);
       }}
-      counts={selectedOwnerUserId === currentUser?._id ? counts : undefined}
+      counts={counts}
       suggestionsVisible={suggestionsVisible}
       suggestionPanel={
         <QueueSuggestions

@@ -1,7 +1,8 @@
 import { ConvexError } from "convex/values";
 import { canonicalRequestBytes } from "../lib/aiUploadCaps";
 import { refusalOf, aiRefusal } from "../lib/usageLimits/refusal";
-import connectionPolicy from "../../shared/ai-connection-policy.json";
+import { movingToolListResponse, movingToolRequest, normalizeMovingToolCall } from "../../shared/moving-mcp-tool-names.mjs";
+import { movingConnectorInstructions } from "../lib/mcpConnector/instructions";
 /**
  * Stateless dual-era remote MCP endpoint and Moving-native workflow tools.
  *
@@ -563,19 +564,7 @@ export function createMovingServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
       maxToolInputElements: MAX_MCP_TOOL_INPUT_ELEMENTS,
-      instructions: [connectionPolicy.instructions,
-        granted.size === 0
-          ? `Connection state: ${connectionState?.status ?? "limited"}; changed ${connectionState?.changedAt ?? "date unavailable"}; end date ${connectionState?.expiresAt ?? "none"}. Only the person can restore it at https://movingmanifest.com/settings/ai. describe_connection remains available.`
-          : `This connection holds ${[...granted].join(", ")}. Only tools inside those are listed.`,
-        "New AI connections get all entitled current and future scopes, all owned moves, and no end date unless restricted, unreleased OAuth connections set a narrower floor. API keys have their own person-chosen limits. Use reduce_connection to narrow only your own access; only the person in Settings can widen or restore it.",
-        "Call get_move_brief first and use only returned move and record IDs.",
-        "Search before creating duplicates; hydrate only the records needed for the work.",
-        "Use get_evidence_media for private photos rather than normal web fetch.",
-        "Use save_complete_result for a normal finished workflow and granular save tools for corrections.",
-        "Record blocked, gated, failed, and not-relevant sources honestly.",
-        "A Queue directive says what the person wants; it never widens this grant. If authority is missing, ask the smallest question with ask_queue_question instead of assuming.",
-        `Never attempted here: ${NEVER_PERMITTED[0]}`,
-      ].join(" "),
+      instructions: movingConnectorInstructions("canonical", connectionState ?? { status: granted.size ? "active" : "limited" }),
     },
   );
 
@@ -1500,8 +1489,9 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
     },
   );
   const envelope = await request.clone().json().catch(() => null);
-  const response = await handler.fetch(request, { authInfo: auth });
-  const power = envelope?.method === "tools/call" && typeof envelope.params?.name === "string" ? scopeForTool(envelope.params.name) : null;
+  const normalized = normalizeMovingToolCall(envelope);
+  const response = await handler.fetch(movingToolRequest(request, envelope, normalized), { authInfo: auth });
+  const power = normalized?.method === "tools/call" && typeof normalized.params?.name === "string" ? scopeForTool(normalized.params.name) : null;
   // Filtered tools remain discoverable through describe_connection. A client
   // with a cached catalogue must receive the real missing-power recovery,
   // rather than the SDK's generic unknown-tool error.
@@ -1513,7 +1503,7 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       return new Response(JSON.stringify(reply), { status: response.status, headers: response.headers });
     }
   }
-  return response;
+  return movingToolListResponse(response, envelope);
 }
 
 /**

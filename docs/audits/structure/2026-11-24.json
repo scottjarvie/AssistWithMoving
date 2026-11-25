@@ -1,0 +1,163 @@
+{
+  "repo": "scottjarvie/AssistWithMoving",
+  "date": "2026-11-24",
+  "baseline": "f578b32",
+  "includesPR274": true,
+  "readOnly": true,
+  "verdict": {
+    "summary": "Fairly close to easy for a future AI to work in. Guard rails are good (npm run check is the full local gate; MCP docs are tested against code; README map is current). 17 safe steps in 4 pull requests, about 16 thread-hours; none changes what a person sees or does.",
+    "reasons": [
+      "convex/restApi.ts is 10,135 lines: the whole API-key door (33 route families, ~120 helpers), and some helpers were already copied into the one handler split out.",
+      "Rules written in more than one place: value lists typed by hand in five places; the loose movable-unit rule twice; CSV export in six screens; photo-link fetching in twelve components.",
+      "Misleading names: mcpPlanning.ts is the whole canonical door; mcpToolsCanonicalQueue.ts serves the legacy door; two files named restApi.ts; move-pages/ mixes live pages with redirected leftovers; one feature carries several names across routes, tables and tools."
+    ],
+    "bigFileVerdicts": { "total": 32, "leave": 24, "split": 6, "partial": 2, "delete": 0 },
+    "uiGiantsNote": "plan-workspace-page.tsx and load-planner-board.tsx have zero commits in 90 days: move pure helpers now, split components when work on those screens resumes."
+  },
+  "census": {
+    "method": "git ls-files on f578b32 | wc -l (newline count); images/audio/video excluded. tests = tests/ or *.test.*/*.spec.*; generated_or_data = convex/_generated, lockfiles, all .json/.html/.patch, plus synced files shared/audio.mjs, shared/usage-limits.mjs, convex/lib/media/audio.ts, convex/lib/usageLimits/core.ts; stylesheets = .css; hand-written code = remaining .ts/.tsx/.mjs/.mts/.js/.sh/.cmd/.yml; docs (.md/.txt) for scale only.",
+    "rows": [
+      { "kind": "hand-written code", "files": 531, "lines": 161337, "over500": 79, "over1000": 32, "over2000": 8, "over4000": 3 },
+      { "kind": "generated or data", "files": 46, "lines": 31887, "over500": 9, "over1000": 7, "over2000": 3, "over4000": 1 },
+      { "kind": "stylesheets", "files": 2, "lines": 638, "over500": 0, "over1000": 0, "over2000": 0, "over4000": 0 },
+      { "kind": "tests", "files": 269, "lines": 50931, "over500": 20, "over1000": 6, "over2000": 2, "over4000": 0 },
+      { "kind": "docs (scale only)", "files": 94, "lines": 17758, "over500": 5, "over1000": 3, "over2000": 2, "over4000": 0 }
+    ],
+    "notes": [
+      "public/openapi.json (2,123 lines) is hand-maintained despite looking generated.",
+      "docs/planning/assist-with-moving-project-philosophy.html is generated from the Markdown by scripts/project-philosophy-docs.mjs.",
+      "Large tests (mcp-client.test.ts 3,225; queue-suggestions.test.ts 2,274) each cover one surface: leave."
+    ]
+  },
+  "bigFiles": [
+    { "path": "convex/restApi.ts", "lines": 10135, "commits90d": 7, "commitsAll": 60, "importers": 0, "convexRefFiles": 6, "jobs": ["6 Convex entry points (handle, commit, rate limit, auth, idempotency)", "router", "33 route families (933-6685)", "~120 require/safe/parse/patch helpers (6686-10135)", "setup and AI-suggestion approval helpers", "local copies of value lists"], "action": "split", "targets": ["convex/rest/<family>.ts x12 (queue, plans, households+me, moves, spaces+sale-listings, transport, people, items+planned+movable-units, boxes+assignments, planning+ai, exports+share-links, top-level)", "convex/lib/rest/{require,safe,parse,patch}.ts"], "steps": [6, 7, 8], "class": "SAFE", "size": "L", "risk": "medium", "guardTests": ["new rest-route-table.test.ts", "rest-api.test.ts", "queue-contract.test.ts", "storage-allowance-doors.test.ts", "room-history.test.ts", "audio-backend.test.ts", "mcp-api-key-transport.test.ts", "contract:drift", "Convex typecheck"], "auditRef": "AIR-04" },
+    { "path": "src/components/layout-studio/plan-workspace-page.tsx", "lines": 7217, "commits90d": 0, "commitsAll": 4, "importers": 1, "jobs": ["page shell", "side rail and tool palette", "proposal review", "inspectors", "underlay and template panels", "canvas", "SVG shapes", "ghost overlays", "handles and draft previews", "~1,100 lines pure geometry/fit/label helpers (6129-7218)"], "action": "split pure helpers only; component split deferred until Layout Studio work resumes", "targets": ["src/lib/plan-geometry/studio.ts"], "steps": [15, 16], "class": "SAFE", "size": "M", "risk": "low", "guardTests": ["new layout-studio-helpers.test.ts", "layout-studio-side-rail-tabs.test.tsx", "layout-studio-qa-readiness.test.ts", "e2e layout-studio.spec.ts (local)"], "auditRef": "AIR-05", "note": "Its pointInPolygon treats an edge as outside; src/lib/plan-geometry treats it as inside. Keep both under different names." },
+    { "path": "src/components/load-planner-board.tsx", "lines": 4657, "commits90d": 0, "commitsAll": 16, "importers": 1, "jobs": ["board and drag-assign", "movable-unit list, pager, mobile cards", "bulk assignment", "rough intake editor", "AI-assistant prompt builders", "follow-up queue", "measurement route", "row estimate controls", "resource and assignment panels"], "action": "split pure helpers only; component split deferred", "targets": ["src/lib/movable-unit-intake.ts", "src/lib/movable-unit-followups.ts"], "steps": [17], "class": "SAFE", "size": "S", "risk": "low", "guardTests": ["load-planner-board-tabs.test.tsx", "move-workspace-page-tabs.test.tsx", "movable-unit-intake.test.ts"], "auditRef": "AIR-05" },
+    { "path": "mcp-server/assistwithmoving-mcp.mjs", "lines": 2812, "commits90d": 7, "commitsAll": 8, "importers": 2, "jobs": ["~800 lines zod schemas incl. 49 hand-typed value lists", "1,800-line registerTools", "server factory"], "action": "leave, except value lists move to shared source", "steps": [3], "class": "SAFE", "size": "S", "risk": "low" },
+    { "path": "convex/schema.ts", "lines": 2631, "commits90d": 14, "commitsAll": 83, "importers": 3, "jobs": ["database schema (60 tables)"], "action": "leave", "reason": "long, but one job; Convex expects one schema" },
+    { "path": "mcp-server/assistwithmoving-api.mjs", "lines": 2602, "commits90d": 11, "commitsAll": 12, "importers": 4, "jobs": ["~100 REST wrapper functions", "upload and media pipeline (1392-2602)"], "action": "split", "targets": ["mcp-server/uploads.mjs (re-exported; ./api export unchanged)"], "steps": [14], "class": "SAFE", "size": "M", "risk": "low-medium", "guardTests": ["mcp-client.test.ts", "mcp-media-ingress.test.ts", "awl0015-publication-transport.test.ts", "storage-allowance-doors.test.ts", "stdio smoke", "npm pack --dry-run"] },
+    { "path": "convex/photos.ts", "lines": 2424, "commits90d": 13, "commitsAll": 39, "importers": 0, "convexRefFiles": 28, "jobs": ["photo lists", "evidence summary", "upload init/finalize", "delivery URLs", "upload-session cleanup", "derivatives", "audio hooks"], "action": "leave", "reason": "one domain (photo lifecycle); shared rules already in convex/lib/photoDelivery, photoVisibility, aiUploadSession; CODE-03/09 reshape delivery next; moving Convex functions would change API paths" },
+    { "path": "src/components/public-share-viewer.tsx", "lines": 2068, "commits90d": 1, "commitsAll": 9, "importers": 1, "jobs": ["public share page for plan, sub-manifest and documentation packets", "cards", "CSV export"], "action": "leave, except CSV helpers", "steps": [9] },
+    { "path": "convex/mcpPlanning.ts", "lines": 1887, "commits90d": 6, "commitsAll": 10, "importers": 0, "convexRefFiles": 5, "jobs": ["entire canonical OAuth door backend: brief, search, read, save context/inventory/planning/complete result"], "action": "leave code; signpost the name in docs", "steps": [1], "class": "SAFE", "size": "S", "reason": "renaming would change Convex function paths, including a public query" },
+    { "path": "convex/items.ts", "lines": 1810, "commits90d": 1, "commitsAll": 28, "importers": 3, "convexRefFiles": 12, "jobs": ["item queries and mutations", "one-off census/admin functions"], "action": "leave", "reason": "one domain; one-offs are AIR-06" },
+    { "path": "src/components/spaces-transport-page.tsx", "lines": 1787, "commits90d": 0, "commitsAll": 13, "importers": 1, "jobs": ["Spaces & Transport screen"], "action": "leave", "reason": "one screen; thumbnail fetch moves to shared hook (step 11)" },
+    { "path": "src/components/item-detail-sheet.tsx", "lines": 1733, "commits90d": 0, "commitsAll": 28, "importers": 3, "jobs": ["item edit sheet"], "action": "leave", "reason": "one job" },
+    { "path": "convex/planOps.ts", "lines": 1687, "commits90d": 1, "commitsAll": 2, "importers": 0, "convexRefFiles": 1, "jobs": ["layout plan operation engine"], "action": "leave", "reason": "one job" },
+    { "path": "src/components/inventory-table.tsx", "lines": 1682, "commits90d": 2, "commitsAll": 28, "importers": 2, "jobs": ["Items screen"], "action": "leave", "reason": "CODE-01/R01 will rewrite its data flow; thumbnail fetch to step 11" },
+    { "path": "convex/restApiActions.ts", "lines": 1589, "commits90d": 10, "commitsAll": 25, "importers": 0, "convexRefFiles": 3, "jobs": ["REST photo upload/finalize/display actions", "B2 client", "derivatives", "image-byte helpers"], "action": "partial: shared image-byte helpers move to one place", "steps": [13], "class": "SAFE", "size": "M" },
+    { "path": "convex/mcpToolsSetup.ts", "lines": 1562, "commits90d": 1, "commitsAll": 15, "importers": 1, "jobs": ["legacy OAuth door setup tools"], "action": "leave", "reason": "MOV-0040 decides the legacy door's future" },
+    { "path": "convex/httpRoutes/mcp.ts", "lines": 1534, "commits90d": 11, "commitsAll": 22, "importers": 1, "jobs": ["canonical MCP endpoint: OAuth verification, schemas, registration, handler"], "action": "leave", "reason": "one door; catalogue test derives from it" },
+    { "path": "src/components/movable-units-table.tsx", "lines": 1516, "commits90d": 2, "commitsAll": 16, "importers": 1, "jobs": ["Movable Units screen"], "action": "leave", "reason": "R01 territory; has no unit test, so step 10 adds one before step 11 touches it" },
+    { "path": "src/components/documentation-packet-builder.tsx", "lines": 1447, "commits90d": 0, "commitsAll": 17, "importers": 1, "jobs": ["packet builder screen"], "action": "leave" },
+    { "path": "convex/lib/queueService.ts", "lines": 1412, "commits90d": 2, "commitsAll": 7, "importers": 6, "jobs": ["Queue state machine for all doors"], "action": "leave", "reason": "good shape" },
+    { "path": "convex/boxes.ts", "lines": 1374, "commits90d": 1, "commitsAll": 24, "importers": 2, "convexRefFiles": 9, "jobs": ["box queries and mutations", "one-off box migrations"], "action": "leave", "reason": "one domain; one-offs are AIR-06" },
+    { "path": "src/components/box-lookup.tsx", "lines": 1346, "commits90d": 0, "commitsAll": 20, "importers": 1, "jobs": ["box page"], "action": "leave" },
+    { "path": "convex/http.ts", "lines": 1338, "commits90d": 8, "commitsAll": 25, "importers": 0, "jobs": ["HTTP router", "direct image upload action with multipart and image-byte parsing (547-1030)", "legacy MCP OAuth gateway (1032-1339)"], "action": "split", "targets": ["convex/lib/directImageUpload.ts"], "steps": [12, 13], "class": "SAFE", "size": "M", "risk": "medium", "guardTests": ["new image-bytes-parity.test.ts", "ai-upload-routes.test.ts", "storage-allowance-doors.test.ts", "mcp-request-guards.test.ts"] },
+    { "path": "src/components/move-day-view.tsx", "lines": 1332, "commits90d": 0, "commitsAll": 8, "importers": 1, "jobs": ["move-day screen"], "action": "leave" },
+    { "path": "src/components/ingestion-queue-list.tsx", "lines": 1170, "commits90d": 2, "commitsAll": 21, "importers": 1, "jobs": ["Capture list"], "action": "leave" },
+    { "path": "convex/queue.ts", "lines": 1135, "commits90d": 3, "commitsAll": 10, "importers": 0, "convexRefFiles": 7, "jobs": ["Queue reads and person actions"], "action": "leave", "reason": "CODE-08 pending" },
+    { "path": "src/components/api-key-manager.tsx", "lines": 1129, "commits90d": 1, "commitsAll": 19, "importers": 2, "jobs": ["API-key settings screen"], "action": "leave" },
+    { "path": "src/components/queue-experience.tsx", "lines": 1120, "commits90d": 2, "commitsAll": 10, "importers": 1, "jobs": ["Queue desk screen"], "action": "leave" },
+    { "path": "convex/ingestionQueue.ts", "lines": 1111, "commits90d": 1, "commitsAll": 12, "importers": 1, "convexRefFiles": 7, "jobs": ["Capture backend", "one-off backfills"], "action": "leave", "reason": "one-offs are AIR-06" },
+    { "path": "convex/lib/restApi.ts", "lines": 1084, "commits90d": 2, "commitsAll": 25, "importers": 4, "jobs": ["REST plumbing (1-380)", "movable-unit summary copying src/lib/movable-units.ts (381-1084)"], "action": "split", "targets": ["shared movable-unit rule in src/lib/movable-units.ts", "convex/lib/rest/core.ts"], "steps": [5, 7], "class": "SAFE", "size": "M", "risk": "low" },
+    { "path": "convex/lib/moveFields.ts", "lines": 1070, "commits90d": 0, "commitsAll": 23, "importers": 37, "jobs": ["value lists and validators"], "action": "leave as backend home; becomes single source others import", "steps": [3], "class": "SAFE", "size": "M" },
+    { "path": "src/components/moves-home.tsx", "lines": 1025, "commits90d": 2, "commitsAll": 13, "importers": 1, "jobs": ["Moves home screen"], "action": "leave" }
+  ],
+  "organisation": {
+    "misleadingNames": [
+      "src/components/move-pages/ mixes 9 live page bodies with 4 leftovers behind redirect routes (AIR-01).",
+      "src/components/layout-studio/ holds one file while 99 components sit flat; add structure only where a split creates it.",
+      "convex/restApi.ts and convex/lib/restApi.ts share a name (step 7 renames the lib file to convex/lib/rest/core.ts).",
+      "convex/mcpPlanning.ts is the whole canonical door backend; convex/mcpToolsCanonicalQueue.ts is imported only by the legacy door convex/mcp.ts (step 1 signposts; no renames).",
+      "(internal as any) references (17 in httpRoutes/mcp.ts, 5 in http.ts, 3 in shareLinks.ts) and a hand-typed internalFunctions block in restApi.ts are invisible to TypeScript on rename; probably deliberate Convex type-cycle workarounds; leave and document."
+    ],
+    "duplicates": [
+      { "idea": "field value lists", "copies": ["convex/lib/moveFields.ts", "convex/restApi.ts local copies", "mcp-server/assistwithmoving-mcp.mjs (49 z.enum)", "public/openapi.json", "scripts/contract-drift-check.mjs manifest (checks 4)"], "note": "some differ on purpose (MCP confidence adds 'estimated')", "steps": [2, 3] },
+      { "idea": "loose movable-unit rule and word lists", "copies": ["src/lib/movable-units.ts", "convex/lib/restApi.ts"], "note": "word lists identical; function differs only in normalising helpers", "steps": [4, 5] },
+      { "idea": "CSV export csvCell + downloadCsv", "copies": ["printable-claim-packet.tsx", "printable-employer-packet.tsx", "printable-mover-packet.tsx", "printable-pcs-packet.tsx", "printable-sub-manifest.tsx", "public-share-viewer.tsx", "convex/lib/exportRows.ts (csvCell)"], "note": "byte-identical; printable-load-plan-packet.tsx variant always quotes, keep separate", "steps": [9] },
+      { "idea": "photo display-link fetch", "copies": ["12 components call api.photos.getDisplayUrl", "5 thumbnail components"], "note": "CODE-03 must change all of them", "steps": [10, 11] },
+      { "idea": "image-byte helpers", "copies": ["convex/http.ts", "convex/restApiActions.ts", "convex/lib/mediaStorage.ts (size readers)", "mcp-server/assistwithmoving-api.mjs (size readers, MIME)"], "note": "mimeTypeForFilename identical; three others differ", "steps": [12, 13] },
+      { "idea": "REST parse helpers", "copies": ["convex/restApi.ts", "convex/rest/documentationProfiles.ts"], "note": "parseLiteralArray identical; asString, includesLiteral, parseShareLinkActions copied", "steps": [7] },
+      { "idea": "point-in-polygon", "copies": ["plan-workspace-page.tsx (edge outside)", "src/lib/plan-geometry/index.ts (edge inside)"], "note": "different behaviour under one name; name apart, do not merge", "steps": [15, 16] },
+      { "idea": "formatNumber", "copies": ["13 files"], "note": "formats differ per screen; leave", "steps": [] }
+    ],
+    "nameMap": [
+      { "seen": "Movable Units (boxes + loose items)", "routes": ["/app/movable-units", "/app/moves/[id]/load-plan"], "tables": ["boxes", "boxItems", "items"], "backend": ["boxes.ts", "items.ts", "convex/lib/restApi.ts summary"], "screens": ["movable-units-table.tsx", "load-planner-board.tsx", "src/lib/movable-units.ts"], "ai": ["REST /moves/{id}/movable-units", "canonical save_inventory"] },
+      { "seen": "Capture", "routes": ["/app/moves/[id]/capture"], "tables": ["ingestionQueueEntries"], "backend": ["ingestionQueue.ts", "queue.ts capture adapters"], "screens": ["ingestion-queue-list.tsx"], "ai": ["legacy capture_to_queue"] },
+      { "seen": "Queue / Needs your input", "routes": ["/app/queue", "/app/queue/suggestions"], "tables": ["queueItems", "queueActivities"], "backend": ["queue.ts", "lib/queueService.ts", "mcpQueueWork.ts (canonical)", "mcpToolsCanonicalQueue.ts + mcpToolsQueue.ts (legacy)"], "ai": ["REST /queue/{id}/needs-you", "requestQueueInput", "canonical ask_queue_question"] },
+      { "seen": "Spaces & Transport", "routes": ["/app/spaces-transport", "/app/moves/[id]/spaces (redirect)"], "tables": ["moveSpaces", "transportResources", "transportZones", "transportTrips", "tripSpaces"], "screens": ["spaces-transport-page.tsx"], "ai": ["REST /spaces", "/transport-resources", "/transport-zones"] },
+      { "seen": "Layout plan", "routes": ["/app/moves/[id]/plan"], "tables": ["floorPlans", "planLevels", "planEntities", "planPlacements", "planOps", "planProposals"], "backend": ["floorPlans.ts", "planOps.ts"], "screens": ["layout-studio/", "src/lib/plan-*"], "ai": ["REST /plans"] },
+      { "seen": "Packets and sharing", "routes": ["/app/moves/[id]/packets", "/share/[token]", "six printable packet routes"], "tables": ["documentationProfiles", "shareLinks", "shareLinkComments", "exportJobs"], "backend": ["publicPackets.ts"], "screens": ["documentation-packet-builder.tsx", "public-share-viewer.tsx", "printable-*.tsx"], "ai": ["REST /documentation-profiles", "/share-links", "/exports"] }
+    ],
+    "describedTwiceByHand": [
+      "REST surface in six places: restApi.ts router, requiredScopesForRestRoute in convex/lib/restApi.ts, public/openapi.json, contract-drift-check.mjs manifest, mcp-server/assistwithmoving-api.mjs wrappers, shared/api-tool-access.json. Guarded by contract:drift. Future follow-up (L): generate OpenAPI and drift manifest from one route table, only if REST changes start coming often.",
+      "Field value lists (see duplicates)."
+    ],
+    "generatedLookingHandWritten": [
+      "shared/audio.mjs, shared/usage-limits.mjs, convex/lib/media/audio.ts, convex/lib/usageLimits/core.ts (3,882 lines) are synced from assistwithlife; change upstream.",
+      "convex/lib/mcpConnector/contract.ts is the shared connector contract with a checksum test.",
+      "docs/planning/*-philosophy.html is generated from Markdown; docs/tracker/*.html from tracker:build.",
+      "Opposite trap: public/openapi.json looks generated but is hand-maintained."
+    ],
+    "packaging": "mcp-server/package.json files lists 4 files, but assistwithmoving-api.mjs imports ./media-ingress.mjs and both entry files import ../shared/*.mjs; a published package would miss them. Step 14 adds media-ingress.mjs and uploads.mjs; ../shared is a follow-up."
+  },
+  "plan": {
+    "allChecksEndWith": "npm run check; for new files under convex/ also npx convex codegen, and the convex/_generated/api.d.ts diff must only add modules and remove no function",
+    "steps": [
+      { "n": 1, "batch": 1, "what": "Signpost confusing names: name map in README; header comments in convex/mcpPlanning.ts and convex/mcpToolsCanonicalQueue.ts; note (internal as any) references", "files": ["README.md", "convex/mcpPlanning.ts", "convex/mcpToolsCanonicalQueue.ts"], "dependsOn": [], "proof": "docs and comments only; mcp-doc-tool-catalog.test.ts passes", "class": "SAFE", "size": "S" },
+      { "n": 2, "batch": 1, "what": "Pin test: value lists agree across moveFields.ts, restApi.ts, assistwithmoving-mcp.mjs, openapi.json, with known differences recorded", "files": ["tests/unit/value-list-parity.test.ts"], "dependsOn": [], "proof": "new test passes on current code", "class": "SAFE", "size": "S", "pinTest": true },
+      { "n": 3, "batch": 1, "what": "One source for value lists in shared/move-vocabulary.mjs (+ .d.mts); moveFields re-exports; restApi.ts drops local copies; MCP zod enums and contract-drift-check import it; intentionally different lists stay explicit; restApiActions.ts untouched", "files": ["shared/move-vocabulary.mjs", "convex/lib/moveFields.ts", "convex/restApi.ts", "mcp-server/assistwithmoving-mcp.mjs", "scripts/contract-drift-check.mjs"], "dependsOn": [2], "proof": "step 2 test, move-fields, box-fields, contract:drift, mcp-capabilities, both typechecks", "class": "SAFE", "size": "M" },
+      { "n": 4, "batch": 1, "what": "Pin test: screen and API loose-movable-unit rules give identical answers over a fixture table", "files": ["tests/unit/movable-unit-rule-parity.test.ts"], "dependsOn": [], "proof": "new test passes; a difference means stop (bug fix, not move)", "class": "SAFE", "size": "S", "pinTest": true },
+      { "n": 5, "batch": 1, "what": "One movable-unit rule: convex/lib/restApi.ts imports the rule and word lists from src/lib/movable-units.ts", "files": ["src/lib/movable-units.ts", "convex/lib/restApi.ts"], "dependsOn": [4], "proof": "step 4 test, movable-units.test.ts, rest-api.test.ts, Convex typecheck", "class": "SAFE", "size": "S" },
+      { "n": 6, "batch": 1, "what": "Pin test: REST route-table snapshot (status + error code per route family with a fixture key); today's tests reach about 15 of 33 families by path", "files": ["tests/unit/rest-route-table.test.ts"], "dependsOn": [], "proof": "new test passes on current code", "class": "SAFE", "size": "M", "pinTest": true },
+      { "n": 7, "batch": 1, "what": "Extract REST helpers to convex/lib/rest/{require,safe,parse,patch}.ts; rename convex/lib/restApi.ts to convex/lib/rest/core.ts; delete copies in convex/rest/documentationProfiles.ts", "files": ["convex/restApi.ts", "convex/lib/restApi.ts", "convex/lib/rest/*", "convex/rest/documentationProfiles.ts", "4 importers of convex/lib/restApi.ts"], "dependsOn": [3, 5, 6], "proof": "step 6 snapshot unchanged, rest-api, queue-contract, mcp-api-key-transport, storage-allowance-doors, contract:drift, api.d.ts adds modules only", "class": "SAFE", "size": "M" },
+      { "n": 8, "batch": 1, "what": "Split route handlers into 12 convex/rest/<family>.ts files; restApi.ts keeps its 6 Convex functions and routeRequest (~930 lines)", "files": ["convex/restApi.ts", "convex/rest/*.ts"], "dependsOn": [7], "proof": "as step 7 plus room-history, audio-backend", "class": "SAFE", "size": "L" },
+      { "n": 9, "batch": 2, "what": "One CSV helper src/lib/csv.ts replacing 6 byte-identical copies; load-plan packet variant stays", "files": ["src/lib/csv.ts", "tests/unit/csv.test.ts", "printable-claim-packet.tsx", "printable-employer-packet.tsx", "printable-mover-packet.tsx", "printable-pcs-packet.tsx", "printable-sub-manifest.tsx", "public-share-viewer.tsx"], "dependsOn": [], "proof": "new csv test, public-share-viewer-component", "class": "SAFE", "size": "S" },
+      { "n": 10, "batch": 2, "what": "Pin test: photo-link fetch behaviour, plus first component test for movable-units-table.tsx", "files": ["tests/unit/photo-display-url.test.tsx", "tests/unit/movable-units-table-thumbnail.test.tsx"], "dependsOn": [], "proof": "new tests pass on current code", "class": "SAFE", "size": "S", "pinTest": true },
+      { "n": 11, "batch": 2, "what": "One usePhotoDisplayUrl() hook replacing the duplicated effect in 5 thumbnail components; visuals unchanged; makes CODE-03 a one-place change", "files": ["src/lib/use-photo-display-url.ts", "inventory-table.tsx", "movable-units-table.tsx", "spaces-transport-page.tsx", "box-lookup.tsx", "ingestion-queue-list.tsx"], "dependsOn": [10], "proof": "step 10 tests, inventory-table-component, spaces-transport-page, box-lookup, ingestion-queue-list-tabs", "class": "SAFE", "size": "M" },
+      { "n": 12, "batch": 3, "what": "Pin test: fixture image bytes and data URLs through both image-byte helper copies (http.ts, restApiActions.ts), snapshot results", "files": ["tests/unit/image-bytes-parity.test.ts"], "dependsOn": [], "proof": "new test passes on current code", "class": "SAFE", "size": "S", "pinTest": true },
+      { "n": 13, "batch": 3, "what": "Extract direct-upload parsing from http.ts to convex/lib/directImageUpload.ts; keep one copy of helpers proven identical; differing copies stay with door-specific names", "files": ["convex/http.ts", "convex/restApiActions.ts", "convex/lib/directImageUpload.ts"], "dependsOn": [12], "proof": "step 12 snapshot, ai-upload-routes, storage-allowance-doors, mcp-request-guards, api.d.ts adds modules only", "class": "SAFE", "size": "M" },
+      { "n": 14, "batch": 3, "what": "Split stdio upload pipeline into mcp-server/uploads.mjs, re-exported so ./api is unchanged; add uploads.mjs and missing media-ingress.mjs to package files", "files": ["mcp-server/assistwithmoving-api.mjs", "mcp-server/uploads.mjs", "mcp-server/package.json"], "dependsOn": [], "proof": "mcp-client, mcp-media-ingress, awl0015-publication-transport, storage-allowance-doors, mock stdio smoke, npm pack --dry-run", "class": "SAFE", "size": "M" },
+      { "n": 15, "batch": 4, "what": "Pin test: export Layout Studio pure helpers in place and unit-test them, including the edge-outside point test", "files": ["src/components/layout-studio/plan-workspace-page.tsx", "tests/unit/layout-studio-helpers.test.ts"], "dependsOn": [], "proof": "new tests pass on current code", "class": "SAFE", "size": "S", "pinTest": true },
+      { "n": 16, "batch": 4, "what": "Move Layout Studio helpers to src/lib/plan-geometry/studio.ts, naming the strict point test apart from plan-geometry's inclusive one", "files": ["src/components/layout-studio/plan-workspace-page.tsx", "src/lib/plan-geometry/studio.ts"], "dependsOn": [15], "proof": "step 15 tests, layout-studio-side-rail-tabs, layout-studio-qa-readiness; local e2e layout-studio.spec.ts before merge", "class": "SAFE", "size": "M" },
+      { "n": 17, "batch": 4, "what": "Move load-planner prompt builders and rough-intake/follow-up helpers into src/lib/movable-unit-intake.ts and src/lib/movable-unit-followups.ts", "files": ["src/components/load-planner-board.tsx", "src/lib/movable-unit-intake.ts", "src/lib/movable-unit-followups.ts", "tests/unit/load-planner-board-tabs.test.tsx"], "dependsOn": [], "proof": "load-planner-board-tabs, move-workspace-page-tabs, movable-unit-intake tests", "class": "SAFE", "size": "S" }
+    ],
+    "batches": [
+      { "n": 1, "title": "API-key door", "steps": [1, 2, 3, 4, 5, 6, 7, 8], "threadHours": 7 },
+      { "n": 2, "title": "Shared screen helpers", "steps": [9, 10, 11], "threadHours": 3 },
+      { "n": 3, "title": "Upload plumbing", "steps": [12, 13, 14], "threadHours": 3.5 },
+      { "n": 4, "title": "Planning-screen helpers", "steps": [15, 16, 17], "threadHours": 3 }
+    ],
+    "parallel": "All four batches can run side by side; they touch disjoint files. Only convex/_generated/api.d.ts is shared (batches 1 and 3 add modules): the second to merge re-runs npx convex codegen after rebasing.",
+    "orderAgainstAuditWork": [
+      "Run batch 2 before CODE-03 (batched thumbnails) and CODE-01/R01 (bounded Items and Movable Units): same components; makes CODE-03 a one-place change.",
+      "Batch 1 overlaps no open audit item; steps 6-8 deliver AIR-04.",
+      "Steps 15-17 deliver the low-risk part of AIR-05; component split waits for the next change to those screens."
+    ],
+    "totals": { "steps": 17, "safe": 17, "needsScott": 0, "pinTests": 6, "batches": 4, "threadHours": 16.5 },
+    "needsScottOutsidePlan": ["AIR-01 keep or delete ~5,000 lines of unrendered screens", "AIR-06 production check before removing one-off migrations", "AIR-14/15 old brand files, old stdio name, branch cleanup", "MOV-0040 converge the legacy door (would retire ~4,900 lines including mcpToolsSetup.ts)"]
+  },
+  "goodShape": [
+    "convex/lib/queueService.ts: one Queue engine for every door",
+    "convex/lib/ small focused rule modules (moveAccess, aiGrants, photoVisibility, photoDelivery, aiUploadSession)",
+    "convex/rest/documentationProfiles.ts: the pattern for step 8",
+    "convex/schema.ts as one file (Convex convention)",
+    "docs-against-code guards: mcp-doc-tool-catalog test, contract:drift, tracker:verify, docs:project-philosophy:check, connector contract checksum; npm run check is the full local gate",
+    "lean CI: both jobs in required-ci.yml skip draft PRs",
+    "synced family cores with version and checksum headers; do not fork locally",
+    "tests named after features (269 files); long tests each cover one surface",
+    "README repository map refreshed in PR #274",
+    "the 24 'leave' files: long, but one job each"
+  ],
+  "couldNotVerify": [
+    "Nothing run: no tests, typecheck, build or convex codegen; counts, imports and duplicates are static (hashes and diff of function bodies).",
+    "Importer counts from a regex resolver (relative paths and @/ alias); Convex references by text search; computed references (anyApi, 'module:function' strings) may be missed.",
+    "Commit counts do not follow renames.",
+    "Which of the 33 REST route families work today without a unit test reaching them (step 6 will show).",
+    "Whether differing image-byte helper copies behave differently on real uploads (step 12 will show).",
+    "Whether the assistwithmoving-mcp npm package is published; if so it already misses media-ingress.mjs and ../shared/*.",
+    "Whether the (internal as any) references are needed to avoid Convex type cycles (assumed so; left alone).",
+    "Thread-hour figures are estimates."
+  ],
+  "briefFeedback": "The prescribed shared scratch folder (J:\\code\\_scratch\\structure-2026-11-24\\) was deleted by a sibling map thread mid-run, so this thread used J:\\code\\_scratch\\structure-2026-11-24-moving\\; a separate top-level folder per thread would avoid this. Audit PRs #272/#273 were already folded into main via #274, so they were read from main."
+}

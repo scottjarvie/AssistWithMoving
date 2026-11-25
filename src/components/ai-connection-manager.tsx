@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
@@ -71,16 +71,19 @@ function ConnectionCard({ row }: { row: Row }) {
   </section>;
 }
 export function AiConnectionManager() {
+  const { isAuthenticated } = useConvexAuth();
   const [cursor, setCursor] = useState<string>();
   const [cursorGeneration, setCursorGeneration] = useState<number>();
   const [oldCursor, setOldCursor] = useState<string>();
   const [oldGeneration, setOldGeneration] = useState<number>();
   const [showOld, setShowOld] = useState(false);
   const [error, setError] = useState("");
-  const data = useQuery(api.connectionSettings.list, cursor ? { cursor, cursorGeneration } : {});
-  const old = useQuery(api.connectionSettings.list, showOld ? { superseded: true, ...(oldCursor ? { cursor: oldCursor, cursorGeneration: oldGeneration } : {}) } : "skip");
+  // The server requires a website session. Wait for Convex to confirm the
+  // Clerk token before subscribing, including on a fresh page navigation.
+  const data = useQuery(api.connectionSettings.list, isAuthenticated ? { cursor, cursorGeneration } : "skip");
+  const old = useQuery(api.connectionSettings.list, isAuthenticated && showOld ? { superseded: true, ...(oldCursor ? { cursor: oldCursor, cursorGeneration: oldGeneration } : {}) } : "skip");
   const initialize = useMutation(api.connectionSettings.initialize);
-  const needsInitialization = data?.initialized === false;
+  const needsInitialization = isAuthenticated && data?.initialized === false;
   useEffect(() => { if (needsInitialization) void initialize({}).catch(err => setError(err instanceof Error ? err.message : "Could not check earlier connections.")); }, [needsInitialization, initialize]);
   return <div className="space-y-6">
     <p className="text-base leading-7">{policy.settings}</p>

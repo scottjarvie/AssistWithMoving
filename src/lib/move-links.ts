@@ -3,6 +3,10 @@ export function moveWorkspacePath(moveId: string, section?: string) {
   return section ? `${basePath}/${encodeURIComponent(section)}` : basePath;
 }
 
+export function moveItemsPath(moveId: string) {
+  return `/app/items/${encodeURIComponent(moveId)}`;
+}
+
 // Where to navigate when the user switches the active move while keeping the
 // page they're on. Shared by both switchers (the top-bar MoveSwitcher and the
 // per-move MoveWorkspaceHeader) so they can't drift apart:
@@ -16,6 +20,7 @@ export function buildMoveSwitchTarget(
   pathname: string,
   moveId: string,
 ): string | null {
+  if (pathname.startsWith("/app/items/")) return moveItemsPath(moveId);
   if (PER_MOVE_SEGMENT.test(pathname)) {
     return pathname.replace(
       PER_MOVE_SEGMENT,
@@ -40,8 +45,8 @@ const removedSectionDestinations: Record<
 > = {
   spaces: (moveId) => `${moveWorkspacePath(moveId, "configure")}#start`,
   boxes: () => "/app/movable-units",
-  inventory: () => "/app/items",
-  photos: () => "/app/items",
+  inventory: moveItemsPath,
+  photos: moveItemsPath,
   sell: () => "/app/items",
 };
 

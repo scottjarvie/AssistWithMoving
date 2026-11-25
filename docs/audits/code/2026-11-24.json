@@ -1,0 +1,137 @@
+{
+  "date": "2026-11-24",
+  "baseline": "91d9be95484c475743b4f1a063ccb9b70d2553cd",
+  "findings": [
+    {
+      "id": "01",
+      "title": "Items and Movable Units read whole moves before showing the first rows",
+      "lens": ["speed", "spend"],
+      "files": ["src/components/inventory-table.tsx:615", "convex/items.ts:749", "src/components/ui/data-table.tsx:381", "src/components/movable-units-table.tsx:215", "src/components/movable-units-table.tsx:413"],
+      "label": "safe to fix",
+      "size": "large",
+      "expectedGain": "Bound first-response rows and enrichment to page size and measure whole-move counts separately."
+    },
+    {
+      "id": "02",
+      "title": "A cold signed-in page waits through account and move lookups",
+      "lens": ["speed"],
+      "files": ["src/components/move-workspace-context.tsx:68", "src/components/move-workspace-context.tsx:146", "src/components/global-table-page.tsx:37"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Remove serial query rounds from the page's critical path."
+    },
+    {
+      "id": "03",
+      "title": "Each mounted photo thumbnail asks Convex for its own card image",
+      "lens": ["speed", "spend"],
+      "files": ["src/components/inventory-table.tsx:380", "src/components/movable-units-table.tsx:1156", "convex/photos.ts:1099", "src/lib/photo-upload.ts:34"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Target one signing action and one authorization query for ten eligible covers and transfer smaller renditions."
+    },
+    {
+      "id": "04",
+      "title": "Queue counts reread history, including when the screen discards them",
+      "lens": ["spend"],
+      "files": ["src/components/queue-experience-data.tsx:122", "src/components/queue-experience-data.tsx:347", "convex/queue.ts:891", "src/components/workspace-nav.tsx:84", "convex/queue.ts:1091"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Eliminate unused desk counts and avoid rereading processed captures with explicit flags for legacy badges."
+    },
+    {
+      "id": "05",
+      "title": "Some photo links skip the photo's visibility rule",
+      "lens": ["safety", "family media standard"],
+      "files": ["convex/photos.ts:1099", "convex/photos.ts:1706", "convex/restApiActions.ts:173", "convex/lib/apiKeyAuth.ts:37", "convex/photos.ts:1140", "convex/lib/photoVisibility.ts:9", "convex/photos.ts:128", "convex/photos.ts:1263"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Issue zero image capabilities to denied roles and cap sensitive original URLs at one minute."
+    },
+    {
+      "id": "06",
+      "title": "Older connector uploads can finish without checking current connection limits",
+      "lens": ["safety", "family media standard"],
+      "files": ["convex/restApiActions.ts:531", "convex/http.ts:1227", "convex/mcpToolsImages.ts:503", "convex/mcpToolsImages.ts:546", "convex/lib/aiUploadSession.ts:13", "convex/photos.ts:1869", "convex/photos.ts:1934", "convex/lib/sharedPublishing.ts:71"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Deny an out-of-scope upload at commit without creating a photo record."
+    },
+    {
+      "id": "07",
+      "title": "An AI edit can rebuild each live recipient packet twice",
+      "lens": ["spend"],
+      "files": ["convex/lib/sharedPublishing.ts:36", "convex/lib/sharedPublishing.ts:71", "convex/lib/sharedPublishing.ts:118", "convex/publicPackets.ts:146", "convex/mcpPlanning.ts:1525"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Reduce repeated documentation packet reads toward one shared move data bundle per phase, preserving atomic publication checks."
+    },
+    {
+      "id": "08",
+      "title": "An empty Queue view can page through unrelated capture history",
+      "lens": ["speed", "spend"],
+      "files": ["convex/queue.ts:418", "convex/queue.ts:490", "src/components/queue-experience-data.tsx:205"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Avoid exhausting Answered capture pages to render an empty Waiting on AI view."
+    },
+    {
+      "id": "09",
+      "title": "Covers and gallery images disappear behind the move-wide photo cap",
+      "lens": ["correctness"],
+      "files": ["src/components/inventory-table.tsx:627", "src/components/movable-units-table.tsx:231", "src/components/movable-units-table.tsx:347", "convex/photos.ts:303", "convex/schema.ts:1922"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Keep eligible record photos visible regardless of how many unrelated photos were uploaded."
+    },
+    {
+      "id": "10",
+      "title": "Move-specific inventory and photo links can open a different move",
+      "lens": ["correctness"],
+      "files": ["src/app/(product)/app/moves/[moveId]/inventory/page.tsx:1", "src/app/(product)/app/moves/[moveId]/photos/page.tsx:1", "src/components/global-table-page.tsx:60", "src/components/move-workspace-context.tsx:146", "src/components/move-workspace-context.tsx:211"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Authorized links consistently select the named move while unavailable links retain a fallback."
+    },
+    {
+      "id": "11",
+      "title": "Opening Admin scans 11 entire tables",
+      "lens": ["spend"],
+      "files": ["src/components/admin-dashboard.tsx:199", "convex/admin.ts:21", "convex/admin.ts:117", "convex/lib/admin.ts:37"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Bound search and detail reads and reuse exact totals where available, preserving access receipts."
+    }
+  ],
+  "refactorProposals": [
+    {
+      "id": "R01",
+      "title": "Rewrite inventory browse around bounded rows",
+      "lens": ["speed", "spend", "maintainability"],
+      "files": ["src/components/inventory-table.tsx:615", "convex/items.ts:749", "src/components/movable-units-table.tsx:215", "convex/photos.ts:1099"],
+      "label": "safe to fix",
+      "size": "large",
+      "expectedGain": "Keep initial row and cover work small as the move grows, using one reusable lookup path.",
+      "verification": "Compare full-move search and sort, facets, cross-page selection, thumbnail visibility and large-move read bytes."
+    },
+    {
+      "id": "R02",
+      "title": "Give the workspace one route-aware bootstrap",
+      "lens": ["speed", "correctness", "maintainability"],
+      "files": ["src/components/move-workspace-context.tsx:61", "convex/moves.ts:85", "convex/moveParticipants.ts:260", "src/components/global-table-page.tsx:37"],
+      "label": "safe to fix",
+      "size": "medium",
+      "expectedGain": "Start route data sooner and use one selection policy for membership and deep links.",
+      "verification": "Compare cold loads, same-tab move switches, first sign-in with an invite, move-only access, cross-household links, unavailable-link fallback and uninterrupted capture jobs."
+    },
+    {
+      "id": "R03",
+      "title": "Make photo delivery and upload commits share an explicit authority boundary",
+      "lens": ["safety", "maintainability"],
+      "files": ["convex/photos.ts:1099", "convex/lib/aiUploadSession.ts:13", "convex/restApiActions.ts:167", "convex/mcpToolsImages.ts:491", "convex/lib/photoVisibility.ts:9"],
+      "label": "safe to fix",
+      "size": "large",
+      "expectedGain": "Reuse one consistent visibility check for reads and one current-authority check for commits.",
+      "verification": "Compare all four connector doors and the browser for role denials, commit-time authority, replay, rendition limits and expiry."
+    }
+  ]
+}

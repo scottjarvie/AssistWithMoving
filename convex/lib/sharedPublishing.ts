@@ -17,8 +17,8 @@ type Actor = { ownerUserId: Id<"users">; verifiedClientId: string };
 // These are the complete sources of recipient packets and public Layout Studio views.
 const publicTables = ["moves", "items", "boxes", "boxItems", "itemPhotos", "moveSpaces", "movePeople", "transportResources", "transportZones", "documentationProfiles", "floorPlans", "planLevels", "planEntities", "planPlacements", "plannedItems"] as const;
 function stable(value: unknown): string { return JSON.stringify(value, (key, entry) => key === "generatedAt" ? undefined : entry); }
-async function packet(ctx: MutationCtx, link: Doc<"shareLinks">) {
-  try { return await previewPublicPacket(ctx, { ...link, shareLinkId: link._id }); }
+async function packet(ctx: MutationCtx, link: Doc<"shareLinks">, documentationRows: NonNullable<Parameters<typeof previewPublicPacket>[2]>) {
+  try { return await previewPublicPacket(ctx, { ...link, shareLinkId: link._id }, documentationRows); }
   catch { return null; } // Restoring a profile may turn an unavailable packet into a live one.
 }
 async function currentActor(ctx: MutationCtx, actor: Actor, publish: boolean, moveIds: Id<"moves">[]) {
@@ -44,7 +44,8 @@ export async function withSharedPublishing<T>(ctx: MutationCtx, actorSource: Act
   function beforeMove(moveId: Id<"moves">) {
     if (!moves.has(moveId)) moves.set(moveId, (async () => {
       const links = await ctx.db.query("shareLinks").withIndex("by_move_status", q => q.eq("moveId", moveId).eq("status", "active")).collect();
-      return Promise.all(links.filter(link => link.expiresAt > Date.now()).map(async link => ({ link, before: stable(await packet(ctx, link)) })));
+      const documentationRows = new Map();
+      return Promise.all(links.filter(link => link.expiresAt > Date.now()).map(async link => ({ link, before: stable(await packet(ctx, link, documentationRows)) })));
     })());
     return moves.get(moveId)!;
   }
@@ -70,10 +71,11 @@ export async function withSharedPublishing<T>(ctx: MutationCtx, actorSource: Act
   } });
   const result = await work({ ...ctx, db });
   const changed: Array<{ link: Doc<"shareLinks">; after: unknown }> = [];
+  const documentationRows = new Map();
   for (const promise of moves.values()) for (const { link, before } of await promise) {
     const current = await ctx.db.get(link._id);
     if (!current || current.status !== "active" || current.expiresAt <= Date.now()) continue;
-    const after = await packet(ctx, current);
+    const after = await packet(ctx, current, documentationRows);
     if (stable(after) !== before) changed.push({ link: current, after });
   }
   if (!changed.length) return result;

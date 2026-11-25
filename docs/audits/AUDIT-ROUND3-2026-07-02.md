@@ -1,5 +1,9 @@
 # Audit remediation — Round 3 work package (2026-07-02)
 
+> **Historical work package (checked 2026-11-24).** This is a dated July 2026
+> record, not a current work list: do not execute its items. Current audit
+> findings live in `docs/audits/code/` and `docs/audits/ai-readiness/`.
+
 **You need zero prior context. Read this intro, then work the 5 items. One PR.**
 
 ## Background

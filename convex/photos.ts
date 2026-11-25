@@ -1,4 +1,4 @@
-import { requireAiUploadSession, checkAiUploadFile, uploadAuthorizationValidator, uploadBinding, type UploadAuthorization } from "./lib/aiUploadSession";
+import { requireAiUploadSession, requireOrdinaryAiUploadCommit, checkAiUploadFile, uploadAuthorizationValidator, uploadBinding, type UploadAuthorization } from "./lib/aiUploadSession";
 import { effectiveFileCap } from "./lib/aiUploadCaps";
 import { validateAudioContainer, invalidAudioFileError, audioVideoTrackError, voiceNoteTooLongError } from "./lib/media/audio";
 import { transportLimits, voiceNoteMaxSeconds } from "../shared/media-limits.mjs";
@@ -21,7 +21,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import {
   type ActionCtx,
@@ -395,6 +395,73 @@ export const listForBox = query({
       photos.filter((photo) => photo.moveId === args.moveId),
       policy.visibility,
     );
+  },
+});
+
+const recordPhotoTarget = v.union(v.id("items"), v.id("boxes"));
+
+async function* visibleRecordPhotos(
+  ctx: QueryCtx,
+  scope: { householdId: Id<"households">; moveId: Id<"moves"> },
+  targetId: Id<"items"> | Id<"boxes">,
+  visibility: { sensitivePhotos: boolean },
+) {
+  const target = await ctx.db.get(targetId);
+  if (!target || target.householdId !== scope.householdId ||
+      target.moveId !== scope.moveId || target.status === "archived" ||
+      ("archivedAt" in target && target.archivedAt) ||
+      ("deletedAt" in target && target.deletedAt)) return;
+
+  const itemId = ctx.db.normalizeId("items", targetId);
+  const boxId = ctx.db.normalizeId("boxes", targetId);
+  const photos = ctx.db.query("itemPhotos");
+  const indexed = itemId
+    ? photos.withIndex("by_item_created", (q) => q.eq("itemId", itemId))
+    : boxId && photos.withIndex("by_box_created", (q) => q.eq("boxId", boxId));
+  if (!indexed) return;
+
+  // The indexes scope visits to the target, but hidden, archived, or non-image
+  // history still counts toward Convex's read limits. A cutoff here could hide
+  // an eligible older cover or silently truncate the gallery.
+  for await (const photo of indexed.order("desc")) {
+    const matchesTarget = itemId ? photo.itemId === itemId : photo.boxId === boxId;
+    const isImage = (photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image") === "image";
+    if (matchesTarget && isImage && isVisibleDeliveryPhoto(photo, scope, visibility)) yield photo;
+  }
+}
+
+export const listRecordCovers = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    targetIds: v.array(recordPhotoTarget),
+  },
+  handler: async (ctx, args) => {
+    const { visibility } = await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:read");
+    if (args.targetIds.length > thumbnailBatchLimit) throw new ConvexError("Too many photo targets.");
+    const targetIds = [...new Set(args.targetIds)];
+    const covers = await Promise.all(targetIds.map(async (targetId) => {
+      // Stop at the first eligible image. Hidden or archived history on this
+      // target can still require multiple index reads.
+      for await (const { _id, updatedAt, derivativeRefs } of visibleRecordPhotos(ctx, args, targetId, visibility)) {
+        return { targetId, _id, updatedAt, derivativeRefs };
+      }
+    }));
+    return covers.filter((cover) => cover !== undefined);
+  },
+});
+
+export const listRecordGallery = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    targetId: recordPhotoTarget,
+  },
+  handler: async (ctx, args) => {
+    const { visibility } = await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:read");
+    const ids: Id<"itemPhotos">[] = [];
+    for await (const photo of visibleRecordPhotos(ctx, args, args.targetId, visibility)) ids.push(photo._id);
+    return ids;
   },
 });
 
@@ -1126,6 +1193,60 @@ export const getDisplayUrl = action({
   },
 });
 
+const thumbnailBatchLimit = 25; // The largest inventory browse page.
+
+function checkThumbnailBatchSize(photoIds: readonly Id<"itemPhotos">[]) {
+  if (photoIds.length > thumbnailBatchLimit) {
+    throw new ConvexError("Too many thumbnails requested.");
+  }
+}
+
+export const getThumbnailUrls = action({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoIds: v.array(v.id("itemPhotos")),
+  },
+  handler: async (ctx, args): Promise<Array<{
+    photoId: Id<"itemPhotos">;
+    url: string;
+    expiresAt: number;
+  }>> => {
+    checkThumbnailBatchSize(args.photoIds);
+    if (!args.photoIds.length) return [];
+    const photos = await ctx.runQuery(internal.photos.getPhotosForThumbnailDelivery, args);
+    const results = await Promise.allSettled(photos.map(async (photo) => {
+      const { url, expiresAt } = await buildDisplayUrlResult(photo, "thumb");
+      return { photoId: photo._id, url, expiresAt };
+    }));
+    return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  },
+});
+
+function isVisibleDeliveryPhoto(
+  photo: Doc<"itemPhotos"> | null,
+  args: { householdId: Id<"households">; moveId: Id<"moves"> },
+  visibility: { sensitivePhotos: boolean },
+): photo is Doc<"itemPhotos"> {
+  return photo !== null &&
+    photo.householdId === args.householdId &&
+    photo.moveId === args.moveId &&
+    !photo.archivedAt &&
+    canViewPhotoAssets(photo, visibility);
+}
+
+async function requireVisibleDeliveryPhoto(
+  ctx: QueryCtx,
+  args: { householdId: Id<"households">; moveId: Id<"moves">; photoId: Id<"itemPhotos"> },
+  visibility: { sensitivePhotos: boolean },
+) {
+  const photo = await ctx.db.get(args.photoId);
+  if (!isVisibleDeliveryPhoto(photo, args, visibility)) {
+    throw new ConvexError("Photo not found.");
+  }
+  return { photo, visibility };
+}
+
 // Bridge-authed variants of the delivery query + display-url action for the
 // OAuth MCP gateway: ctx.auth is null inside a gateway tool, so these authorize
 // from the injected caller subject (requireMoveForSubject) instead of the web
@@ -1145,19 +1266,7 @@ export const getPhotoForDeliveryForSubject = internalQuery({
       args.moveId,
       "inventory:read",
     );
-    const photo = await ctx.db.get(args.photoId);
-    if (
-      !photo ||
-      photo.householdId !== args.householdId ||
-      photo.moveId !== args.moveId ||
-      photo.archivedAt
-    ) {
-      throw new ConvexError("Photo not found.");
-    }
-    if (!canViewPhotoAssets(photo, policy.visibility)) {
-      throw new ConvexError("Photo not found.");
-    }
-    return { photo, visibility: policy.visibility };
+    return requireVisibleDeliveryPhoto(ctx, args, policy.visibility);
   },
 });
 
@@ -1196,10 +1305,8 @@ export const getDisplayUrlForSubject = internalAction({
   },
 });
 
-// REST API (api-key actor) variant. The REST action layer already authorized
-// the move via authenticateAction, so this only re-validates that the photo
-// belongs to the move (getPhotoForDelivery) before signing. Internal-only —
-// never client-callable. Same URL output as getDisplayUrl / *ForSubject. Lets
+// REST API (api-key actor) variant. The REST action passes the effective move
+// visibility from authenticateAction. Internal-only. Lets
 // the stdio/HTTP MCP server fetch real image bytes server-side and hand the
 // model a native image (it never needs to reach Backblaze itself). See
 // MOVE-317.
@@ -1209,6 +1316,7 @@ export const getDisplayUrlForApiActor = internalAction({
     moveId: v.id("moves"),
     photoId: v.id("itemPhotos"),
     variant: photoDisplayVariantValidator,
+    sensitivePhotos: v.boolean(),
   },
   handler: async (
     ctx,
@@ -1230,6 +1338,7 @@ export const getDisplayUrlForApiActor = internalAction({
         householdId: args.householdId,
         moveId: args.moveId,
         photoId: args.photoId,
+        sensitivePhotos: args.sensitivePhotos,
       },
     );
     return buildDisplayUrlResult(photo, args.variant);
@@ -1263,6 +1372,9 @@ export const getOriginalDownloadUrl = action({
     if (!canDownloadOriginalPhoto(photo, visibility)) {
       throw new Error("Original download is not available for this role.");
     }
+    const ttlSeconds = canViewPhotoAssets(photo, { sensitivePhotos: false })
+      ? displayUrlTtlSeconds
+      : 60;
 
     const config = requireB2Config();
     const filename = `assistwithmoving-original-${args.photoId}.${fileExtensionForMediaMimeType(
@@ -1275,7 +1387,7 @@ export const getOriginalDownloadUrl = action({
         Key: photo.originalStorageKey,
         ResponseContentDisposition: `attachment; filename="${filename}"`,
       }),
-      { expiresIn: displayUrlTtlSeconds },
+      { expiresIn: ttlSeconds },
     );
 
     await ctx.runMutation(internal.photos.recordOriginalAccess, {
@@ -1286,7 +1398,7 @@ export const getOriginalDownloadUrl = action({
 
     return {
       url,
-      expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+      expiresAt: Date.now() + ttlSeconds * 1000,
       filename,
       mimeType: photo.mimeType,
       sizeBytes: photo.sizeBytes,
@@ -1716,47 +1828,34 @@ export const getPhotoForDelivery = internalQuery({
       args.moveId,
       "inventory:read",
     );
-    const photo = await ctx.db.get(args.photoId);
-    if (
-      !photo ||
-      photo.householdId !== args.householdId ||
-      photo.moveId !== args.moveId ||
-      photo.archivedAt
-    ) {
-      throw new ConvexError("Photo not found.");
-    }
+    return requireVisibleDeliveryPhoto(ctx, args, policy.visibility);
+  },
+});
 
-    return {
-      photo,
-      visibility: policy.visibility,
-    };
+export const getPhotosForThumbnailDelivery = internalQuery({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoIds: v.array(v.id("itemPhotos")),
+  },
+  handler: async (ctx, args) => {
+    checkThumbnailBatchSize(args.photoIds);
+    const { visibility } = await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:read");
+    const photos = await Promise.all([...new Set(args.photoIds)].map((id) => ctx.db.get(id)));
+    return photos.filter((photo) => isVisibleDeliveryPhoto(photo, args, visibility));
   },
 });
 
 // API-key (REST) variant of getPhotoForDelivery. The REST action layer already
-// authorized the move via authenticateAction (API-key scope + household/move),
-// and there is NO ctx.auth in that path — so this must NOT call
-// requireMovePermission (which resolves a Clerk session and throws
-// AuthenticationRequiredError for API-key callers). It only re-validates that
-// the photo belongs to the authorized move. See MOVE-317.
+// authorized the move via authenticateAction and passes its effective policy.
 export const getPhotoForDeliveryForApiActor = internalQuery({
   args: {
     householdId: v.id("households"),
     moveId: v.id("moves"),
     photoId: v.id("itemPhotos"),
+    sensitivePhotos: v.boolean(),
   },
-  handler: async (ctx, args) => {
-    const photo = await ctx.db.get(args.photoId);
-    if (
-      !photo ||
-      photo.householdId !== args.householdId ||
-      photo.moveId !== args.moveId ||
-      photo.archivedAt
-    ) {
-      throw new ConvexError("Photo not found.");
-    }
-    return { photo };
-  },
+  handler: (ctx, args) => requireVisibleDeliveryPhoto(ctx, args, { sensitivePhotos: args.sensitivePhotos }),
 });
 
 export const recordOriginalAccess = aiMutation({
@@ -1890,7 +1989,6 @@ async function completeSession(ctx: MutationCtx, args: Infer<typeof completeVali
     }
 
     const session = await ctx.db.get(args.uploadSessionId);
-    if (session?.completedPhotoId && session.householdId === args.householdId && session.moveId === args.moveId) return session.completedPhotoId;
     if (
       !session ||
       session.householdId !== args.householdId ||
@@ -1900,6 +1998,8 @@ async function completeSession(ctx: MutationCtx, args: Infer<typeof completeVali
     ) {
       throw new Error("Upload session is not active.");
     }
+    if (args.apiActor && !args.apiActor.uploadAuthorization) await requireOrdinaryAiUploadCommit(ctx, session, args.apiActor);
+    if (session.completedPhotoId) return session.completedPhotoId;
     const mediaKind =
       session.mediaKind ??
       mediaKindForMimeType(session.expectedMimeType) ??

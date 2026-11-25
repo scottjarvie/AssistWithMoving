@@ -2,12 +2,30 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AiConnectionManager } from "@/components/ai-connection-manager";
-const mocks = vi.hoisted(() => ({ result: undefined as unknown, change: vi.fn() }));
-vi.mock("convex/react", () => ({ useQuery: (_ref: unknown, args: unknown) => args === "skip" ? undefined : mocks.result, useMutation: () => mocks.change }));
+const mocks = vi.hoisted(() => ({ result: undefined as unknown, change: vi.fn(), isAuthenticated: true }));
+vi.mock("convex/react", () => ({
+  useConvexAuth: () => ({ isAuthenticated: mocks.isAuthenticated }),
+  useQuery: (_ref: unknown, args: unknown) => {
+    if (args === "skip") return undefined;
+    if (!mocks.isAuthenticated) throw new Error("The server refused the unauthenticated subscription");
+    return mocks.result;
+  },
+  useMutation: () => mocks.change,
+}));
 vi.mock("@/components/api-key-manager", () => ({ ApiKeyManager: () => <div>API key creation</div> }));
 const base = { id: "grant-one", isCurrent: true, retired: false, moveCount: null, kind: "oauth", label: "My AI", version: 4, scopes: ["moving.context.read"], catalog: ["moving.context.read", "moving.work.write"], expiresAt: null, pausedAt: null, status: "active", lastUsedAt: null, narrowedBy: "ai", narrowedAt: 1794000000000 };
-beforeEach(() => { mocks.change.mockReset().mockResolvedValue({}); mocks.result = { ready: true, initialized: true, nextCursor: null, connections: [{ ...base }], history: [{ _id: "history-one", connectionId: "grant-one", createdAt: 1794000000000, actor: "ai", message: "Your AI removed saving." }] }; });
+beforeEach(() => { mocks.isAuthenticated = true; mocks.change.mockReset().mockResolvedValue({}); mocks.result = { ready: true, initialized: true, nextCursor: null, connections: [{ ...base }], history: [{ _id: "history-one", connectionId: "grant-one", createdAt: 1794000000000, actor: "ai", message: "Your AI removed saving." }] }; });
 describe("AI settings after AWL-0015", () => {
+  it("waits for a confirmed Convex session on a fresh navigation", () => {
+    mocks.isAuthenticated = false;
+    const { rerender } = render(<AiConnectionManager />);
+    expect(screen.getByText(/Checking earlier connection limits/)).toBeVisible();
+    expect(mocks.change).not.toHaveBeenCalled();
+
+    mocks.isAuthenticated = true;
+    rerender(<AiConnectionManager />);
+    expect(screen.getByRole("heading", { name: "My AI" })).toBeVisible();
+  });
   it("shows the exact opening and an honest fresh-account state without enable controls", () => {
     mocks.result = { ready: true, initialized: true, nextCursor: null, connections: [], history: [] }; render(<AiConnectionManager />);
     expect(screen.getByText("Your AI has full access. You can limit it here or by asking it.")).toBeVisible();

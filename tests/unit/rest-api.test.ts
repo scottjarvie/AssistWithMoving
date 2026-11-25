@@ -26,7 +26,7 @@ import {
   restRateLimitWindowStart,
   restRateLimited,
   withRestRateLimitHeaders,
-} from "../../convex/lib/restApi";
+} from "../../convex/lib/rest/core";
 
 describe("REST API helpers", () => {
   it("parses bearer tokens", () => {

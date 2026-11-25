@@ -8,48 +8,23 @@ import {
   normalizeOptionalText,
   planningDefaultKeys,
 } from "./moveFields";
+import {
+  documentationFieldKeys,
+  documentationImageRules,
+  documentationProfileStatuses,
+  shareLinkActions,
+  shareLinkStatuses,
+  shareLinkScopes,
+} from "../../shared/move-vocabulary.mjs";
 
-export const documentationFieldKeys = [
-  "moveSummary",
-  "pcsFields",
-  "rooms",
-  "items",
-  "boxes",
-  "loadAssignments",
-  "photos",
-  "estimatedValues",
-  "purchaseValues",
-  "serialNumbers",
-  "privateNotes",
-  "conditionAndDamage",
-  "auditSummary",
-] as const;
-
-export const documentationImageRules = [
-  "none",
-  "thumbsOnly",
-  "reviewedEvidence",
-  "allAllowed",
-] as const;
-
-export const shareLinkActions = [
-  "view",
-  "viewPlan",
-  "download",
-  "statusUpdate",
-  "comment",
-  "uploadEvidence",
-] as const;
-
-export const documentationProfileStatuses = [
-  "draft",
-  "active",
-  "archived",
-] as const;
-
-export const shareLinkStatuses = ["active", "revoked"] as const;
-
-export const shareLinkScopes = ["move", "profile"] as const;
+export {
+  documentationFieldKeys,
+  documentationImageRules,
+  documentationProfileStatuses,
+  shareLinkActions,
+  shareLinkStatuses,
+  shareLinkScopes,
+};
 
 export type DocumentationProfileType = (typeof documentationProfileTypes)[number];
 export type DocumentationFieldKey = (typeof documentationFieldKeys)[number];
