@@ -1,0 +1,26 @@
+{
+  "site": "https://movingmanifest.com",
+  "date": "2026-11-24",
+  "machine": "macmini",
+  "baseline_head": "0f068a09c189fe67893f005bb599cfee9ca1bf4e",
+  "deployment_attribution": "Driver reported PR #277 live at 545a9e61659bd71691504b5d04028b65077adb71 and six REST registrations unchanged; browser deployment identity not independently verified.",
+  "method": "Saved default profile, one owned T3 preview tab, visible=false; settled scoped booleans only, read-only.",
+  "signed_in_shell": true,
+  "rows": [
+    {"route":"/app/moves","main":true,"heading":true,"ordinary_move_link":true,"sampled_error_or_access_refusal":false},
+    {"route":"/app/moves/[moveId]","main":true,"heading":true,"ordinary_navigation":true,"sampled_error_or_access_refusal":false},
+    {"route":"/app/items","main":true,"controls":true,"nonempty_rendered_content":true,"loaded_image":true,"meaningful_row_or_explicit_empty_state":null,"sampled_error_or_access_refusal":false,"workspace_loading":false},
+    {"route":"/app/queue","main":true,"heading":true,"controls":true,"nonempty_rendered_content":true,"meaningful_row_or_explicit_empty_state":null,"sampled_error_or_access_refusal":false,"workspace_loading":false}
+  ],
+  "authenticated_rest": {"verified":false,"reason":"No already-established production-approved read-only key, suitable fixture and secret-safe authorized client in this thread; no credential inspection or API-key call made."},
+  "separate_reported_evidence":"Driver previously reported signed-out 401 and PR #277 synthetic 66-case proof; neither was reproduced in this sweep.",
+  "limits":"Single account and one ordinary move. Generic selectors did not establish meaningful Items or Queue rows or explicit empty states. Booleans do not establish data correctness, full readiness or visual layout.",
+  "prior_file_sha256": {
+    "original_md":"22db57a1eb25f99bc079e5c5a70d4109a61f31f60415537ca49fe4fbc39144a2",
+    "original_json":"267849c0031cbd8b78a83fd18e097ab763efeb4d1e75c7165a90eb75466faacb",
+    "after_fixes_md":"16013713ec4da332e88accf8655348e8175dec5e9324951c7616113ecc981663",
+    "after_fixes_json":"708915da3954ba7b2841e96a542e567245b48f7980955919ff35b68756a2692f",
+    "after_thumbnail_batch_md":"1395a700481ee9e789fb280e7aa8ea7c3b62e04844c27bd0d3d58226f0718d3f",
+    "after_thumbnail_batch_json":"3a175a1e3142787cf9bace82ba9391a2b4281e11007f901ed30accf800679bc8"
+  }
+}
