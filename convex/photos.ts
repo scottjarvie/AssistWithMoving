@@ -420,6 +420,9 @@ async function* visibleRecordPhotos(
     : boxId && photos.withIndex("by_box_created", (q) => q.eq("boxId", boxId));
   if (!indexed) return;
 
+  // The indexes scope visits to the target, but hidden, archived, or non-image
+  // history still counts toward Convex's read limits. A cutoff here could hide
+  // an eligible older cover or silently truncate the gallery.
   for await (const photo of indexed.order("desc")) {
     const matchesTarget = itemId ? photo.itemId === itemId : photo.boxId === boxId;
     const isImage = (photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image") === "image";
@@ -435,8 +438,8 @@ export const listRecordCovers = query({
   },
   handler: async (ctx, args) => {
     const { visibility } = await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:read");
+    if (args.targetIds.length > thumbnailBatchLimit) throw new ConvexError("Too many photo targets.");
     const targetIds = [...new Set(args.targetIds)];
-    if (targetIds.length > 25) throw new ConvexError("Too many photo targets.");
     const covers = await Promise.all(targetIds.map(async (targetId) => {
       // Stop at the first eligible image. Hidden or archived history on this
       // target can still require multiple index reads.

@@ -131,7 +131,7 @@ it("finds older item and box photos through their own indexes and preserves elig
   expect(capped).toHaveLength(250);
   expect(capped.every((photo) => !photo.itemId && !photo.boxId)).toBe(true);
 
-  const targetIds = [...Array(25).fill(boxId), itemId, foreignBox, archivedBox];
+  const targetIds = [boxId, boxId, itemId, foreignBox, archivedBox];
   const covers = await viewer.query(api.photos.listRecordCovers, { ...scope, targetIds });
   expect(covers.map(({ targetId, _id }) => [targetId, _id])).toEqual([[boxId, older], [itemId, older]]);
   for (const targetId of [boxId, itemId]) {
@@ -143,6 +143,9 @@ it("finds older item and box photos through their own indexes and preserves elig
   await expect(viewer.query(api.photos.listRecordGallery, { ...scope, targetId: older as never })).rejects.toThrow();
   await expect(outsider.query(api.photos.listRecordCovers, { ...scope, targetIds })).rejects.toThrow();
   await expect(viewer.query(api.photos.listRecordCovers, { ...scope, targetIds: emptyBoxes })).rejects.toThrow("Too many photo targets.");
+  await expect(viewer.query(api.photos.listRecordCovers, {
+    ...scope, targetIds: Array(26).fill(boxId),
+  })).rejects.toThrow("Too many photo targets.");
   const pending = await viewer.query(api.photos.listRecordCovers, { ...scope, targetIds: [pendingBox] });
   expect(pending).toMatchObject([{ _id: pendingCover, derivativeRefs: {} }]);
   const signed = await viewer.action(api.photos.getThumbnailUrls, {

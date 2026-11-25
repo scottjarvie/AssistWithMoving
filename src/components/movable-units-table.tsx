@@ -1144,7 +1144,12 @@ function UnitThumbnail({
 }) {
   const coverPhotoId = useRecordCover(targetId);
   const url = usePhotoDisplayUrl(householdId, moveId, coverPhotoId);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const scope = householdId && moveId ? `${householdId}:${moveId}:${targetId}` : null;
+  const [viewer, setViewer] = useState({ scope, open: false });
+  if (viewer.scope !== scope) {
+    setViewer({ scope, open: false });
+  }
+  const lightboxOpen = scope !== null && viewer.scope === scope && viewer.open;
   const photoIds = useQuery(
     api.photos.listRecordGallery,
     lightboxOpen && householdId && moveId ? { householdId, moveId, targetId } : "skip",
@@ -1154,12 +1159,12 @@ function UnitThumbnail({
     <>
       <button
         type="button"
-        disabled={!coverPhotoId}
+        disabled={!scope || !coverPhotoId}
         aria-label={coverPhotoId ? "View photos" : "No photos"}
         // stopPropagation so opening the lightbox never also triggers row-open.
         onClick={(event) => {
           event.stopPropagation();
-          setLightboxOpen(true);
+          setViewer({ scope, open: true });
         }}
         className="size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted disabled:cursor-default"
       >
@@ -1181,7 +1186,7 @@ function UnitThumbnail({
           photoIds={photoIds ?? []}
           loading={photoIds === undefined}
           open={lightboxOpen}
-          onOpenChange={setLightboxOpen}
+          onOpenChange={(open) => setViewer({ scope, open })}
         />
       ) : null}
     </>
