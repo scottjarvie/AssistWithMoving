@@ -1,0 +1,15 @@
+{
+  "site": "https://movingmanifest.com",
+  "date_utc": "2026-11-25",
+  "machine": "macmini",
+  "baseline_head": "81424389af572eb88f6e7948e7f5fa41b494c6e0",
+  "reported_release_commit": "cc98797e3d4d54be349b749e16e499a1afc8401c",
+  "deployment_attribution": "Coordinator reported independently verified GitHub Production and ready Vercel alias evidence; driver separately reported Convex registrations and signed-out 307/401 results. None was reproduced in this pass.",
+  "preview_status": {"available": false, "visible": false, "owned_tab_available": false},
+  "signed_in_media_checked": false,
+  "reason": "No already-mounted owned product workspace was available and demonstrably on the new deployment. Fresh signed-in loads were prohibited because workspace mount can update account identity state.",
+  "coverage": {"items_cover": null, "items_gallery": null, "movable_units_cover": null, "movable_units_gallery": null},
+  "live_regression_assessed": false,
+  "tab_opened_or_changed": false,
+  "notes": "No private data, credentials, media URLs, API calls, or production writes accessed. Earlier reports unchanged."
+}
