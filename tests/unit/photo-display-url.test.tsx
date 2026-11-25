@@ -7,7 +7,7 @@ const fixture = vi.hoisted(() => ({
   sign: vi.fn(),
   batch: vi.fn(),
   sessionId: "owner-session",
-  photos: [] as { _id: string; itemId: string; updatedAt: number; derivativeRefs: { thumb?: string } }[],
+  photos: [] as { _id: string; targetId: string; updatedAt: number; derivativeRefs: { thumb?: string } }[],
   items: [] as object[],
 }));
 
@@ -21,12 +21,13 @@ vi.mock("convex/react", async () => {
       getFunctionName(ref) === "photos:getThumbnailUrls" ? fixture.batch : fixture.sign,
     useConvexAuth: () => ({ isAuthenticated: true }),
     useMutation: () => noop,
-    useQuery: (ref: Parameters<typeof getFunctionName>[0]) => {
+    useQuery: (ref: Parameters<typeof getFunctionName>[0], args: { targetIds?: string[] } | "skip") => {
+      if (args === "skip") return undefined;
       switch (getFunctionName(ref)) {
         case "items:facetedListForMove":
           return { items: fixture.items, facets: { total: fixture.items.length, disposition: {} } };
-        case "photos:listForMove":
-          return fixture.photos;
+        case "photos:listRecordCovers":
+          return fixture.photos.filter(({ targetId }) => args.targetIds?.includes(targetId));
         case "transportResources:listForMoveWithZones":
           return [];
       }
@@ -50,7 +51,7 @@ function seed(rows: number) {
     signals: { boxCodes: [], assignedResourceNames: [], assignedZoneNames: [] },
   }));
   fixture.photos = fixture.items.map((_, index) => ({
-    _id: `photo-${index}`, itemId: `item-${index}`, updatedAt: 1,
+    _id: `photo-${index}`, targetId: `item-${index}`, updatedAt: 1,
     derivativeRefs: { thumb: `cover-${index}` },
   }));
 }

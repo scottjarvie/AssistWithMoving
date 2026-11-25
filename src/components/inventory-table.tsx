@@ -17,7 +17,7 @@ import {
 } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
 import { usePhotoDisplayUrl } from "@/lib/use-photo-display-url";
-import { PhotoThumbnailPage } from "@/components/photo-thumbnail-page";
+import { RecordPhotoPage, useRecordCover } from "@/components/photo-thumbnail-page";
 import {
   ChevronRight,
   ClipboardList,
@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
-import type { Doc, Id } from "../../convex/_generated/dataModel";
+import type { Id } from "../../convex/_generated/dataModel";
 import { BulkInventoryIntake } from "@/components/bulk-inventory-intake";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
@@ -384,12 +384,13 @@ function itemMetaLine(item: InventoryItem): string {
 function ItemThumbnail({
   householdId,
   moveId,
-  photoId,
+  itemId,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
-  photoId?: Id<"itemPhotos">;
+  itemId: Id<"items">;
 }) {
+  const photoId = useRecordCover(itemId);
   const url = usePhotoDisplayUrl(householdId, moveId, photoId);
 
   return (
@@ -419,7 +420,6 @@ function InventoryItemCard({
   selected,
   onSelectedChange,
   onOpenDetails,
-  photoId,
   householdId,
   moveId,
 }: {
@@ -427,7 +427,6 @@ function InventoryItemCard({
   selected: boolean;
   onSelectedChange: (checked: boolean) => void;
   onOpenDetails: () => void;
-  photoId?: Id<"itemPhotos">;
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
 }) {
@@ -461,7 +460,7 @@ function InventoryItemCard({
           onCheckedChange={(checked) => onSelectedChange(checked === true)}
         />
       </label>
-      <ItemThumbnail householdId={householdId} moveId={moveId} photoId={photoId} />
+      <ItemThumbnail householdId={householdId} moveId={moveId} itemId={item._id} />
       <div className="min-w-0 flex-1">
         <p className="line-clamp-1 break-words text-sm font-medium leading-snug">
           {item.name}
@@ -609,21 +608,6 @@ export function InventoryTable({
   );
   const items = faceted?.items;
   const facets = faceted?.facets;
-  // Cover photos for the compact rows. Newest-first, so the first photo per item
-  // is its most recent — a good default thumbnail.
-  const photosData = useQuery(
-    api.photos.listForMove,
-    householdId && moveId ? { householdId, moveId, limit: 250 } : "skip",
-  ) as Array<Doc<"itemPhotos">> | undefined;
-  const photoByItem = useMemo(() => {
-    const map = new Map<string, Id<"itemPhotos">>();
-    for (const photo of photosData ?? []) {
-      if (photo.archivedAt || !photo.itemId) continue;
-      const key = String(photo.itemId);
-      if (!map.has(key)) map.set(key, photo._id);
-    }
-    return map;
-  }, [photosData]);
   const createItem = useMutation(api.items.create);
   const updateItem = useMutation(api.items.update);
   const setItemDisposition = useMutation(api.items.setDisposition);
@@ -1421,14 +1405,13 @@ export function InventoryTable({
                 onRowSelectionChange={setRowSelection}
                 cardOnly
                 wrapPage={(rows, children) => (
-                  <PhotoThumbnailPage
+                  <RecordPhotoPage
                     householdId={householdId}
                     moveId={moveId}
-                    photoIds={rows.map((item) => photoByItem.get(String(item._id)))}
-                    photos={photosData}
+                    targetIds={rows.map((item) => item._id)}
                   >
                     {children}
-                  </PhotoThumbnailPage>
+                  </RecordPhotoPage>
                 )}
                 renderMobileCard={({ row, selected, onSelectedChange }) => (
                   <InventoryItemCard
@@ -1439,7 +1422,6 @@ export function InventoryTable({
                       setSelectedItemId(row._id);
                       setDetailOpen(true);
                     }}
-                    photoId={photoByItem.get(String(row._id))}
                     householdId={householdId}
                     moveId={moveId}
                   />

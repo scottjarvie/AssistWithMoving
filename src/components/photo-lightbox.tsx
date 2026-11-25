@@ -17,6 +17,7 @@ export function PhotoLightbox({
   householdId,
   moveId,
   photoIds,
+  loading = false,
   open,
   onOpenChange,
   initialIndex = 0,
@@ -25,6 +26,7 @@ export function PhotoLightbox({
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   photoIds: readonly Id<"itemPhotos">[];
+  loading?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialIndex?: number;
@@ -79,7 +81,9 @@ export function PhotoLightbox({
         >
           <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
 
-          {currentPhotoId ? (
+          {loading ? (
+            <div role="status" className="text-sm text-white/80">Loading photos…</div>
+          ) : currentPhotoId ? (
             // key per photo so each image mounts fresh (no stale URL flash).
             <LightboxImage
               key={currentPhotoId}

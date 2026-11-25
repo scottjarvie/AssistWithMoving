@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { usePhotoDisplayUrl } from "@/lib/use-photo-display-url";
-import { PhotoThumbnailPage } from "@/components/photo-thumbnail-page";
+import { RecordPhotoPage, useRecordCover } from "@/components/photo-thumbnail-page";
 import {
   type ColumnDef,
   type RowSelectionState,
@@ -230,10 +230,6 @@ export function MovableUnitsTable({
     api.transportTrips.listForMoveWithSpaces,
     householdId && moveId ? { householdId, moveId } : "skip",
   );
-  const movePhotos = useQuery(
-    api.photos.listForMove,
-    householdId && moveId ? { householdId, moveId, limit: 250 } : "skip",
-  );
   const batchAssign = useMutation(api.movableUnits.batchAssign);
   const updateItem = useMutation(api.items.update);
   const router = useRouter();
@@ -346,23 +342,6 @@ export function MovableUnitsTable({
   function toggleStatFilter(next: StatFilter) {
     setStatFilter((current) => (current === next ? null : next));
   }
-  // All photos per box / loose item, keyed by MovableUnit.id, newest-first
-  // (listForMove returns newest-first). The first is the cover thumbnail; the
-  // full list feeds the lightbox so you can scroll through every photo.
-  const photosByUnit = useMemo(() => {
-    const map = new Map<string, Id<"itemPhotos">[]>();
-    const push = (key: string, photoId: Id<"itemPhotos">) => {
-      const list = map.get(key);
-      if (list) list.push(photoId);
-      else map.set(key, [photoId]);
-    };
-    for (const photo of movePhotos ?? []) {
-      if (photo.archivedAt) continue;
-      if (photo.boxId) push(`box:${photo.boxId}`, photo._id);
-      if (photo.itemId) push(`looseItem:${photo.itemId}`, photo._id);
-    }
-    return map;
-  }, [movePhotos]);
   const selectedLooseItem = useMemo(
     () => items?.find((item) => item._id === selectedLooseItemId) ?? null,
     [items, selectedLooseItemId],
@@ -532,7 +511,7 @@ export function MovableUnitsTable({
           <UnitThumbnail
             householdId={householdId}
             moveId={moveId}
-            photoIds={photosByUnit.get(row.original.id) ?? []}
+            targetId={row.original.recordId}
           />
         ),
       },
@@ -719,7 +698,7 @@ export function MovableUnitsTable({
         },
       },
     ],
-    [householdId, moveId, photosByUnit, handleEditSize],
+    [householdId, moveId, handleEditSize],
   );
 
   return (
@@ -838,14 +817,13 @@ export function MovableUnitsTable({
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
         wrapPage={(rows, children) => (
-          <PhotoThumbnailPage
+          <RecordPhotoPage
             householdId={householdId}
             moveId={moveId}
-            photoIds={rows.map((unit) => photosByUnit.get(unit.id)?.[0])}
-            photos={movePhotos}
+            targetIds={rows.map((unit) => unit.recordId)}
           >
             {children}
-          </PhotoThumbnailPage>
+          </RecordPhotoPage>
         )}
         renderMobileCard={({ row, selected, onSelectedChange, onOpen }) => (
           <MovableUnitCard
@@ -856,7 +834,6 @@ export function MovableUnitsTable({
             onEditSize={handleEditSize}
             householdId={householdId}
             moveId={moveId}
-            photoIds={photosByUnit.get(row.id) ?? []}
           />
         )}
         batchActions={({ selectedRows, clearSelection }) => (
@@ -1159,15 +1136,19 @@ function MovableUnitBatchActions({
 function UnitThumbnail({
   householdId,
   moveId,
-  photoIds = [],
+  targetId,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
-  photoIds?: readonly Id<"itemPhotos">[];
+  targetId: MovableUnit["recordId"];
 }) {
-  const coverPhotoId = photoIds[0];
+  const coverPhotoId = useRecordCover(targetId);
   const url = usePhotoDisplayUrl(householdId, moveId, coverPhotoId);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const photoIds = useQuery(
+    api.photos.listRecordGallery,
+    lightboxOpen && householdId && moveId ? { householdId, moveId, targetId } : "skip",
+  );
 
   return (
     <>
@@ -1193,11 +1174,12 @@ function UnitThumbnail({
           </div>
         )}
       </button>
-      {coverPhotoId ? (
+      {lightboxOpen ? (
         <PhotoLightbox
           householdId={householdId}
           moveId={moveId}
-          photoIds={photoIds}
+          photoIds={photoIds ?? []}
+          loading={photoIds === undefined}
           open={lightboxOpen}
           onOpenChange={setLightboxOpen}
         />
@@ -1214,7 +1196,6 @@ function MovableUnitCard({
   onEditSize,
   householdId,
   moveId,
-  photoIds,
 }: {
   unit: MovableUnit;
   selected: boolean;
@@ -1223,7 +1204,6 @@ function MovableUnitCard({
   onEditSize: (unit: MovableUnit) => void;
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
-  photoIds?: readonly Id<"itemPhotos">[];
 }) {
   const followUps = visibleFollowUps(unit);
   const knownFacts = [
@@ -1265,7 +1245,7 @@ function MovableUnitCard({
         <UnitThumbnail
           householdId={householdId}
           moveId={moveId}
-          photoIds={photoIds}
+          targetId={unit.recordId}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
