@@ -1,0 +1,17 @@
+{
+  "site": "https://movingmanifest.com",
+  "date_utc": "2026-11-25",
+  "machine": "macmini",
+  "baseline_head": "b1185f8009a524783021cf2adf7174950fe02cc4",
+  "reported_production_commit": "42dc655bad173e0e15b793b7c8079d99139a7007",
+  "deployment_attribution": "Coordinator reported successful deployment 8060833782 and matching Ready deployments for both domains; browser identity not independently verified.",
+  "browser": "T3 preview, owned incognito tab, reported visible=false, closed after check",
+  "public_routes": ["/", "/about", "/ai", "/ai/start", "/claims-inventory", "/faq", "/features", "/mcp/guide", "/pcs-moving", "/privacy", "/terms", "/updates", "/sign-in", "/sign-up", "/api"],
+  "public_route_result": {"expected_path_and_heading_at_1280_and_390": true, "sampled_application_error": false},
+  "ai_start_phone": {"inner_width": 390, "document_scroll_width": 470, "baseline_scroll_width": 470, "checking_sign_in_cleared": true, "full_page_visual_impact_verified": false},
+  "home_initial_viewport": {"desktop_1280_visually_sampled": true, "phone_390_visually_sampled": true, "obvious_overlap_observed": false},
+  "sign_in": {"heading": true, "input_or_embedded_auth_surface": true, "credentials_entered": false},
+  "signed_out_gates_redirected_to_sign_in": ["/app", "/app/queue", "/settings/ai", "/admin"],
+  "signed_in": {"checked": false, "reason": "No owned already-mounted approved session was available; fresh product mount can update account identity state.", "queue": null, "media": null, "cursor": null},
+  "limits": "Other route layouts were document-width checks only. No timing, network diagnostics, hosted OAuth or provider-free writes tested. No parity claim for signed-in behavior."
+}
