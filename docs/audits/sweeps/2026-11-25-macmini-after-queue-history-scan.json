@@ -1,0 +1,21 @@
+{
+  "site": "https://movingmanifest.com",
+  "date_utc": "2026-11-25",
+  "machine": "macmini",
+  "source_commit": "72e17913b61a4b32a1db3a1f1150af7cd39e6e64",
+  "baseline_head": "fbda65ed4451d0743a04c053fd8c708845da30e4",
+  "deployment_attribution": "Coordinator reported production PR #278 and successful deployment; serving deployment not independently verified in this source-only pass.",
+  "signed_in_queue_checked": false,
+  "reason": "Fresh product mount invokes users.upsertCurrent when the Clerk user is present and conditionally invokes clerkIdentity.syncEmailAndClaim. These account-state mutation/action paths conflict with the no-write instruction; actual account effects were not tested.",
+  "source_observations": {
+    "lane_switch_uses_react_state": true,
+    "automatic_discovery_pagination_reads": true,
+    "media_provider_initial_jobs_empty": true,
+    "media_provider_scheduler_can_start_queued_jobs": true,
+    "existing_session_jobs_checked": false
+  },
+  "coverage": {"lanes":null,"badges":null,"settled_states":null,"next_page":null,"delegation":null,"everyone":null,"signed_out_gate":null},
+  "browser_tab_opened": false,
+  "live_regression_assessed": false,
+  "notes": "No records, credentials, settings, fixtures, API calls or write controls accessed. Prior findings remain unchanged."
+}
