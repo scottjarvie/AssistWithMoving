@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-25",
+  "applicationCommit": "42dc655bad173e0e15b793b7c8079d99139a7007",
+  "productionDeployment": "8060833782",
+  "released": [
+    {"ids": ["CODE-02", "CODE-04", "CODE-05", "CODE-06", "CODE-07", "CODE-10"], "pullRequest": 274},
+    {"ids": ["CODE-03"], "pullRequest": 276},
+    {"ids": ["CODE-08"], "pullRequest": 278},
+    {"ids": ["CODE-09"], "pullRequest": 279},
+    {"ids": ["Search cursor validation"], "pullRequest": 280, "readyCiRun": "45636398099"}
+  ],
+  "open": [
+    {"ids": ["CODE-01", "R01"], "reason": "Exact global browse still requires joined data, facets and stable selection."},
+    {"ids": ["CODE-11"], "reason": "Current indexes and rollups cannot preserve arbitrary substring order and exact all-time totals within a fixed read budget."},
+    {"ids": ["Moving media adoption"], "reason": "Family sync and Moving-specific read work are pending. Verify Cloudflare configuration and reachability before removal."}
+  ],
+  "publicSweep": {
+    "routes": 15,
+    "viewportWidthsPx": [1280, 390],
+    "protectedSignInRedirects": 4,
+    "knownOverflow": {"path": "/ai/start", "viewportWidthPx": 390, "documentWidthPx": 470}
+  },
+  "verificationGaps": ["Signed-in Queue paging", "Signed-in production gallery and cover behavior", "Signed-in production cursor recovery", "Hosted OAuth save lifecycle"]
+}

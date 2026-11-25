@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-25",
+  "applicationCommit": "42dc655bad173e0e15b793b7c8079d99139a7007",
+  "released": [
+    {"ids": ["AIR-02", "AIR-03", "AIR-07", "AIR-08", "AIR-09", "AIR-10", "AIR-11", "AIR-12", "AIR-13"], "pullRequest": 274},
+    {"ids": ["AIR-04"], "pullRequest": 277},
+    {"ids": ["Search cursor validation"], "pullRequest": 280}
+  ],
+  "historicalPrototype": {"pullRequest": 259, "head": "32e82ad81b46d6963ddd0c7e3b0f8230cb30b763", "state": "closed"},
+  "open": [
+    {"ids": ["AIR-01"], "reason": "Prove reachability and preserve live coverage before retiring legacy screens."},
+    {"ids": ["AIR-05", "Structure batches 3 and 4"], "reason": "Upload and planning-helper work remains open."}
+  ],
+  "verificationGaps": ["Signed-in Sandbox browser and hosted connector save lifecycle"]
+}
