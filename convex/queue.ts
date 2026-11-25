@@ -28,6 +28,7 @@ import {
   ingestionStatusToQueueState,
   normalizeQueueLimit,
   queueItemMatchesEffectiveState,
+  type QueueState,
 } from "./lib/queue";
 import {
   createQueueItem,
@@ -387,6 +388,88 @@ function shapeCaptureAdapterEntry(
   };
 }
 
+type CaptureStatus = Doc<"ingestionQueueEntries">["status"];
+type CaptureScope = {
+  moveId: Id<"moves">;
+  ownerUserId?: Id<"users">;
+  legacyCreatorId?: Id<"users">;
+};
+
+const captureStatusesByState = {
+  waitingForAi: ["queued", "needsInput", "claimed"],
+  working: ["claimed"],
+  done: ["processed", "resolved"],
+} satisfies Record<Exclude<QueueState, "needsYou">, CaptureStatus[]>;
+
+async function captureViewCanHaveRows(
+  ctx: QueryCtx,
+  { moveId, ownerUserId, legacyCreatorId }: CaptureScope,
+  state: QueueState | undefined,
+  pagination: { cursor: string | null; endCursor?: string | null },
+) {
+  // Once a client has a page boundary, keep using the original chronological
+  // query for it. Status probes must never become pagination cursors.
+  if (!state || pagination.cursor !== null || pagination.endCursor != null) {
+    return true;
+  }
+  const captures = () => ctx.db.query("ingestionQueueEntries");
+  const byStatus = (status: CaptureStatus) =>
+    legacyCreatorId
+      ? captures().withIndex("by_move_creator_owner_status", (q) =>
+          q
+            .eq("moveId", moveId)
+            .eq("createdByUserId", legacyCreatorId)
+            .eq("ownerUserId", undefined)
+            .eq("status", status),
+        )
+      : ownerUserId
+        ? captures().withIndex("by_move_owner_status", (q) =>
+            q.eq("moveId", moveId).eq("ownerUserId", ownerUserId).eq("status", status),
+          )
+        : captures().withIndex("by_move_status_order", (q) =>
+            q.eq("moveId", moveId).eq("status", status),
+          );
+
+  const byInput = (
+    needsInput: true | undefined,
+    comparison: "lt" | "gt" | "eq",
+    status: CaptureStatus,
+  ) =>
+    legacyCreatorId
+      ? captures().withIndex("by_move_creator_owner_input_status", (q) =>
+          q
+            .eq("moveId", moveId)
+            .eq("createdByUserId", legacyCreatorId)
+            .eq("ownerUserId", undefined)
+            .eq("needsInput", needsInput)[comparison]("status", status),
+        )
+      : ownerUserId
+        ? captures().withIndex("by_move_owner_input_status", (q) =>
+            q
+              .eq("moveId", moveId)
+              .eq("ownerUserId", ownerUserId)
+              .eq("needsInput", needsInput)[comparison]("status", status),
+          )
+        : captures().withIndex("by_move_input_status", (q) =>
+            q.eq("moveId", moveId).eq("needsInput", needsInput)[comparison]("status", status),
+          );
+
+  // Claimed can contribute to either lifecycle view as its lease expires.
+  // Missing input flags retain the two historical status defaults.
+  const candidates =
+    state === "needsYou"
+      ? [
+          byInput(true, "lt", "discarded"),
+          byInput(true, "gt", "discarded"),
+          byInput(undefined, "eq", "needsInput"),
+          byInput(undefined, "eq", "processed"),
+        ]
+      : captureStatusesByState[state].map(byStatus);
+  return (await Promise.all(candidates.map((range) => range.first()))).some(
+    (entry) => entry !== null,
+  );
+}
+
 export const listCaptureAdapter = query({
   args: {
     householdId: v.id("households"),
@@ -414,6 +497,15 @@ export const listCaptureAdapter = query({
       if (!runnableOwnerIds.includes(ownerUserId)) {
         throw new ConvexError("You cannot view this Queue owner's captures.");
       }
+    }
+    const canHaveRows = await captureViewCanHaveRows(
+      ctx,
+      { moveId: args.moveId, ownerUserId },
+      args.state,
+      args.paginationOpts,
+    );
+    if (!canHaveRows) {
+      return { page: [], isDone: true, continueCursor: "" };
     }
     const limit = normalizeQueueLimit(args.paginationOpts.numItems);
     const page = ownerUserId
@@ -486,6 +578,15 @@ export const listLegacyCaptureAdapter = query({
     );
     if (!runnableOwnerIds.includes(args.ownerUserId)) {
       throw new ConvexError("You cannot view this Queue owner's captures.");
+    }
+    const canHaveRows = await captureViewCanHaveRows(
+      ctx,
+      { moveId: args.moveId, legacyCreatorId: args.ownerUserId },
+      args.state,
+      args.paginationOpts,
+    );
+    if (!canHaveRows) {
+      return { page: [], isDone: true, continueCursor: "" };
     }
     const page = await ctx.db
       .query("ingestionQueueEntries")
