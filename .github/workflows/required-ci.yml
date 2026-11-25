@@ -23,9 +23,8 @@ jobs:
     # marking the PR ready runs the full check before merge. Manual
     # workflow_dispatch runs always execute, whatever the PR's draft state.
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft != true
-    # Runs on the Mac mini's own runner (free minutes) when the repo variable
-    # CI_RUNNER is "mini". Delete that variable to fall back to GitHub's machines.
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    # Route fork PRs to GitHub-hosted runners to keep their code off the Mac mini.
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - name: Check out source
@@ -119,9 +118,8 @@ jobs:
   full-tests:
     name: Unit tests (informational)
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft != true
-    # Runs on the Mac mini's own runner (free minutes) when the repo variable
-    # CI_RUNNER is "mini". Delete that variable to fall back to GitHub's machines.
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    # Route fork PRs to GitHub-hosted runners to keep their code off the Mac mini.
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - name: Check out source
