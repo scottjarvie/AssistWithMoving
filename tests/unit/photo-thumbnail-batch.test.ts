@@ -11,7 +11,7 @@ import schema from "../../convex/schema";
 const modules = import.meta.glob("../../convex/**/*.ts");
 const delivery = "https://thumbnail-proof.example.test";
 
-async function seed() {
+async function seed(withRecordHistory = false) {
   vi.stubEnv("CLOUDFLARE_IMAGE_DELIVERY_URL", delivery);
   const t = convexTest(schema, modules);
   const ids = await t.run(async ({ db }) => {
@@ -57,7 +57,43 @@ async function seed() {
     const audio = await addPhoto("audio", { mediaKind: "audio", mimeType: "audio/mpeg" });
     const archived = await addPhoto("archived", { archivedAt: 2 });
     const foreign = await addPhoto("other-move", { moveId: otherMoveId });
-    return { householdId, moveId, covers, cardOnly, restricted, pending, audio, archived, foreign };
+    const box = { householdId, moveId, code: "B-001", status: "open" as const, createdByUserId: ownerId, ...times };
+    const boxId = await db.insert("boxes", box);
+    const foreignBox = await db.insert("boxes", { ...box, moveId: otherMoveId });
+    const archivedBox = await db.insert("boxes", { ...box, archivedAt: 2 });
+    const itemId = await db.insert("items", {
+      householdId, moveId, name: "Synthetic item", normalizedName: "synthetic item",
+      quantity: 1, status: "active", condition: "good", disposition: "take",
+      weightConfidence: "none", volumeConfidence: "none", fragility: "low", stackable: false,
+      hazardousFlag: false, highValue: false, requiresPersonalTransport: false,
+      planningDefaultKeys: [], needsReview: false, reviewFlags: [], aiTags: [],
+      createdVia: "manual", createdByUserId: ownerId, updatedByUserId: ownerId, ...times,
+    });
+    const oldest = await addPhoto("oldest", { boxId, itemId, createdAt: 10 });
+    const older = await addPhoto("older", { boxId, itemId, createdAt: 10 });
+    const hidden = await addPhoto("hidden", { boxId, itemId, createdAt: 11, visibilityScope: "private" });
+    const archivedNewer = await addPhoto("archived-newer", { boxId, itemId, createdAt: 12, archivedAt: 13 });
+    const wrongScope = await addPhoto("wrong-scope", { boxId, itemId, createdAt: 13, moveId: otherMoveId });
+    const pendingBox = await db.insert("boxes", { ...box, code: "B-002" });
+    await addPhoto("pending-box-older", { boxId: pendingBox, createdAt: 10 });
+    const pendingCover = await addPhoto("pending-box-newest", {
+      boxId: pendingBox, createdAt: 11, derivativeRefs: {}, derivativeStatus: "pending",
+    });
+    const emptyBoxes = withRecordHistory
+      ? await Promise.all(Array.from({ length: 26 }, (_, i) => db.insert("boxes", { ...box, code: `EMPTY-${i}` })))
+      : [];
+    await addPhoto("archived-target", { boxId: archivedBox });
+    await addPhoto("wrong-target", { boxId: foreignBox });
+    if (withRecordHistory) {
+      for (let index = 0; index < 251; index++) {
+        await addPhoto(`unrelated-${index}`, { createdAt: 20 + index });
+      }
+    }
+    return {
+      householdId, moveId, covers, cardOnly, restricted, pending, audio, archived, foreign,
+      boxId, itemId, foreignBox, archivedBox, oldest, older, hidden, archivedNewer, wrongScope,
+      pendingBox, pendingCover, emptyBoxes,
+    };
   });
   return {
     ...ids,
@@ -83,6 +119,40 @@ it("returns thumbnail capabilities for the same ten photos served by the existin
     expect(entry.expiresAt).toBeGreaterThanOrEqual(started + 300_000);
     expect(entry.expiresAt).toBeLessThanOrEqual(Date.now() + 300_000);
   }
+});
+
+it("finds older item and box photos through their own indexes and preserves eligible gallery order", async () => {
+  const {
+    viewer, owner, outsider, householdId, moveId, boxId, itemId, foreignBox, archivedBox,
+    oldest, older, hidden, archivedNewer, wrongScope, emptyBoxes, pendingBox, pendingCover,
+  } = await seed(true);
+  const scope = { householdId, moveId };
+  const capped = await viewer.query(api.photos.listForMove, { ...scope, limit: 250 });
+  expect(capped).toHaveLength(250);
+  expect(capped.every((photo) => !photo.itemId && !photo.boxId)).toBe(true);
+
+  const targetIds = [boxId, boxId, itemId, foreignBox, archivedBox];
+  const covers = await viewer.query(api.photos.listRecordCovers, { ...scope, targetIds });
+  expect(covers.map(({ targetId, _id }) => [targetId, _id])).toEqual([[boxId, older], [itemId, older]]);
+  for (const targetId of [boxId, itemId]) {
+    expect(await viewer.query(api.photos.listRecordGallery, { ...scope, targetId })).toEqual([older, oldest]);
+  }
+  for (const targetId of [foreignBox, archivedBox]) {
+    expect(await viewer.query(api.photos.listRecordGallery, { ...scope, targetId })).toEqual([]);
+  }
+  await expect(viewer.query(api.photos.listRecordGallery, { ...scope, targetId: older as never })).rejects.toThrow();
+  await expect(outsider.query(api.photos.listRecordCovers, { ...scope, targetIds })).rejects.toThrow();
+  await expect(viewer.query(api.photos.listRecordCovers, { ...scope, targetIds: emptyBoxes })).rejects.toThrow("Too many photo targets.");
+  await expect(viewer.query(api.photos.listRecordCovers, {
+    ...scope, targetIds: Array(26).fill(boxId),
+  })).rejects.toThrow("Too many photo targets.");
+  const pending = await viewer.query(api.photos.listRecordCovers, { ...scope, targetIds: [pendingBox] });
+  expect(pending).toMatchObject([{ _id: pendingCover, derivativeRefs: {} }]);
+  const signed = await viewer.action(api.photos.getThumbnailUrls, {
+    ...scope, photoIds: [hidden, archivedNewer, wrongScope, older],
+  });
+  expect(signed.map(({ photoId }) => photoId)).toEqual([older]);
+  expect(await owner.query(api.photos.listRecordGallery, { ...scope, targetId: boxId })).toEqual([hidden, older, oldest]);
 });
 
 it("reduces the authorization-query count for ten covers from ten to one", async () => {

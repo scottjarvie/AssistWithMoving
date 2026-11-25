@@ -398,6 +398,73 @@ export const listForBox = query({
   },
 });
 
+const recordPhotoTarget = v.union(v.id("items"), v.id("boxes"));
+
+async function* visibleRecordPhotos(
+  ctx: QueryCtx,
+  scope: { householdId: Id<"households">; moveId: Id<"moves"> },
+  targetId: Id<"items"> | Id<"boxes">,
+  visibility: { sensitivePhotos: boolean },
+) {
+  const target = await ctx.db.get(targetId);
+  if (!target || target.householdId !== scope.householdId ||
+      target.moveId !== scope.moveId || target.status === "archived" ||
+      ("archivedAt" in target && target.archivedAt) ||
+      ("deletedAt" in target && target.deletedAt)) return;
+
+  const itemId = ctx.db.normalizeId("items", targetId);
+  const boxId = ctx.db.normalizeId("boxes", targetId);
+  const photos = ctx.db.query("itemPhotos");
+  const indexed = itemId
+    ? photos.withIndex("by_item_created", (q) => q.eq("itemId", itemId))
+    : boxId && photos.withIndex("by_box_created", (q) => q.eq("boxId", boxId));
+  if (!indexed) return;
+
+  // The indexes scope visits to the target, but hidden, archived, or non-image
+  // history still counts toward Convex's read limits. A cutoff here could hide
+  // an eligible older cover or silently truncate the gallery.
+  for await (const photo of indexed.order("desc")) {
+    const matchesTarget = itemId ? photo.itemId === itemId : photo.boxId === boxId;
+    const isImage = (photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image") === "image";
+    if (matchesTarget && isImage && isVisibleDeliveryPhoto(photo, scope, visibility)) yield photo;
+  }
+}
+
+export const listRecordCovers = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    targetIds: v.array(recordPhotoTarget),
+  },
+  handler: async (ctx, args) => {
+    const { visibility } = await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:read");
+    if (args.targetIds.length > thumbnailBatchLimit) throw new ConvexError("Too many photo targets.");
+    const targetIds = [...new Set(args.targetIds)];
+    const covers = await Promise.all(targetIds.map(async (targetId) => {
+      // Stop at the first eligible image. Hidden or archived history on this
+      // target can still require multiple index reads.
+      for await (const { _id, updatedAt, derivativeRefs } of visibleRecordPhotos(ctx, args, targetId, visibility)) {
+        return { targetId, _id, updatedAt, derivativeRefs };
+      }
+    }));
+    return covers.filter((cover) => cover !== undefined);
+  },
+});
+
+export const listRecordGallery = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    targetId: recordPhotoTarget,
+  },
+  handler: async (ctx, args) => {
+    const { visibility } = await requireMovePermission(ctx, args.householdId, args.moveId, "inventory:read");
+    const ids: Id<"itemPhotos">[] = [];
+    for await (const photo of visibleRecordPhotos(ctx, args, args.targetId, visibility)) ids.push(photo._id);
+    return ids;
+  },
+});
+
 export const listReviewQueue = query({
   args: {
     householdId: v.id("households"),

@@ -1,8 +1,8 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useAction, useConvexAuth } from "convex/react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { selectDerivativeRef } from "../../convex/lib/photoDelivery";
@@ -13,6 +13,41 @@ const expiryMarginMs = 10_000;
 const emptyUrls: Record<string, string> = {};
 
 type PhotoId = Id<"itemPhotos">;
+type RecordId = Id<"items"> | Id<"boxes">;
+const RecordCovers = createContext<ReadonlyMap<RecordId, PhotoId> | null>(null);
+
+export function useRecordCover(targetId: RecordId) {
+  return useContext(RecordCovers)?.get(targetId);
+}
+
+export function RecordPhotoPage({ householdId, moveId, targetIds, children }: {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  targetIds: RecordId[];
+  children: ReactNode;
+}) {
+  const ids = [...new Set(targetIds)].sort();
+  const covers = useQuery(api.photos.listRecordCovers,
+    householdId && moveId && ids.length ? { householdId, moveId, targetIds: ids } : "skip");
+  const coverByTarget = useMemo(
+    () => new Map(covers?.map(({ targetId, _id }) => [targetId, _id])),
+    [covers],
+  );
+
+  return (
+    <RecordCovers.Provider value={coverByTarget}>
+      <PhotoThumbnailPage
+        householdId={householdId}
+        moveId={moveId}
+        photoIds={covers?.map(({ _id }) => _id) ?? []}
+        photos={covers}
+      >
+        {children}
+      </PhotoThumbnailPage>
+    </RecordCovers.Provider>
+  );
+}
+
 type Cover = [photoId: PhotoId, derivative: string, updatedAt: number];
 type PageProps = {
   householdId: Id<"households"> | null;

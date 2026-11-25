@@ -13,10 +13,21 @@ import { ChevronLeft, ChevronRight, ImageOff, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
+function clampPhotoIndex(index: number, count: number) {
+  return Math.max(0, Math.min(index, count - 1));
+}
+
+function PhotoLoadingPlaceholder() {
+  return (
+    <div role="status" className="size-12 animate-pulse rounded-md bg-white/20" aria-label="Loading photo" />
+  );
+}
+
 export function PhotoLightbox({
   householdId,
   moveId,
   photoIds,
+  loading = false,
   open,
   onOpenChange,
   initialIndex = 0,
@@ -25,6 +36,7 @@ export function PhotoLightbox({
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   photoIds: readonly Id<"itemPhotos">[];
+  loading?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialIndex?: number;
@@ -32,6 +44,7 @@ export function PhotoLightbox({
 }) {
   const count = photoIds.length;
   const [index, setIndex] = useState(initialIndex);
+  const safeIndex = clampPhotoIndex(index, count);
 
   // Snap to the requested photo whenever the viewer opens (adjust-during-render
   // pattern — React's documented alternative to a setState-in-effect).
@@ -39,14 +52,14 @@ export function PhotoLightbox({
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setIndex(Math.min(Math.max(0, initialIndex), Math.max(0, count - 1)));
+      setIndex(clampPhotoIndex(initialIndex, count));
     }
   }
 
   const go = useCallback(
     (delta: number) => {
       if (count === 0) return;
-      setIndex((current) => (current + delta + count) % count);
+      setIndex((current) => (clampPhotoIndex(current, count) + delta + count) % count);
     },
     [count],
   );
@@ -62,7 +75,7 @@ export function PhotoLightbox({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, count, go]);
 
-  const currentPhotoId = photoIds[index];
+  const currentPhotoId = photoIds[safeIndex];
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -79,7 +92,9 @@ export function PhotoLightbox({
         >
           <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
 
-          {currentPhotoId ? (
+          {loading ? (
+            <PhotoLoadingPlaceholder />
+          ) : currentPhotoId ? (
             // key per photo so each image mounts fresh (no stale URL flash).
             <LightboxImage
               key={currentPhotoId}
@@ -113,7 +128,7 @@ export function PhotoLightbox({
                 <ChevronRight className="size-6" aria-hidden />
               </button>
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white">
-                {index + 1} / {count}
+                {safeIndex + 1} / {count}
               </div>
             </>
           ) : null}
@@ -170,9 +185,7 @@ function LightboxImage({
   }
 
   if (!url) {
-    return (
-      <div className="size-12 animate-pulse rounded-md bg-white/20" aria-label="Loading photo" />
-    );
+    return <PhotoLoadingPlaceholder />;
   }
 
   return (

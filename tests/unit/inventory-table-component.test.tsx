@@ -30,7 +30,8 @@ const apiMock = vi.hoisted(() => ({
   },
   // Cover-photo thumbnails on the compact item rows.
   photos: {
-    listForMove: "photos.listForMove",
+    listRecordCovers: "photos.listRecordCovers",
+    getThumbnailUrls: "photos.getThumbnailUrls",
     getDisplayUrl: "photos.getDisplayUrl",
   },
   // Referenced by the always-mounted ItemDetailSheet; these resolve to undefined
@@ -49,6 +50,7 @@ const apiMock = vi.hoisted(() => ({
 const mockItems = vi.hoisted(() => ({
   rows: [] as unknown as InventoryItem[],
   useMutation: vi.fn(),
+  coverQuery: vi.fn(),
 }));
 
 // The disposition facet groups mirror the server (convex/items.ts). We rebuild
@@ -97,13 +99,13 @@ vi.mock("convex/react", () => ({
   // The rebuilt table reads a single faceted query that returns both the rows
   // and the disposition facet counts. Transport resources are only needed for
   // the batch-assign menu and stay empty here.
-  useQuery: (query: string) =>
+  useQuery: (query: string, args: unknown) =>
     query === apiMock.items.facetedListForMove
       ? { items: mockItems.rows, facets: buildFacets(mockItems.rows) }
       : query === apiMock.transportResources.listForMoveWithZones
         ? []
-        : query === apiMock.photos.listForMove
-          ? []
+        : query === apiMock.photos.listRecordCovers
+          ? mockItems.coverQuery(args)
           : undefined,
   useMutation: mockItems.useMutation,
   useAction: () => vi.fn(async () => ({ url: null })),
@@ -136,6 +138,24 @@ describe("InventoryTable", () => {
     ];
     mockItems.useMutation.mockReset();
     mockItems.useMutation.mockReturnValue(vi.fn());
+    mockItems.coverQuery.mockReset();
+  });
+
+  it("renders text while requesting covers only for the current rows", async () => {
+    mockItems.rows = Array.from({ length: 12 }, (_, index) =>
+      inventoryItem(`item_${index}`, `Synthetic item ${String(index).padStart(2, "0")}`),
+    );
+    const householdId = "household_123" as Id<"households">;
+    const moveId = "move_123" as Id<"moves">;
+    render(<InventoryTable {...{ householdId, moveId }} />);
+    expect(screen.getByText("Synthetic item 00")).toBeInTheDocument();
+    expect(screen.queryByText("Synthetic item 11")).not.toBeInTheDocument();
+    const pageTargets = () => mockItems.coverQuery.mock.lastCall?.[0].targetIds;
+    expect(pageTargets()).toHaveLength(10);
+    expect(pageTargets()).not.toContain("item_11");
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Synthetic item 11")).toBeInTheDocument();
+    expect(pageTargets()).toEqual(["item_10", "item_11"]);
   });
 
   it("shows the disposition facet, action controls, and one record interaction tree", () => {
